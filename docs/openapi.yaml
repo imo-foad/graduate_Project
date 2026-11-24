@@ -143,6 +143,78 @@ components:
         opportunity:
           type: object
           description: Embedded opportunity (id,type,title,company_name,location,attendance_mode,status,deadline,start_at,end_at)
+    CareerSkillEvidence:
+      type: object
+      required: [skill_id, level, role, weight, contribution]
+      properties:
+        skill_id: { type: string }
+        level: { type: integer, minimum: 1, maximum: 5 }
+        role: { type: string, enum: [CORE, SUPPORTING] }
+        weight: { type: integer, minimum: 1 }
+        contribution: { type: number, minimum: 0, maximum: 100 }
+    CareerPathMatch:
+      type: object
+      required:
+      - id
+      - label
+      - score
+      - matched_skill_ids
+      - matched_core_skill_ids
+      - matched_supporting_skill_ids
+      - specialization_signal_skill_ids
+      - missing_core_skill_ids
+      - next_skill_ids
+      - core_match_count
+      - required_core_match_count
+      - skill_evidence
+      - explanation_ar
+      properties:
+        id: { type: string }
+        label: { type: string }
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Weighted confirmed-skill coverage, not a hiring probability.
+        matched_skill_ids:
+          type: array
+          items: { type: string }
+        matched_core_skill_ids:
+          type: array
+          items: { type: string }
+        matched_supporting_skill_ids:
+          type: array
+          items: { type: string }
+        specialization_signal_skill_ids:
+          type: array
+          description: Matched core skills satisfying any required specialization gate for this path.
+          items: { type: string }
+        missing_core_skill_ids:
+          type: array
+          items: { type: string }
+        next_skill_ids:
+          type: array
+          maxItems: 3
+          items: { type: string }
+        core_match_count: { type: integer, minimum: 0 }
+        required_core_match_count: { type: integer, minimum: 1 }
+        skill_evidence:
+          type: array
+          items: { $ref: '#/components/schemas/CareerSkillEvidence' }
+        explanation_ar: { type: string }
+    CareerProfile:
+      type: object
+      required: [primary_path, paths, disclaimer]
+      properties:
+        primary_path:
+          allOf:
+          - $ref: '#/components/schemas/CareerPathMatch'
+          nullable: true
+        paths:
+          type: array
+          description: Every path meeting the minimum core-skill evidence threshold, sorted by fit score.
+          items: { $ref: '#/components/schemas/CareerPathMatch' }
+        disclaimer: { type: string }
     PasswordGrantRequest:
       type: object
       required:
@@ -220,6 +292,7 @@ components:
           - SAVE_FAILED
           - STALE_SNAPSHOT
           - READ_FAILED
+          - PROFILE_SKILLS_READ_FAILED
         retryable:
           type: boolean
         attempts:
@@ -628,9 +701,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Recommendation'
                   career_profile:
-                    type: object
-                    nullable: true
-                    description: Inferred career paths based on the graduate's confirmed skills; an empty profile is null.
+                    $ref: '#/components/schemas/CareerProfile'
         '401':
           description: UNAUTHENTICATED
           content:

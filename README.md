@@ -56,6 +56,13 @@ Additional database/runtime evidence:
 See `docs/AUDIT_REPORT.md` for the subsystem scores, exact test evidence and remaining gaps.
 
 
+## Stage 3 — Career Profile Intelligence
+- The authenticated `POST /functions/v1/recommend` response returns a deterministic `career_profile` built from the graduate's own confirmed skills.
+- Paths cover Frontend, Backend, Mobile, Data Analytics, Data Science / ML, Cybersecurity, DevOps / Cloud, QA Automation and UI/UX.
+- Core skills carry 3x the weight of supporting skills. A path needs at least two matched core skills; Backend, Data Science and Cybersecurity also require path-specific specialization evidence. Results include a primary path, every qualifying parallel path, weighted skill coverage, matched evidence, missing core skills, suggested next skills and an Arabic explanation.
+- The score measures coverage of the defined path skill catalogue; it is not a hiring probability. Pending CV suggestions never contribute before graduate confirmation.
+- The recommendation model version is `deterministic-v3-career-intelligence`; cached rows produced by an older model version are recomputed before being served.
+
 ## Free-first career intelligence (migration 0014)
 - Structured CV suggestions now cover SKILL, EXPERIENCE, CERTIFICATION and COURSE. Extraction uses PDF.js/fflate plus local section/date rules; no paid API key or external model is needed.
 - Review through `POST /rest/v1/rpc/review_cv_suggestions` with `p_decisions: [{id,status,payload?}]`. Only confirmed suggestions are written to `graduate_skills`, `career_history`, `certifications` or `courses`.

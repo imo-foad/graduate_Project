@@ -222,8 +222,8 @@ class SecurityAndAuthContract(unittest.TestCase):
         refresh_block = doc.split("grant_type=refresh_token", 1)[1].split("```", 1)[0]
         self.assertNotIn("password", refresh_block, "refresh example must not send email/password")
         for name in re.findall(r"rpc/(\w+)", doc): self.assertIn(f"/rest/v1/rpc/{name}", API["paths"])
-        for name in re.findall(r"/rest/v1/(\w+)", doc): self.assertIn(f"/rest/v1/{name}", API["paths"])
-        for name in re.findall(r"/functions/v1/(\w+)", doc): self.assertIn(f"/functions/v1/{name}", API["paths"])
+        for name in re.findall(r"/rest/v1/(?!rpc/)(\w+)", doc): self.assertIn(f"/rest/v1/{name}", API["paths"])
+        for name in re.findall(r"/functions/v1/([\w-]+)", doc): self.assertIn(f"/functions/v1/{name}", API["paths"])
         self.assertIn("/auth/v1/token", doc)
 
 

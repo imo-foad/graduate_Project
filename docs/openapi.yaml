@@ -999,6 +999,6 @@ paths:
         '405': { description: Method not allowed }
         '409': { description: CV is already processing or has already been parsed }
         '413': { description: CV exceeds the 5 MB limit }
-        '422': { description: Unsupported, malformed, mismatched, or text-empty CV file }
+        '422': { description: 'Unsupported, malformed, mismatched, or text-empty CV file' }
         '500': { description: Internal processing failure }
         '502': { description: Private Storage download failed }

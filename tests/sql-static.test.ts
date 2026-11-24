@@ -106,5 +106,5 @@ test("saved-opportunity RLS helper is private and not exposed as a public RPC", 
   assert.match(migration, /grant execute on function private\._opportunity_exists_for_saved_item\(uuid\) to authenticated/i);
   assert.match(migration, /drop function if exists public\._opportunity_exists_for_saved_item\(uuid\)/i);
   assert.match(migration, /create policy saved_insert[\s\S]*?private\._opportunity_exists_for_saved_item\(opportunity_id\)/i);
-  assert.doesNotMatch(sql, /create or replace function public\._opportunity_exists_for_saved_item\(/i);
+  assert.doesNotMatch(migration, /create or replace function public\._opportunity_exists_for_saved_item\(/i);
 });

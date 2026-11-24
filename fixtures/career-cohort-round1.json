@@ -29,7 +29,7 @@
         "title": "Frontend Developer",
         "field": "Frontend",
         "date_range": "Jan 2023 - Dec 2024",
-        "description": "Built responsive React dashboards and accessible web interfaces."
+        "description": "Built responsive React pages and accessible web interfaces."
       },
       "certification": {
         "title": "Responsive Web Interfaces Certificate",
@@ -426,7 +426,8 @@
         "REST_API",
         "API_DESIGN",
         "POSTGRESQL",
-        "GIT"
+        "GIT",
+        "JAVA"
       ],
       "reject_skill_id": "FLUTTER",
       "work_mode": "HYBRID",

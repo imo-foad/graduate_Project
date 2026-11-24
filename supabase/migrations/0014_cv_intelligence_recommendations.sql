@@ -10,6 +10,11 @@ alter table public.certifications add column if not exists credential_id text,
 alter table public.certifications drop constraint if exists certifications_source_check;
 alter table public.certifications add constraint certifications_source_check
   check (source in ('SELF_REPORTED','CV_CONFIRMED','SEED'));
+revoke insert,update on public.certifications from authenticated;
+grant insert (graduate_id,title,issuer,issue_date,reference_url,credential_id,expires_at)
+  on public.certifications to authenticated;
+grant update (title,issuer,issue_date,reference_url,credential_id,expires_at)
+  on public.certifications to authenticated;
 
 create table public.courses (
   id uuid primary key default gen_random_uuid(),
@@ -22,7 +27,12 @@ create table public.courses (
 );
 create index courses_graduate_idx on public.courses(graduate_id,completion_date desc);
 alter table public.courses enable row level security;
-grant select,insert,update,delete on public.courses to authenticated;
+grant select,delete on public.courses to authenticated;
+revoke insert,update on public.courses from authenticated;
+grant insert (graduate_id,title,provider,completion_date,duration,reference_url,skills)
+  on public.courses to authenticated;
+grant update (title,provider,completion_date,duration,reference_url,skills)
+  on public.courses to authenticated;
 create policy courses_select on public.courses for select to authenticated using (graduate_id=(select auth.uid()));
 create policy courses_insert on public.courses for insert to authenticated with check (graduate_id=(select auth.uid()) and source='SELF_REPORTED');
 create policy courses_update on public.courses for update to authenticated
@@ -76,8 +86,11 @@ create trigger saved_opportunities_log_interaction after insert on public.saved_
 create or replace function public.log_application_recommendation_interaction()
 returns trigger language plpgsql security definer set search_path = '' as $log_application_interaction$
 begin
- insert into public.recommendation_interactions(graduate_id,opportunity_id,interaction_type)
- values(new.graduate_id,new.opportunity_id,'APPLY'); return new;
+ if new.status_source <> 'SEED_SAMPLE' then
+  insert into public.recommendation_interactions(graduate_id,opportunity_id,interaction_type)
+   values(new.graduate_id,new.opportunity_id,'APPLY');
+ end if;
+ return new;
 end
 $log_application_interaction$;
 create trigger applications_log_interaction after insert on public.applications
@@ -86,7 +99,7 @@ create trigger applications_log_interaction after insert on public.applications
 create or replace function public.log_event_recommendation_interaction()
 returns trigger language plpgsql security definer set search_path = '' as $log_event_interaction$
 begin
- if new.status in ('REGISTERED','WAITLISTED') then
+ if new.source <> 'SEED_SAMPLE' and new.status in ('REGISTERED','WAITLISTED') then
   insert into public.recommendation_interactions(graduate_id,opportunity_id,interaction_type)
   values(new.graduate_id,new.opportunity_id,'REGISTER');
  end if;
@@ -132,7 +145,7 @@ begin
  for v_item in select value from jsonb_array_elements(p_suggestions) loop
   if jsonb_typeof(v_item)<>'object' then raise exception 'INVALID_CV_SUGGESTIONS' using errcode='PT422'; end if;
   v_kind:=v_item->>'kind'; v_payload:=v_item->'payload';
-  if v_kind not in ('SKILL','EXPERIENCE','CERTIFICATION','COURSE')
+  if v_kind is null or v_kind not in ('SKILL','EXPERIENCE','CERTIFICATION','COURSE')
      or jsonb_typeof(v_payload) is distinct from 'object' then
    raise exception 'INVALID_CV_SUGGESTIONS' using errcode='PT422';
   end if;
@@ -148,7 +161,7 @@ begin
  delete from public.cv_suggestions where cv_document_id=p_cv_document_id and graduate_id=p_graduate_id and status='PENDING';
  insert into public.cv_suggestions(graduate_id,cv_document_id,kind,payload,status)
  select p_graduate_id,p_cv_document_id,item->>'kind',item->'payload','PENDING'
- from jsonb_array_elements(p_suggestions) item;
+ from jsonb_array_elements(p_suggestions) as items(item);
  get diagnostics v_count=row_count;
  update public.cv_documents set parse_status='DONE',parsed_at=now(),error_message=null
  where id=p_cv_document_id and graduate_id=p_graduate_id;

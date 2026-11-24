@@ -91,7 +91,7 @@ class Scripts(unittest.TestCase):
                        "/functions/v1/recommend", "force: true", "cv-documents"):
             self.assertIn(needle, http)
         for needle in ("/functions/v1/parse-cv", "/functions/v1/recommend", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
-                       "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "matched_skill_ids"):
+                       "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])

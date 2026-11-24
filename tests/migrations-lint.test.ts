@@ -44,6 +44,12 @@ test("service-only functions are not granted to authenticated", () => {
     assert.doesNotMatch(sql, new RegExp(`grant execute on function[^;]*public\\.${fn}\\([^;]*to authenticated`), fn);
   }
 });
+test("CV parse finalization RPC is service-role only", () => {
+  assert.ok(sql.includes("revoke all on function public.complete_cv_parse(uuid, uuid, jsonb)"));
+  assert.ok(sql.includes("from public, anon, authenticated"));
+  assert.ok(sql.includes("grant execute on function public.complete_cv_parse(uuid, uuid, jsonb) to service_role"));
+  assert.ok(!sql.includes("grant execute on function public.complete_cv_parse(uuid, uuid, jsonb) to authenticated"));
+});
 test("private CV bucket and ownership-scoped storage policies exist", () => {
   assert.match(sql, /'cv-documents', 'cv-documents', false/);
   assert.match(sql, /storage\.foldername\(name\)\)\[1\] = \(select auth\.uid\(\)\)::text/);
@@ -53,6 +59,11 @@ test("business uniqueness constraints are present (BR-007, BR-012, BR-003)", () 
   assert.match(sql, /unique \(graduate_id, opportunity_id\) -- BR-012/);
   assert.match(sql, /profile_id uuid primary key references public\.profiles/);
   assert.match(sql, /create unique index career_history_one_current/);
+});
+test("CV parse finalization RPC is service-role only", () => {
+  assert.match(sql, /revoke all on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\)\\s+from public, anon, authenticated/i);
+  assert.match(sql, /grant execute on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\) to service_role/i);
+  assert.doesNotMatch(sql, /grant execute on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\) to authenticated/i);
 });
 test("no secrets or demo passwords in SQL", () => {
   assert.doesNotMatch(sql, /service_role_key|eyJ[A-Za-z0-9_-]{20,}|password\s*=/i);

@@ -11,3 +11,6 @@ enable_signup = false   # demo accounts are provisioned by scripts/provision-dem
 
 [functions.recommend]
 verify_jwt = true
+
+[functions.parse-cv]
+verify_jwt = true

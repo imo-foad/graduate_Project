@@ -33,6 +33,11 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
    **New in v0.2:** it can answer `409 {"error":"STALE_SNAPSHOT","retryable":true}` when the profile kept changing during
    the calculation; the previous cache is intact, so show it (or a spinner) and call again later. `ai_mode` is
    `deterministic`; if the call fails, keep manual search/filter working (BR-021).
-9. **CV upload** (CV parsing endpoint is not implemented yet): upload to bucket `cv-documents` at path
-   `<uid>/<file>.pdf|docx` (max 5 MB), then insert a `cv_documents` row (`graduate_id`, `storage_path`, `file_type`, `size_bytes`).
+9. **CV upload and parsing**: upload to private bucket `cv-documents` at `<uid>/<file>.pdf|docx` (max 5 MB),
+   then insert `cv_documents` metadata (`graduate_id`, `storage_path`, `file_type`, `size_bytes`). Call
+   `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<id>" }`; the verified JWT determines ownership.
+   Digital-text PDF and DOCX files are parsed for dictionary-matched skills. The response creates `PENDING`
+   `cv_suggestions`; it does not write `graduate_skills`. After the graduate reviews the suggestions, call
+   `POST /rest/v1/rpc/confirm_cv_suggestions` with `p_confirm` and optional `p_reject` UUID arrays.
+   Scanned/image-only PDFs that need OCR are not supported in this version.
 10. **Notifications**: in-app only (`notifications` table); no FCM in this scope.

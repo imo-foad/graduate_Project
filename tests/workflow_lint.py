@@ -72,23 +72,28 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
-        self.assertEqual(len(migs), 12)
-        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012"])
+        self.assertEqual(len(migs), 13)
+        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"])
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]
         http = code(open(os.path.join(ROOT, "tests/integration/local-supabase.integration.mjs")).read())
-        for needle in ("provision-demo-users.mjs", "03_demo_profiles.sql", "supabase functions serve recommend",
+        cv_http = code(open(os.path.join(ROOT, "tests/integration/cv-parse.integration.mjs")).read())
+        for needle in ("provision-demo-users.mjs", "03_demo_profiles.sql", "supabase functions serve",
                        "api.url=SUPABASE_URL", "auth.anon_key=SUPABASE_ANON_KEY",
                        "auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY", "DEMO_PASSWORD", "assert-local-db.mjs"):
             self.assertIn(needle, runner)
         for needle in ("/auth/v1/token", "/storage/v1/object/", "/rest/v1/cv_documents",
                        "/functions/v1/recommend", "force: true", "cv-documents"):
             self.assertIn(needle, http)
+        for needle in ("/functions/v1/parse-cv", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
+                       "graduate_skills", "cv_suggestions"):
+            self.assertIn(needle, cv_http)
+        self.assertIn("cv-parse.integration.mjs", runner)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):

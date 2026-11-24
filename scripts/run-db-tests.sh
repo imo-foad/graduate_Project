@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> migrations 0001..0012 -> seeds -> pgTAP (7 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> migrations 0001..0013 -> seeds -> pgTAP (8 files) -> concurrency. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -37,7 +37,7 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 12 ] || fail "expected at least 12 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -ge 13 ] || fail "expected at least 13 migration files, found ${#MIGRATIONS[@]}"
 for f in "${MIGRATIONS[@]}"; do
   grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
 done
@@ -63,7 +63,7 @@ echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on seco
 
 # ---- D. pgTAP: all seven files must run and pass
 echo "=== D. supabase test db"
-EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls)
+EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done

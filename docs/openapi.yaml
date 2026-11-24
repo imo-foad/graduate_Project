@@ -236,7 +236,8 @@ components:
         409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
-        OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION.
+        OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
+        CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND.
       content:
         application/json:
           schema:
@@ -950,3 +951,54 @@ paths:
       responses:
         '200': { description: Closed opportunity }
         4XX: { $ref: '#/components/responses/BusinessError' }
+
+  /functions/v1/parse-cv:
+    post:
+      summary: Parse the authenticated graduate's own private PDF/DOCX and create pending skill suggestions
+      description: >
+        The caller supplies only the CV document id. Ownership is derived from the verified JWT.
+        Digital-text PDFs and DOCX are supported, up to 5 MB. Scanned/image-only PDFs requiring OCR
+        are not supported in this version. Extracted skills remain pending until confirm_cv_suggestions is called.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cv_document_id]
+              properties:
+                cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: CV parsed; extracted skills are pending graduate confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cv_document_id, status, suggestions_count, suggestions, confirmation_required, extraction_mode]
+                properties:
+                  cv_document_id: { type: string, format: uuid }
+                  status: { type: string, enum: [DONE] }
+                  suggestions_count: { type: integer, minimum: 0 }
+                  confirmation_required: { type: boolean, enum: [true] }
+                  extraction_mode: { type: string, enum: [dictionary_text_match] }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      required: [skill_id, matched_term]
+                      properties:
+                        skill_id: { type: string }
+                        matched_term: { type: string }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '404': { description: CV document not found or not owned by caller }
+        '405': { description: Method not allowed }
+        '409': { description: CV is already processing or has already been parsed }
+        '413': { description: CV exceeds the 5 MB limit }
+        '422': { description: Unsupported, malformed, mismatched, or text-empty CV file }
+        '500': { description: Internal processing failure }
+        '502': { description: Private Storage download failed }

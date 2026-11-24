@@ -9,6 +9,8 @@ API = yaml.safe_load(open(os.path.join(ROOT, "docs/openapi.yaml")))
 EDGE_INDEX = open(os.path.join(ROOT, "supabase/functions/recommend/index.ts")).read()
 FLOW = open(os.path.join(ROOT, "supabase/functions/_shared/recommend-flow.ts")).read()
 EDGE = EDGE_INDEX + "\n" + FLOW  # the function = thin handler + orchestration module
+CV_EDGE = open(os.path.join(ROOT, "supabase/functions/parse-cv/index.ts")).read()
+CV_PARSER = open(os.path.join(ROOT, "supabase/functions/_shared/cv-file-parser.ts")).read()
 INTERNAL_OK = {"is_opportunity_open"}  # helper is private-schema only and must never be exposed as a public RPC
 
 
@@ -119,6 +121,21 @@ class Contract(unittest.TestCase):
         documented = set(re.findall(r"\b[A-Z]{3,}(?:_[A-Z]+)+\b|\bUNAUTHENTICATED\b", text))
         raised = set(re.findall(r"raise exception '([A-Z_]+)'", SQL))
         self.assertFalse(documented - raised, f"documented but never raised: {documented - raised}")
+
+    def test_parse_cv_function_contract(self):
+        op = API["paths"]["/functions/v1/parse-cv"]["post"]
+        schema = op["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(schema["required"]), {"cv_document_id"})
+        self.assertEqual(set(schema["properties"]), {"cv_document_id"})
+        self.assertIs(schema["additionalProperties"], False)
+        self.assertTrue({"200", "400", "401", "404", "405", "409", "413", "422", "500", "502"} <= set(op["responses"]))
+        for needle in ("auth.getUser()", 'from("cv_documents")', 'from("cv-documents")',
+                       'rpc("complete_cv_parse"', 'from("skills")', "confirmation_required"):
+            self.assertIn(needle, CV_EDGE)
+        for needle in ("extractDocxText", "extractPdfText", "MAX_FILE_BYTES", "MAX_PDF_PAGES"):
+            self.assertIn(needle, CV_PARSER)
+        self.assertNotIn('admin.from("graduate_skills")', CV_EDGE)
+        self.assertIn("confirm_cv_suggestions", open(os.path.join(ROOT, "docs/ANDROID_INTEGRATION.md")).read())
 
     def test_recommend_function_contract(self):
         resp = API["paths"]["/functions/v1/recommend"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["properties"]

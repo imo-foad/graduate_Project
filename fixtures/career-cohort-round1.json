@@ -1,0 +1,458 @@
+{
+  "round": 1,
+  "users": [
+    {
+      "code": "01-FRONTEND",
+      "name": "Lina Nabil",
+      "track": "Frontend",
+      "target_paths": [
+        "FRONTEND"
+      ],
+      "major": "Computer Science",
+      "department": "Web Engineering",
+      "interest": [
+        "Frontend Development",
+        "Web"
+      ],
+      "skills": [
+        "HTML_CSS",
+        "JAVASCRIPT",
+        "TYPESCRIPT",
+        "REACT",
+        "GIT"
+      ],
+      "reject_skill_id": "KOTLIN",
+      "work_mode": "HYBRID",
+      "city": "Cairo",
+      "experience": {
+        "company": "Pixel Yard Studio",
+        "title": "Frontend Developer",
+        "field": "Frontend",
+        "date_range": "Jan 2023 - Dec 2024",
+        "description": "Built responsive React dashboards and accessible web interfaces."
+      },
+      "certification": {
+        "title": "Responsive Web Interfaces Certificate",
+        "issuer": "Web Skills Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Advanced React and TypeScript",
+        "provider": "Code Learning Hub",
+        "year": "2025",
+        "duration": "12 weeks"
+      },
+      "recommendation_titles": [
+        "Frontend Developer"
+      ]
+    },
+    {
+      "code": "02-BACKEND",
+      "name": "Karim Fathy",
+      "track": "Backend",
+      "target_paths": [
+        "BACKEND"
+      ],
+      "major": "Computer Science",
+      "department": "Software Engineering",
+      "interest": [
+        "Backend Development",
+        "APIs"
+      ],
+      "skills": [
+        "NODE_JS",
+        "REST_API",
+        "API_DESIGN",
+        "POSTGRESQL",
+        "MONGODB",
+        "DOCKER",
+        "JAVA"
+      ],
+      "reject_skill_id": "FIGMA",
+      "work_mode": "REMOTE",
+      "city": "Alexandria",
+      "experience": {
+        "company": "CoreStack Systems",
+        "title": "Backend Engineer",
+        "field": "Backend",
+        "date_range": "Mar 2022 - Oct 2024",
+        "description": "Designed REST services, database schemas and server-side integrations."
+      },
+      "certification": {
+        "title": "Backend API Engineering Certificate",
+        "issuer": "CoreStack Institute",
+        "year": "2024"
+      },
+      "course": {
+        "title": "PostgreSQL Performance and Node Services",
+        "provider": "Backend Academy",
+        "year": "2025",
+        "duration": "10 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Java Backend Developer"
+      ]
+    },
+    {
+      "code": "03-MOBILE",
+      "name": "Mariam Adel",
+      "track": "Mobile",
+      "target_paths": [
+        "MOBILE"
+      ],
+      "major": "Computer Science",
+      "department": "Mobile Computing",
+      "interest": [
+        "Android Development",
+        "Mobile"
+      ],
+      "skills": [
+        "KOTLIN",
+        "ANDROID",
+        "JETPACK_COMPOSE",
+        "JAVA"
+      ],
+      "reject_skill_id": "SQL",
+      "work_mode": "HYBRID",
+      "city": "Mansoura",
+      "experience": {
+        "company": "Pocket Apps Lab",
+        "title": "Android Developer",
+        "field": "Mobile",
+        "date_range": "Feb 2022 - Aug 2024",
+        "description": "Delivered Kotlin Android applications using Compose UI and lifecycle-aware state."
+      },
+      "certification": {
+        "title": "Native Android Development Certificate",
+        "issuer": "Pocket Apps Lab",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Kotlin Coroutines and Jetpack Compose",
+        "provider": "Mobile Code School",
+        "year": "2025",
+        "duration": "14 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Android Developer"
+      ]
+    },
+    {
+      "code": "04-DATA-ANALYTICS",
+      "name": "Salma Youssef",
+      "track": "Data Analytics",
+      "target_paths": [
+        "DATA_ANALYTICS"
+      ],
+      "major": "Statistics",
+      "department": "Business Analytics",
+      "interest": [
+        "Data Analysis",
+        "Business Intelligence"
+      ],
+      "skills": [
+        "SQL",
+        "POWER_BI",
+        "EXCEL",
+        "STATISTICS",
+        "DATA_VISUALIZATION",
+        "TABLEAU"
+      ],
+      "reject_skill_id": "PYTHON",
+      "work_mode": "REMOTE",
+      "city": "Cairo",
+      "experience": {
+        "company": "Insight Metrics",
+        "title": "Data Analyst",
+        "field": "Data Analytics",
+        "date_range": "Apr 2022 - Dec 2024",
+        "description": "Prepared reporting datasets and built Power BI and Tableau dashboards for business teams."
+      },
+      "certification": {
+        "title": "Business Intelligence Reporting Certificate",
+        "issuer": "Insight Metrics Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Data Storytelling with Power BI",
+        "provider": "Analytics Learning",
+        "year": "2025",
+        "duration": "8 weeks"
+      },
+      "recommendation_titles": [
+        "Data Analyst"
+      ]
+    },
+    {
+      "code": "05-DATA-SCIENCE",
+      "name": "Omar Sameh",
+      "track": "Data Science",
+      "target_paths": [
+        "DATA_SCIENCE"
+      ],
+      "major": "Statistics",
+      "department": "Computational Statistics",
+      "interest": [
+        "Data Science",
+        "Machine Learning"
+      ],
+      "skills": [
+        "PYTHON",
+        "STATISTICS",
+        "MACHINE_LEARNING",
+        "ETL"
+      ],
+      "reject_skill_id": "EXCEL",
+      "work_mode": "REMOTE",
+      "city": "Giza",
+      "experience": {
+        "company": "Neuron Research Group",
+        "title": "Machine Learning Intern",
+        "field": "Data Science",
+        "date_range": "Jan 2023 - Sep 2024",
+        "description": "Prepared training pipelines and evaluated supervised learning experiments."
+      },
+      "certification": {
+        "title": "Applied Machine Learning Certificate",
+        "issuer": "Neuron Research Group",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Feature Engineering and Model Evaluation",
+        "provider": "ML Practice School",
+        "year": "2025",
+        "duration": "16 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Machine Learning Engineer"
+      ]
+    },
+    {
+      "code": "06-CYBERSECURITY",
+      "name": "Yara Mahmoud",
+      "track": "Cybersecurity",
+      "target_paths": [
+        "CYBERSECURITY"
+      ],
+      "major": "Cybersecurity",
+      "department": "Information Security",
+      "interest": [
+        "Cybersecurity",
+        "Information Security"
+      ],
+      "skills": [
+        "CYBERSECURITY",
+        "PENETRATION_TESTING",
+        "SIEM",
+        "NETWORKING",
+        "CRYPTOGRAPHY",
+        "LINUX"
+      ],
+      "reject_skill_id": "REACT",
+      "work_mode": "ONSITE",
+      "city": "Cairo",
+      "experience": {
+        "company": "Blue Shield Operations",
+        "title": "SOC Analyst",
+        "field": "Cybersecurity",
+        "date_range": "Jun 2022 - Nov 2024",
+        "description": "Reviewed SIEM alerts, triaged incidents and documented network security findings."
+      },
+      "certification": {
+        "title": "Security Operations Analyst Certificate",
+        "issuer": "Blue Shield Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Blue Team Monitoring and Incident Response",
+        "provider": "Security Learning Center",
+        "year": "2025",
+        "duration": "10 weeks"
+      },
+      "recommendation_titles": [
+        "SOC Analyst (Tier 1)"
+      ]
+    },
+    {
+      "code": "07-DEVOPS",
+      "name": "Hassan Tarek",
+      "track": "DevOps and Cloud",
+      "target_paths": [
+        "DEVOPS_CLOUD"
+      ],
+      "major": "Computer Science",
+      "department": "Cloud Computing",
+      "interest": [
+        "DevOps",
+        "Cloud Engineering"
+      ],
+      "skills": [
+        "DOCKER",
+        "LINUX",
+        "AWS",
+        "CLOUD_BASICS",
+        "DEVOPS_CI_CD",
+        "NETWORKING"
+      ],
+      "reject_skill_id": "FIGMA",
+      "work_mode": "HYBRID",
+      "city": "Cairo",
+      "experience": {
+        "company": "CloudBridge Infrastructure",
+        "title": "Cloud Engineer",
+        "field": "DevOps",
+        "date_range": "May 2022 - Dec 2024",
+        "description": "Maintained containerized services and automated cloud deployment pipelines."
+      },
+      "certification": {
+        "title": "Cloud Foundations Certificate",
+        "issuer": "CloudBridge Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Docker and Continuous Delivery",
+        "provider": "Cloud Engineering School",
+        "year": "2025",
+        "duration": "12 weeks"
+      },
+      "recommendation_titles": [
+        "Cloud Day (registration opens later)"
+      ]
+    },
+    {
+      "code": "08-QA",
+      "name": "Nour Ashraf",
+      "track": "QA Automation",
+      "target_paths": [
+        "QA_AUTOMATION"
+      ],
+      "major": "Computer Science",
+      "department": "Software Quality",
+      "interest": [
+        "Software Testing",
+        "Quality Assurance"
+      ],
+      "skills": [
+        "TESTING",
+        "JAVASCRIPT",
+        "PYTHON"
+      ],
+      "reject_skill_id": "KOTLIN",
+      "work_mode": "HYBRID",
+      "city": "Mansoura",
+      "experience": {
+        "company": "Quality Loop Labs",
+        "title": "QA Automation Engineer",
+        "field": "Quality Assurance",
+        "date_range": "Feb 2023 - Oct 2024",
+        "description": "Created automated regression suites and tested JavaScript application workflows."
+      },
+      "certification": {
+        "title": "Software Quality Automation Certificate",
+        "issuer": "Quality Loop Institute",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Reliable API and UI Test Automation",
+        "provider": "QA Learning Studio",
+        "year": "2025",
+        "duration": "9 weeks"
+      },
+      "recommendation_titles": [
+        "QA Engineer"
+      ]
+    },
+    {
+      "code": "09-UIUX",
+      "name": "Farida Hany",
+      "track": "UI UX Design",
+      "target_paths": [
+        "UI_UX"
+      ],
+      "major": "Graphic Design",
+      "department": "Product Design",
+      "interest": [
+        "UI/UX Design",
+        "Product Design"
+      ],
+      "skills": [
+        "UI_UX",
+        "FIGMA",
+        "HTML_CSS"
+      ],
+      "reject_skill_id": "JAVASCRIPT",
+      "work_mode": "REMOTE",
+      "city": "Alexandria",
+      "experience": {
+        "company": "Human Centered Studio",
+        "title": "UX Designer",
+        "field": "UI/UX Design",
+        "date_range": "Aug 2022 - Dec 2024",
+        "description": "Conducted usability research and translated user journeys into tested Figma prototypes."
+      },
+      "certification": {
+        "title": "User Experience Design Certificate",
+        "issuer": "Human Centered Studio",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Research Methods and Figma Prototyping",
+        "provider": "Product Design Academy",
+        "year": "2025",
+        "duration": "11 weeks"
+      },
+      "recommendation_titles": []
+    },
+    {
+      "code": "10-FULLSTACK",
+      "name": "Ziad Mostafa",
+      "track": "Full Stack",
+      "target_paths": [
+        "FRONTEND",
+        "BACKEND"
+      ],
+      "major": "Computer Science",
+      "department": "Software Engineering",
+      "interest": [
+        "Full Stack Development",
+        "Web Applications"
+      ],
+      "skills": [
+        "HTML_CSS",
+        "JAVASCRIPT",
+        "TYPESCRIPT",
+        "REACT",
+        "NODE_JS",
+        "REST_API",
+        "API_DESIGN",
+        "POSTGRESQL",
+        "GIT"
+      ],
+      "reject_skill_id": "FLUTTER",
+      "work_mode": "HYBRID",
+      "city": "Cairo",
+      "experience": {
+        "company": "Unified Web Products",
+        "title": "Full Stack Engineer",
+        "field": "Software Engineering",
+        "date_range": "Jan 2022 - Dec 2024",
+        "description": "Built React interfaces and Node REST backends backed by PostgreSQL."
+      },
+      "certification": {
+        "title": "Full Stack Web Engineering Certificate",
+        "issuer": "Unified Web Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "End to End TypeScript Web Systems",
+        "provider": "Full Stack School",
+        "year": "2025",
+        "duration": "15 weeks"
+      },
+      "recommendation_titles": [
+        "Frontend Developer",
+        "Junior Java Backend Developer"
+      ]
+    }
+  ]
+}

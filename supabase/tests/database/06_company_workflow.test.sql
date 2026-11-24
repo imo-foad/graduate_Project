@@ -5,7 +5,7 @@ select * from no_plan();
 create schema tests;
 grant usage on schema tests to anon, authenticated, service_role;
 create table tests.ids (k text primary key, v uuid not null);
-grant select on tests.ids to anon, authenticated, service_role;
+grant select, insert on tests.ids to anon, authenticated, service_role;
 create function tests.id(p_k text) returns uuid language sql stable as $f$ select v from tests.ids where k = p_k $f$;
 create function tests.mk_user(p_key text) returns uuid language plpgsql as $f$
 declare v uuid := gen_random_uuid();
@@ -74,6 +74,8 @@ select is((public.update_application_status(tests.id('application'), 'UNDER_REVI
   'UNDER_REVIEW', 'company recruiter can update its own application');
 select is((select source_type from public.application_status_history where application_id = tests.id('application') order by changed_at desc limit 1),
   'COMPANY_ACTION', 'company action is added to status history');
+reset role;
+select tests.login('graduate');
 select ok(exists (select 1 from public.notifications where profile_id = tests.id('graduate')
   and type = 'APPLICATION_STATUS_UPDATED'), 'graduate receives in-app status notification');
 

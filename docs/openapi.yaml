@@ -742,6 +742,10 @@ paths:
       responses:
         '204':
           description: Deleted
+  /rest/v1/recommendation_interactions:
+    get:
+      summary: Own recommendation impressions, views, saves, applications, registrations and feedback
+      responses: *id001
   /rest/v1/courses:
     get:
       summary: Own courses and training history

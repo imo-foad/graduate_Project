@@ -55,10 +55,6 @@ def table_grants(role="authenticated"):
         privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(priv_text)}
         for t in split_top(object_text):
             grants.setdefault(t.replace("public.", "").strip(), set()).update(privs)
-        if role not in [r.strip() for r in m.group(3).split(",")]: continue
-        privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(m.group(1))}
-        for t in split_top(m.group(2)):
-            grants.setdefault(t.replace("public.", "").strip(), set()).update(privs)
     return grants
 
 

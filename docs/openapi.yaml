@@ -232,12 +232,14 @@ components:
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
-        CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND.
+        CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
+        CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
+        INVALID_INTERACTION, JOB_NOT_DRAFT.
       content:
         application/json:
           schema:
@@ -338,7 +340,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [p_opportunity_id, p_is_required]
+              required: [p_opportunity_id, p_minimum_experience_years, p_is_required]
               properties:
                 p_opportunity_id: { type: string, format: uuid }
                 p_minimum_experience_years: { type: number, minimum: 0, maximum: 50, nullable: true }
@@ -733,6 +735,25 @@ paths:
           description: Updated
     delete:
       summary: Delete own
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/courses:
+    get:
+      summary: Own courses and training history
+      responses: *id001
+    post:
+      summary: Add a course manually; source is server-defaulted to SELF_REPORTED
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Edit own course details without changing provenance
+      responses:
+        '204':
+          description: Updated
+    delete:
+      summary: Delete own course
       responses:
         '204':
           description: Deleted

@@ -27,10 +27,22 @@ do $$ begin
   perform tests.mk_user('viewer');
   perform tests.mk_user('admin');
   perform tests.mk_user('outsider');
+  perform tests.mk_user('other_owner');
+  perform tests.mk_user('graduate');
 end $$;
 
 select tests.login('owner');
 insert into tests.ids values ('company', (public.create_company('Acme Labs')).id);
+
+reset role;
+insert into public.company_memberships(company_id, user_id, role)
+values (tests.id('company'), tests.id('other_owner'), 'OWNER');
+select tests.login('owner');
+select throws_ok($select public.set_company_member(tests.id('company'), tests.id('other_owner'), 'RECRUITER', true)$,
+  'PT422', 'INVALID_INPUT', 'an existing company owner cannot be demoted');
+select is((select role from public.company_memberships
+  where company_id = tests.id('company') and user_id = tests.id('other_owner')), 'OWNER',
+  'owner role remains protected');
 select is((public.set_company_member(tests.id('company'), tests.id('recruiter'), 'RECRUITER', true)).role,
   'RECRUITER', 'owner can add a recruiter');
 select is((public.set_company_member(tests.id('company'), tests.id('viewer'), 'VIEWER', true)).role,
@@ -79,6 +91,25 @@ select is((public.update_admin_job(tests.id('admin_job'), 'Senior Data Engineer'
   'Senior Data Engineer', 'platform admin can edit a published job');
 select is((public.close_admin_job(tests.id('admin_job'))).status, 'CLOSED',
   'platform admin can close a published job');
+
+insert into tests.ids values ('admin_job_apply', (public.create_admin_job(
+  'Product Engineer', 'Acme Labs', 'Deliver product platform features and improvements.',
+  'Cairo', 'HYBRID', now() + interval '30 days', 'FULL_TIME', 'FRESH_GRADUATE'
+)).id);
+select is((public.publish_admin_job(tests.id('admin_job_apply'))).status, 'ACTIVE',
+  'platform admin can publish a second live job');
+
+reset role;
+select tests.login('graduate');
+insert into tests.ids values ('admin_application',
+  (public.apply_for_job(tests.id('admin_job_apply'), null, 'I would like to apply.')).id);
+select ok(exists (
+  select 1 from public.notifications
+  where profile_id = tests.id('graduate')
+    and related_entity_id = tests.id('admin_application')
+    and type = 'APPLICATION_SUBMITTED'
+    and body not like '%بيانات تجريبية%'
+), 'application to a real admin-managed job is not labelled sample data');
 
 reset role;
 select tests.login('outsider');

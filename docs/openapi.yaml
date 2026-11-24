@@ -843,7 +843,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_application_status:
     post:
-      summary: Update a real application status for a job owned by the caller's company
+      summary: Company owner/recruiter or platform admin advances a real application through the hiring workflow
       requestBody:
         required: true
         content:

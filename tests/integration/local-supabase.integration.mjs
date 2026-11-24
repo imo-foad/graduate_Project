@@ -60,16 +60,16 @@ const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
 
-async function addTemporaryCareerSkills(graduateId, skillIds) {
+async function addTemporaryCareerSkills(token, graduateId, skillIds) {
   const rows = skillIds.map((skill_id) => ({ graduate_id: graduateId, skill_id, level: 4, source: "MANUAL" }));
   const result = await request("/rest/v1/graduate_skills", {
     method: "POST",
-    headers: headers(service, { "Content-Type": "application/json", Prefer: "return=representation" }),
+    headers: headers(token, { "Content-Type": "application/json", Prefer: "return=representation" }),
     body: JSON.stringify(rows),
   });
   pass("temporary career-path skills inserted for integration profile " + graduateId,
     result.status === 201 && Array.isArray(result.json) && result.json.length === rows.length);
-  if (result.status === 201) injectedSkillRows.push({ graduate_id: graduateId, skill_ids: skillIds });
+  if (result.status === 201) injectedSkillRows.push({ token, graduate_id: graduateId, skill_ids: skillIds });
 }
 
 async function removeObject(token, path) {
@@ -141,7 +141,7 @@ try {
     cyberResult.status === 200 && hasCareerPath(cyberResult, "CYBERSECURITY"));
 
   // Inject isolated test-only skills to exercise Frontend + Data and Backend + Mobile profiles end to end.
-  await addTemporaryCareerSkills(a.id, ["HTML_CSS", "JAVASCRIPT", "REACT"]);
+  await addTemporaryCareerSkills(a.token, a.id, ["HTML_CSS", "JAVASCRIPT", "REACT"]);
   const frontendMulti = await request("/functions/v1/recommend", {
     method: "POST",
     headers: headers(a.token, { "Content-Type": "application/json" }),
@@ -151,7 +151,7 @@ try {
   pass("live Edge Function preserves multiple paths (Frontend + Data) for one graduate",
     hasCareerPath(frontendMulti, "FRONTEND") && hasCareerPath(frontendMulti, "DATA_ANALYTICS"));
 
-  await addTemporaryCareerSkills(b.id, ["NODE_JS", "REST_API", "POSTGRESQL"]);
+  await addTemporaryCareerSkills(b.token, b.id, ["NODE_JS", "REST_API", "POSTGRESQL"]);
   const backendMulti = await request("/functions/v1/recommend", {
     method: "POST",
     headers: headers(b.token, { "Content-Type": "application/json" }),
@@ -223,7 +223,7 @@ try {
     const cleanup = await request(
       "/rest/v1/graduate_skills?graduate_id=eq." + injected.graduate_id +
         "&skill_id=in.(" + injected.skill_ids.join(",") + ")",
-      { method: "DELETE", headers: headers(service) },
+      { method: "DELETE", headers: headers(injected.token) },
     );
     pass("temporary career-path skills cleaned up for " + injected.graduate_id, cleanup.ok);
   }

@@ -146,6 +146,8 @@ class Contract(unittest.TestCase):
         self.assertIn("opportunity:opportunities(", EDGE)
         self.assertIn("career_profile", resp)
         self.assertIn("deriveCareerProfile", EDGE)
+        self.assertIn('neq("model_version", MODEL_VERSION)', EDGE_INDEX)
+        self.assertIn("PROFILE_SKILLS_READ_FAILED", EDGE_INDEX)
 
     def test_career_profile_response_contract(self):
         schemas = API["components"]["schemas"]

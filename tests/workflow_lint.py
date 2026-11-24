@@ -96,6 +96,8 @@ class Scripts(unittest.TestCase):
         self.assertIn("cv-parse.integration.mjs", runner)
         self.assertIn("career-cohort.integration.mjs round1", runner)
         self.assertIn("career-cohort.integration.mjs round2", runner)
+        self.assertIn('[ "$CODE" = "401" ]', runner)
+        self.assertIn("expected HTTP 401 without JWT", runner)
         self.assertIn("timeout 900s", runner)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 

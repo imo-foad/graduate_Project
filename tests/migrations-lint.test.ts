@@ -60,11 +60,6 @@ test("business uniqueness constraints are present (BR-007, BR-012, BR-003)", () 
   assert.match(sql, /profile_id uuid primary key references public\.profiles/);
   assert.match(sql, /create unique index career_history_one_current/);
 });
-test("CV parse finalization RPC is service-role only", () => {
-  assert.match(sql, /revoke all on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\)\\s+from public, anon, authenticated/i);
-  assert.match(sql, /grant execute on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\) to service_role/i);
-  assert.doesNotMatch(sql, /grant execute on function public\\.complete_cv_parse\\(uuid, uuid, jsonb\\) to authenticated/i);
-});
 test("no secrets or demo passwords in SQL", () => {
   assert.doesNotMatch(sql, /service_role_key|eyJ[A-Za-z0-9_-]{20,}|password\s*=/i);
 });

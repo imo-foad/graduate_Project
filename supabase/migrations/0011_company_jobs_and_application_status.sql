@@ -67,20 +67,20 @@ create or replace function private.is_company_member(
 )
 returns boolean
 language sql stable security definer set search_path = ''
-as $
+as $company_member_guard$
   select auth.uid() is not null and exists (
     select 1 from public.company_memberships m
     where m.company_id = p_company_id and m.user_id = auth.uid()
       and m.is_active and m.role = any(p_roles)
   );
-$;
+$company_member_guard$;
 
 -- Break the applications <-> opportunities policy cycle. The SECURITY DEFINER
 -- function reads the relationship without recursively invoking either table's RLS.
 create or replace function private.can_view_company_application(p_application_id uuid)
 returns boolean
 language sql stable security definer set search_path = ''
-as $
+as $company_application_guard$
   select auth.uid() is not null and (
     private.is_platform_admin()
     or exists (
@@ -94,7 +94,7 @@ as $
         and m.role in ('OWNER','RECRUITER','VIEWER')
     )
   );
-$;
+$company_application_guard$;
 
 revoke all on function private.is_platform_admin() from public, anon, authenticated;
 revoke all on function private.is_company_member(uuid, text[]) from public, anon, authenticated;

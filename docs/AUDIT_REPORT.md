@@ -1,84 +1,76 @@
-# Alumni Connect AI — Backend Audit Report
+# Alumni Connect AI — Full Repository Test & Audit
 
 **Audit date:** 2026-11-24  
 **Repository:** `imo-foad/graduate_Project` (private)  
 **Review branch:** `fix/postgres-runtime-test-failures`  
 **Pull request:** [#2 — PostgreSQL and Storage test fixes](https://github.com/imo-foad/graduate_Project/pull/2)
 
-## Snapshot and safety
+## Snapshot and scope
 
-A full repository snapshot was created before the current audit on branch `backup/pre-full-audit-2026-11-24`. The snapshot points to commit `08d5af2f4ca6aefb03073c22bf2972793b647d5c`.
+The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The active audit covers the complete 51-file repository tree: configuration, workflows, docs/OpenAPI, JSON fixtures, scripts, Edge Function source, SQL migrations and seeds, pgTAP tests, TypeScript tests, Python contract checks and concurrency scripts.
 
-All corrective work is isolated on `fix/postgres-runtime-test-failures` and proposed through PR #2, which targets `backend-initial-import`. The `main` branch has not been changed. No Cloud Supabase project has been linked, reset, migrated, or otherwise modified.
+The audit and fixes remain on `fix/postgres-runtime-test-failures`. PR #2 targets `backend-initial-import`; `main` has not been changed. No Cloud Supabase project has been linked, reset, migrated or modified.
 
-## What the real CI run proved
+## Confirmed runtime findings
 
-GitHub Actions run [#17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871), at commit `08d5af2f4ca6aefb03073c22bf2972793b647d5c`, was the first successful start of the real local PostgreSQL/Supabase test stack for this repository.
+GitHub Actions run [#17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871) applied migrations 0001–0008, loaded the catalogue seeds, and ran all five pgTAP files (203 assertions). It reported 200 pass / 3 fail:
 
-The database job reached and completed the following stages:
-- Docker and PostgreSQL client checks passed.
-- Supabase CLI installed and verified.
-- Migrations 0001–0008 applied.
-- Catalogue seeds loaded and checked.
-- All five pgTAP files executed: 203 assertions total.
+1. RLS recursion in saved-opportunity insertion (two tests): SQLSTATE `42P17`, because `saved_insert` queried opportunities while the opportunities SELECT policy queried saved opportunities.
+2. Storage test expectation (one test): the test expected `P0001`, while Supabase's Storage protection returned `42501` for direct SQL deletion.
 
-The pgTAP result was **200 passing / 3 failing**. The failures were concrete:
+The runner stopped after pgTAP, so the concurrency suite did not execute in that run.
 
-1. **RLS recursion — tests 37 and 38 in `03_rls_security.test.sql`.** Saving an opportunity caused PostgreSQL error `42P17: infinite recursion detected in policy for relation "saved_opportunities"`. The catalogue SELECT policy queries `saved_opportunities`, while the saved-opportunity INSERT policy queried `opportunities`, creating a policy cycle.
-2. **Storage test expectation — test 9 in `04_storage_cv_ownership.test.sql`.** The test expected SQLSTATE `P0001`; Supabase returned `42501` with the message that direct deletion from Storage tables is not allowed and the Storage API must be used. The test was asserting the wrong SQLSTATE.
+The same run found an outdated fake-runner assertion that still expected migration 0007 while the runner was checking migration 0008. That test fixture was subsequently updated.
 
-The other pgTAP files, including RPC rules and recommendation-cache integrity, passed in that run. The concurrency phase did **not** execute because the runner stops after a failed pgTAP suite.
-
-The static job in run #17 also failed one fake-runner test: its expected error still named migration 0007 even though the runner correctly stopped at the missing migration 0008. That test fixture has been updated to migration 0009.
-
-## Corrections committed on the review branch
+## Fixes on the review branch
 
 ### Migration 0008 — safe text-array appends
 
-File: `supabase/migrations/0008_fix_array_appends.sql`
+`supabase/migrations/0008_fix_array_appends.sql` replaces scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. It preserves the function signatures and return values. The previous real PostgreSQL run applied migration 0008, and the RPC/eligibility pgTAP file passed in that run.
 
-- Replaced scalar text concatenation with `array_append()` in the final `eligibility_failures()` implementation.
-- Replaced scalar text concatenation with `array_append()` in `get_my_insights()`.
-- Preserved the existing function signatures and return contracts.
-- Added static regression checks and an RPC test that exercises missing profile fields.
+### Migration 0009 — RLS recursion fix
 
-The prior real PostgreSQL run applied migration 0008, and the RPC/eligibility pgTAP file passed in that run.
+`supabase/migrations/0009_fix_saved_opportunity_rls_recursion.sql` introduced a SECURITY DEFINER existence helper to break the recursive policy dependency while preserving the ownership predicate. The policy fix itself needs a fresh pgTAP run to confirm it.
 
-### Migration 0009 — break saved-opportunity RLS recursion
+### Migration 0010 — hide the RLS helper from the public API
 
-File: `supabase/migrations/0009_fix_saved_opportunity_rls_recursion.sql`
+The full static contract review found a follow-on security concern in migration 0009: its helper was in `public` and had EXECUTE granted to `authenticated`, making it a callable public-schema function rather than only an internal RLS implementation detail.
 
-- Added `public._opportunity_exists_for_saved_item(uuid)`, a SECURITY DEFINER helper with an empty search path.
-- Replaced the recursive subquery in the `saved_insert` policy with that helper.
-- Explicitly revoked default execution rights and granted execution only to `authenticated`.
+`supabase/migrations/0010_hide_saved_item_helper_from_api.sql` moves the helper to the `private` schema, which is not included in `supabase/config.toml`'s PostgREST exposed schemas. It revokes default privileges, grants the minimum schema/function access needed by authenticated RLS evaluation, drops the public helper, and recreates `saved_insert` against the private helper.
 
-This change is designed to preserve the existing rule that a graduate may save only an existing opportunity for their own account, without re-entering the catalogue RLS policy. It still needs a fresh real pgTAP run to confirm the fix.
+### Storage and CI regressions
 
-### Storage test and runner
+- Storage test now expects the observed `42501` direct-SQL protection response and checks the owner-folder DELETE policy.
+- Migration-count, fake-runner, SQL-static, API-contract and documentation checks are updated for migrations 0001–0010.
+- The Storage pgTAP assertion is not an HTTP Storage API end-to-end test. It does not yet prove upload-then-delete through the Storage API.
 
-- Corrected the Storage direct-SQL delete assertion to expect SQLSTATE `42501`.
-- Added an assertion that the `cv_objects_delete` policy is a DELETE policy scoped to the authenticated user's folder.
-- Updated migration-count checks, fake runner fixtures, README, and audit documentation for migrations 0001–0009.
+## Static review notes
 
-**Important Storage limitation:** The pgTAP test does not perform the delete through the HTTP Storage API. It verifies that direct SQL deletion is blocked and inspects the owner-folder policy. An API-level upload/delete test is still a separate verification item; do not interpret this pgTAP assertion as end-to-end proof that a user can delete their own object through the API.
+- `fixtures/skills.json`: 50 unique skill IDs.
+- `fixtures/opportunities.json`: 29 unique opportunity seed keys across 8 types.
+- `fixtures/demo-profiles.json`: 4 demo profiles with unique emails.
+- The deterministic scoring implementation explicitly documents six assumptions (B1–B6); its lexical similarity is a proxy, not an embedding model. These are product/quality limitations, not unreported runtime failures.
+- Demo-user provisioning requires the operator to set the target URL and server-side credentials correctly; the script prints its destination before issuing Auth Admin requests.
+- Supabase CLI is configured as `latest` in CI rather than a pinned version; this is a reproducibility risk.
+- README's stated Node engine minimum and `package.json` engine minimum differ; CI currently uses Node 22 and the recorded runner used Node 22.23.5.
 
-## Remaining verification
+## Verification status
 
-The review branch must receive a fresh GitHub Actions run and pass all of these before the PR is considered ready:
+Run #17 is historical evidence for migrations 0001–0008 only. It is **not** evidence that migrations 0009 or 0010 pass. The latest source changes must pass a fresh GitHub Actions run covering:
 
-- Static TypeScript tests.
-- OpenAPI contract tests.
-- Workflow/script lint tests.
-- All nine migrations on the disposable local PostgreSQL stack.
-- Seed idempotency and integrity checks.
-- All five pgTAP files, including saved-opportunity RLS and Storage policy assertions.
-- Real concurrent registration, application, and recommendation-cache tests.
+- all Node/TypeScript tests;
+- all OpenAPI contract tests;
+- workflow and migration-count lint;
+- all ten migrations on disposable local PostgreSQL;
+- seed generation, idempotency, counts and referential integrity;
+- all five pgTAP files;
+- concurrency tests for registrations, applications and recommendation snapshot/cache races.
 
-Until the fresh run is green, the status is **FIXES PREPARED — RUNTIME RE-VERIFICATION PENDING**, not fully passed.
+Until the fresh workflow is green, the overall status remains **IN PROGRESS — latest runtime verification pending**.
 
-## Files and branches
+## Branches
 
 - Snapshot: `backup/pre-full-audit-2026-11-24`
-- Active fixes: `fix/postgres-runtime-test-failures`
-- Review: [Pull request #2](https://github.com/imo-foad/graduate_Project/pull/2)
-- Actions evidence: [Run #17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871)
+- Active review branch: `fix/postgres-runtime-test-failures`
+- Review PR: [#2](https://github.com/imo-foad/graduate_Project/pull/2)
+- Historical runtime evidence: [Actions run #17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871)

@@ -97,12 +97,14 @@ test("REGRESSION: scalar text values are appended safely to text arrays", () => 
 });
 
 
-test("saved-opportunity INSERT policy avoids recursive catalogue RLS evaluation", () => {
+test("saved-opportunity RLS helper is private and not exposed as a public RPC", () => {
   const sql = allMigrationsSql();
-  const helper = finalFunctions(sql).get("_opportunity_exists_for_saved_item")!;
-  assert.match(helper.header, /security definer/i);
-  assert.match(helper.header, /set search_path\s*=\s*''/i);
-  const migration = readMigration("0009_fix_saved_opportunity_rls_recursion.sql");
-  assert.match(migration, /create policy saved_insert[\s\S]*?_opportunity_exists_for_saved_item\(opportunity_id\)/i);
-  assert.doesNotMatch(migration, /create policy saved_insert[\s\S]*?exists\s*\(\s*select[\s\S]*?public\.opportunities/i);
+  const migration = readMigration("0010_hide_saved_item_helper_from_api.sql");
+  assert.match(migration, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
+  assert.match(migration, /security definer[\s\S]*?set search_path\s*=\s*''/i);
+  assert.match(migration, /revoke all on function private\._opportunity_exists_for_saved_item\(uuid\) from public, anon, authenticated/i);
+  assert.match(migration, /grant execute on function private\._opportunity_exists_for_saved_item\(uuid\) to authenticated/i);
+  assert.match(migration, /drop function if exists public\._opportunity_exists_for_saved_item\(uuid\)/i);
+  assert.match(migration, /create policy saved_insert[\s\S]*?private\._opportunity_exists_for_saved_item\(opportunity_id\)/i);
+  assert.doesNotMatch(sql, /create or replace function public\._opportunity_exists_for_saved_item\(/i);
 });

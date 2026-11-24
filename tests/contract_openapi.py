@@ -9,7 +9,7 @@ API = yaml.safe_load(open(os.path.join(ROOT, "docs/openapi.yaml")))
 EDGE_INDEX = open(os.path.join(ROOT, "supabase/functions/recommend/index.ts")).read()
 FLOW = open(os.path.join(ROOT, "supabase/functions/_shared/recommend-flow.ts")).read()
 EDGE = EDGE_INDEX + "\n" + FLOW  # the function = thin handler + orchestration module
-INTERNAL_OK = {"is_opportunity_open"}  # RLS helper: executable by clients but not an API endpoint
+INTERNAL_OK = {"is_opportunity_open", "_opportunity_exists_for_saved_item"}  # historical 0009 public grant is revoked/dropped by 0010; private replacement is not an API endpoint
 
 
 def split_top(s):

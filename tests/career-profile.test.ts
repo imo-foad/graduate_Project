@@ -171,7 +171,7 @@ test("returns every credible path rather than truncating at four", () => {
 test("all four requested tracks satisfy the exact two-core threshold; supporting skills cannot replace a core", () => {
   const cases = [
     { id: "FRONTEND", core: ["HTML_CSS", "JAVASCRIPT"], support: "GIT" },
-    { id: "BACKEND", core: ["NODE_JS", "REST_API"], support: "PYTHON" },
+    { id: "BACKEND", core: ["NODE_JS", "REST_API"], support: "DOCKER" },
     { id: "DATA_ANALYTICS", core: ["SQL", "POWER_BI"], support: "PYTHON" },
     { id: "CYBERSECURITY", core: ["CYBERSECURITY", "PENETRATION_TESTING"], support: "LINUX" },
   ];

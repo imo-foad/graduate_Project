@@ -31,7 +31,7 @@ async function readResponse(res) {
   return { status: res.status, ok: res.ok, text, json };
 }
 async function request(path, init = {}) {
-  const res = await fetch(`${base}${path}`, init);
+  const res = await fetch(`${base}${path}`, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) });
   return readResponse(res);
 }
 async function login(email) {

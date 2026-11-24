@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 LOG_DIR=".ci-logs"
 mkdir -p "$LOG_DIR"
 need() { command -v "$1" >/dev/null || { echo "MISSING TOOL: $1" >&2; exit 3; }; }
-for t in node supabase psql curl; do need "$t"; done
+for t in node supabase psql curl timeout; do need "$t"; done
 
 # Refuse any non-local target before creating Auth users or touching Storage.
 node scripts/assert-local-db.mjs "${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}" >/dev/null
@@ -75,8 +75,9 @@ READY=0
 for _ in $(seq 1 60); do
   CODE="$(curl -sS -o /dev/null -w '%{http_code}' -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/functions/v1/recommend" 2>/dev/null || true)"
   if [ "$CODE" != "000" ] && [ -n "$CODE" ]; then READY=1; break; fi
+  if ! kill -0 "$FUNCTION_PID" >/dev/null 2>&1; then echo "Edge Function serve process exited early" >&2; tail -100 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; fi
   sleep 1
 done
 [ "$READY" = "1" ] || { echo "Edge Function gateway did not become ready" >&2; tail -80 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; }
 
-node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
+timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"

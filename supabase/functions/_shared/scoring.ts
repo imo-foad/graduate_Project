@@ -1,6 +1,6 @@
 // Deterministic match scoring (BR-016/017/022). Pure TypeScript: no Deno/Node APIs, so it is unit-testable.
 // The LLM never produces the score. Weights come from the business doc (6.5) except where marked ASSUMPTION.
-export const MODEL_VERSION = "deterministic-v2-free-personalized";
+export const MODEL_VERSION = "deterministic-v3-career-intelligence";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }

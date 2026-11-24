@@ -83,3 +83,15 @@ test("Edge Function: user-facing reads use the user client; service role only fo
   const adminUses = [...src.matchAll(/admin\.(\w+)\(\s*"(\w+)"/g)].map((m) => `${m[1]}:${m[2]}`).sort();
   assert.deepEqual(adminUses, ["rpc:get_recommendation_candidates", "rpc:save_recommendations"]);
 });
+
+
+test("REGRESSION: scalar text values are appended safely to text arrays", () => {
+  const fns = finalFunctions(allMigrationsSql());
+  const eligibility = fns.get("eligibility_failures")!;
+  const insights = fns.get("get_my_insights")!;
+  assert.match(eligibility.body, /array_append\\(f,\\s*'GRADUATION_YEAR_TOO_EARLY'\\)/);
+  assert.match(eligibility.body, /array_append\\(f,\\s*'MISSING_CERTIFICATION:'\\s*\\|\\|\\s*cert\\)/);
+  assert.doesNotMatch(eligibility.body, /\\bf\\s*:=\\s*f\\s*\\|\\|/);
+  assert.match(insights.body, /array_append\\(missing,\\s*'college'\\)/);
+  assert.doesNotMatch(insights.body, /\\bmissing\\s*:=\\s*missing\\s*\\|\\|/);
+});

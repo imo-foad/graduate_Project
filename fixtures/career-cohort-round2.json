@@ -1,0 +1,447 @@
+{
+  "round": 2,
+  "users": [
+    {
+      "code": "01-FRONTEND",
+      "name": "Dina Wael",
+      "track": "Frontend",
+      "target_paths": [
+        "FRONTEND"
+      ],
+      "major": "Computer Science",
+      "department": "Web Applications",
+      "interest": [
+        "Frontend Engineering",
+        "React"
+      ],
+      "skills": [
+        "HTML_CSS",
+        "JAVASCRIPT",
+        "REACT"
+      ],
+      "reject_skill_id": "DOCKER",
+      "work_mode": "REMOTE",
+      "city": "Cairo",
+      "experience": {
+        "company": "Northstar Web Studio",
+        "title": "Web Developer",
+        "field": "Frontend",
+        "date_range": "Feb 2022 - Nov 2024",
+        "description": "Implemented accessible component systems and reusable React pages."
+      },
+      "certification": {
+        "title": "Modern Web UI Practitioner",
+        "issuer": "Northstar Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Component Design Systems",
+        "provider": "Frontend Workshop",
+        "year": "2025",
+        "duration": "7 weeks"
+      },
+      "recommendation_titles": [
+        "Frontend Developer"
+      ]
+    },
+    {
+      "code": "02-BACKEND",
+      "name": "Mostafa Ali",
+      "track": "Backend",
+      "target_paths": [
+        "BACKEND"
+      ],
+      "major": "Computer Science",
+      "department": "Backend Systems",
+      "interest": [
+        "Backend Systems",
+        "API Development"
+      ],
+      "skills": [
+        "NODE_JS",
+        "REST_API",
+        "POSTGRESQL",
+        "MONGODB"
+      ],
+      "reject_skill_id": "FIGMA",
+      "work_mode": "HYBRID",
+      "city": "Giza",
+      "experience": {
+        "company": "ServerCraft Technologies",
+        "title": "API Engineer",
+        "field": "Backend",
+        "date_range": "May 2022 - Dec 2024",
+        "description": "Built authenticated REST APIs and optimized PostgreSQL persistence."
+      },
+      "certification": {
+        "title": "REST Service Design Credential",
+        "issuer": "ServerCraft Learning",
+        "year": "2024"
+      },
+      "course": {
+        "title": "MongoDB and API Reliability",
+        "provider": "Backend Practice",
+        "year": "2025",
+        "duration": "13 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Java Backend Developer"
+      ]
+    },
+    {
+      "code": "03-MOBILE",
+      "name": "Rana Ibrahim",
+      "track": "Mobile",
+      "target_paths": [
+        "MOBILE"
+      ],
+      "major": "Computer Science",
+      "department": "Mobile Applications",
+      "interest": [
+        "Android Development",
+        "Flutter"
+      ],
+      "skills": [
+        "FLUTTER",
+        "ANDROID",
+        "JETPACK_COMPOSE",
+        "KOTLIN"
+      ],
+      "reject_skill_id": "SQL",
+      "work_mode": "HYBRID",
+      "city": "Mansoura",
+      "experience": {
+        "company": "MobiCraft Studio",
+        "title": "Mobile Application Developer",
+        "field": "Mobile",
+        "date_range": "Mar 2022 - Oct 2024",
+        "description": "Shipped cross-platform and native Android screens with responsive state."
+      },
+      "certification": {
+        "title": "Mobile Application Delivery Certificate",
+        "issuer": "MobiCraft Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Flutter and Native Android Foundations",
+        "provider": "Mobile Learning House",
+        "year": "2025",
+        "duration": "10 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Android Developer"
+      ]
+    },
+    {
+      "code": "04-DATA-ANALYTICS",
+      "name": "Heba Adel",
+      "track": "Data Analytics",
+      "target_paths": [
+        "DATA_ANALYTICS"
+      ],
+      "major": "Statistics",
+      "department": "Decision Science",
+      "interest": [
+        "Data Analytics",
+        "Reporting"
+      ],
+      "skills": [
+        "SQL",
+        "TABLEAU",
+        "STATISTICS",
+        "DATA_VISUALIZATION",
+        "EXCEL",
+        "POWER_BI"
+      ],
+      "reject_skill_id": "PYTHON",
+      "work_mode": "REMOTE",
+      "city": "Cairo",
+      "experience": {
+        "company": "ClearView Business Insights",
+        "title": "Business Data Analyst",
+        "field": "Data Analytics",
+        "date_range": "Jan 2022 - Jul 2024",
+        "description": "Validated business data and designed Tableau and Power BI reporting."
+      },
+      "certification": {
+        "title": "Analytics Dashboard Certificate",
+        "issuer": "ClearView Institute",
+        "year": "2024"
+      },
+      "course": {
+        "title": "SQL Reporting and Visual Analytics",
+        "provider": "Decision Science School",
+        "year": "2025",
+        "duration": "9 weeks"
+      },
+      "recommendation_titles": [
+        "Data Analyst"
+      ]
+    },
+    {
+      "code": "05-DATA-SCIENCE",
+      "name": "Ali Mostafa",
+      "track": "Data Science",
+      "target_paths": [
+        "DATA_SCIENCE"
+      ],
+      "major": "Statistics",
+      "department": "Machine Learning",
+      "interest": [
+        "Machine Learning",
+        "Predictive Modeling"
+      ],
+      "skills": [
+        "PYTHON",
+        "MACHINE_LEARNING",
+        "ETL",
+        "STATISTICS"
+      ],
+      "reject_skill_id": "EXCEL",
+      "work_mode": "REMOTE",
+      "city": "Giza",
+      "experience": {
+        "company": "Predictive Systems Lab",
+        "title": "Data Scientist Intern",
+        "field": "Data Science",
+        "date_range": "Apr 2022 - Dec 2024",
+        "description": "Prepared feature datasets and compared supervised learning model results."
+      },
+      "certification": {
+        "title": "Machine Learning Practice Certificate",
+        "issuer": "Predictive Systems Lab",
+        "year": "2024"
+      },
+      "course": {
+        "title": "Production Data Pipelines",
+        "provider": "Applied ML Institute",
+        "year": "2025",
+        "duration": "14 weeks"
+      },
+      "recommendation_titles": [
+        "Junior Machine Learning Engineer"
+      ]
+    },
+    {
+      "code": "06-CYBERSECURITY",
+      "name": "Mina Fawzy",
+      "track": "Cybersecurity",
+      "target_paths": [
+        "CYBERSECURITY"
+      ],
+      "major": "Cybersecurity",
+      "department": "Network Defense",
+      "interest": [
+        "Information Security",
+        "Blue Team"
+      ],
+      "skills": [
+        "CYBERSECURITY",
+        "NETWORKING",
+        "SIEM",
+        "CRYPTOGRAPHY"
+      ],
+      "reject_skill_id": "REACT",
+      "work_mode": "ONSITE",
+      "city": "Cairo",
+      "experience": {
+        "company": "IronGate Security",
+        "title": "Security Operations Analyst",
+        "field": "Cybersecurity",
+        "date_range": "Jan 2022 - Sep 2024",
+        "description": "Investigated security events and correlated network telemetry in SIEM."
+      },
+      "certification": {
+        "title": "Defensive Security Operations",
+        "issuer": "IronGate Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "SIEM Detection and Threat Analysis",
+        "provider": "Cyber Defense School",
+        "year": "2025",
+        "duration": "12 weeks"
+      },
+      "recommendation_titles": [
+        "SOC Analyst (Tier 1)"
+      ]
+    },
+    {
+      "code": "07-DEVOPS",
+      "name": "Ayman Saeed",
+      "track": "DevOps and Cloud",
+      "target_paths": [
+        "DEVOPS_CLOUD"
+      ],
+      "major": "Computer Science",
+      "department": "Infrastructure Engineering",
+      "interest": [
+        "Cloud Engineering",
+        "DevOps Automation"
+      ],
+      "skills": [
+        "DOCKER",
+        "LINUX",
+        "AWS",
+        "CLOUD_BASICS",
+        "DEVOPS_CI_CD"
+      ],
+      "reject_skill_id": "FIGMA",
+      "work_mode": "HYBRID",
+      "city": "Cairo",
+      "experience": {
+        "company": "Orbit Cloud Services",
+        "title": "Infrastructure Engineer",
+        "field": "DevOps",
+        "date_range": "Jul 2022 - Dec 2024",
+        "description": "Automated container builds and cloud release workflows."
+      },
+      "certification": {
+        "title": "Cloud Infrastructure Fundamentals",
+        "issuer": "Orbit Cloud Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "AWS Deployment and CI CD",
+        "provider": "Cloud Operations Lab",
+        "year": "2025",
+        "duration": "10 weeks"
+      },
+      "recommendation_titles": [
+        "Cloud Day (registration opens later)"
+      ]
+    },
+    {
+      "code": "08-QA",
+      "name": "Mayar Khaled",
+      "track": "QA Automation",
+      "target_paths": [
+        "QA_AUTOMATION"
+      ],
+      "major": "Computer Science",
+      "department": "Quality Engineering",
+      "interest": [
+        "QA Automation",
+        "Test Engineering"
+      ],
+      "skills": [
+        "TESTING",
+        "JAVASCRIPT",
+        "JAVA"
+      ],
+      "reject_skill_id": "KOTLIN",
+      "work_mode": "HYBRID",
+      "city": "Mansoura",
+      "experience": {
+        "company": "AssureTech",
+        "title": "Test Automation Engineer",
+        "field": "QA",
+        "date_range": "Feb 2022 - Nov 2024",
+        "description": "Automated browser and API test suites and analyzed regression failures."
+      },
+      "certification": {
+        "title": "Quality Engineering Certificate",
+        "issuer": "AssureTech Learning",
+        "year": "2024"
+      },
+      "course": {
+        "title": "JavaScript Test Automation",
+        "provider": "Test Engineering Academy",
+        "year": "2025",
+        "duration": "8 weeks"
+      },
+      "recommendation_titles": [
+        "QA Engineer"
+      ]
+    },
+    {
+      "code": "09-UIUX",
+      "name": "Yasmin Sherif",
+      "track": "UI UX Design",
+      "target_paths": [
+        "UI_UX"
+      ],
+      "major": "Product Design",
+      "department": "Interaction Design",
+      "interest": [
+        "UX Research",
+        "Interface Design"
+      ],
+      "skills": [
+        "UI_UX",
+        "FIGMA",
+        "HTML_CSS"
+      ],
+      "reject_skill_id": "JAVASCRIPT",
+      "work_mode": "REMOTE",
+      "city": "Alexandria",
+      "experience": {
+        "company": "Form and Function",
+        "title": "Product Designer",
+        "field": "UI/UX Design",
+        "date_range": "Mar 2022 - Dec 2024",
+        "description": "Mapped user journeys and tested Figma prototypes with product stakeholders."
+      },
+      "certification": {
+        "title": "Interaction Design Practice",
+        "issuer": "Form and Function Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "UX Research and Interface Systems",
+        "provider": "Product Thinking School",
+        "year": "2025",
+        "duration": "12 weeks"
+      },
+      "recommendation_titles": []
+    },
+    {
+      "code": "10-FULLSTACK",
+      "name": "Tamer Reda",
+      "track": "Full Stack",
+      "target_paths": [
+        "FRONTEND",
+        "BACKEND"
+      ],
+      "major": "Computer Science",
+      "department": "Web Systems",
+      "interest": [
+        "Full Stack",
+        "Web Platforms"
+      ],
+      "skills": [
+        "HTML_CSS",
+        "JAVASCRIPT",
+        "REACT",
+        "NODE_JS",
+        "REST_API",
+        "POSTGRESQL"
+      ],
+      "reject_skill_id": "FLUTTER",
+      "work_mode": "HYBRID",
+      "city": "Cairo",
+      "experience": {
+        "company": "BridgeWeb Applications",
+        "title": "Full Stack Developer",
+        "field": "Software Engineering",
+        "date_range": "Jan 2022 - Dec 2024",
+        "description": "Delivered React workflows and Node REST services with relational persistence."
+      },
+      "certification": {
+        "title": "Full Stack Application Certificate",
+        "issuer": "BridgeWeb Academy",
+        "year": "2024"
+      },
+      "course": {
+        "title": "React and Node Service Integration",
+        "provider": "Web Systems School",
+        "year": "2025",
+        "duration": "14 weeks"
+      },
+      "recommendation_titles": [
+        "Frontend Developer",
+        "Junior Java Backend Developer"
+      ]
+    }
+  ]
+}

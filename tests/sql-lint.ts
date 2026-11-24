@@ -6,7 +6,7 @@ export const migrationFiles = () => readdirSync(migrationsDir).filter((f) => f.e
 export const readMigration = (f: string) => readFileSync(new URL(f, migrationsDir), "utf8");
 export const allMigrationsSql = () => migrationFiles().map(readMigration).join("\n");
 
-const FN_RE = /create or replace function\s+public\.(\w+)\s*\(([\s\S]*?)\)\s*returns[\s\S]*?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)([\s\S]*?)\\3/gi;
+const FN_RE = /create or replace function\s+public\.(\w+)\s*\(([\s\S]*?)\)\s*returns[\s\S]*?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)([\s\S]*?)\3/gi;
 
 /** Final definition of each function: later migrations override earlier ones (CREATE OR REPLACE semantics). */
 export function finalFunctions(sql: string): Map<string, { params: string; body: string; header: string }> {

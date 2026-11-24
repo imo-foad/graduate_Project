@@ -773,8 +773,8 @@ const report = {
   checks_total: graded.reduce((sum, item) => sum + item.checks_total, 0),
   category_summary: categorySummary, users: graded, cleanup_failures: cleanupFailures,
 };
-mkdirSync(".ci-logs", { recursive: true });
-writeFileSync(".ci-logs/career-cohort-" + round + ".json", JSON.stringify(report, null, 2) + "\n");
+mkdirSync("career-cohort-reports", { recursive: true });
+writeFileSync("career-cohort-reports/career-cohort-" + round + ".json", JSON.stringify(report, null, 2) + "\n");
 const md = [
   "# Career Cohort " + round.toUpperCase() + " Report",
   "",
@@ -784,10 +784,13 @@ const md = [
   "- Checks: " + report.checks_passed + "/" + report.checks_total,
   "- Fully passed: **" + (allPassed ? "YES" : "NO") + "**",
   "",
-  "| User | Track | QA score | Checks |",
-  "|---|---|---:|---:|",
-  ...graded.map((item) => "| " + item.name + " (" + item.code + ") | " + item.track + " | " +
-    item.score + "/100 | " + item.checks_passed + "/" + item.checks_total + " |"),
+  "| User | Track | Career path score(s) | QA score | Checks |",
+  "|---|---|---|---:|---:|",
+  ...graded.map((item) => {
+    const scores = (item.career_match_scores ?? []).map((path) => path.id + ": " + path.score + "/100").join(", ") || "No inferred path";
+    return "| " + item.name + " (" + item.code + ") | " + item.track + " | " + scores + " | " +
+      item.score + "/100 | " + item.checks_passed + "/" + item.checks_total + " |";
+  }),
   "",
   "## Component averages",
   "",
@@ -805,7 +808,8 @@ const md = [
   )),
   ...(cleanupFailures.length ? ["", "## Cleanup failures", "", ...cleanupFailures.map((item) => "- " + JSON.stringify(item))] : []),
 ].join("\n") + "\n";
-writeFileSync(".ci-logs/career-cohort-" + round + ".md", md);
+writeFileSync("career-cohort-reports/career-cohort-" + round + ".md", md);
+console.log("CAREER_COHORT_REPORT_PATH|career-cohort-reports/career-cohort-" + round + ".json");
 console.log("CAREER_COHORT_SCORE|" + round + "|" + overall + "/100|" +
   report.checks_passed + "/" + report.checks_total + "|" + (allPassed ? "PASS" : "FAIL"));
 console.log("CAREER_COHORT_REPORT|" + JSON.stringify({

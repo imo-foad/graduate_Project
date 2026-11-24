@@ -239,4 +239,7 @@ grant execute on function public.set_company_member(uuid, uuid, text, boolean),
 to authenticated;
 
 comment on function public.set_company_member(uuid, uuid, text, boolean) is 'Company OWNER manages recruiter/viewer memberships; no client can create an OWNER.';
+create policy admin_opportunities_select on public.opportunities for select to authenticated
+  using (private.is_platform_admin());
+
 comment on function public.update_application_status(uuid, text, text) is 'Company recruiters or platform admins can advance applications through the allowed hiring state machine.';

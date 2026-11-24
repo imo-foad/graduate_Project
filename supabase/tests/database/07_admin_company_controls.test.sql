@@ -38,7 +38,7 @@ reset role;
 insert into public.company_memberships(company_id, user_id, role)
 values (tests.id('company'), tests.id('other_owner'), 'OWNER');
 select tests.login('owner');
-select throws_ok($select public.set_company_member(tests.id('company'), tests.id('other_owner'), 'RECRUITER', true)$,
+select throws_ok($q$select public.set_company_member(tests.id('company'), tests.id('other_owner'), 'RECRUITER', true)$q$,
   'PT422', 'INVALID_INPUT', 'an existing company owner cannot be demoted');
 select is((select role from public.company_memberships
   where company_id = tests.id('company') and user_id = tests.id('other_owner')), 'OWNER',
@@ -59,9 +59,9 @@ select is((select status from public.opportunities where id = tests.id('recruite
 
 reset role;
 select tests.login('viewer');
-select throws_ok($$select public.create_company_job(
+select throws_ok($$q$select public.create_company_job(
   tests.id('company'), 'Viewer Job', 'This viewer must not publish company jobs.',
-  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$$,
+  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$q$$,
   'PT403', 'NOT_COMPANY_MEMBER', 'viewer cannot create a job');
 
 reset role;
@@ -70,9 +70,9 @@ select is((public.set_company_member(tests.id('company'), tests.id('recruiter'),
   false, 'owner can revoke a recruiter');
 reset role;
 select tests.login('recruiter');
-select throws_ok($$select public.create_company_job(
+select throws_ok($$q$select public.create_company_job(
   tests.id('company'), 'Revoked Job', 'A revoked recruiter cannot create jobs.',
-  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$$,
+  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$q$$,
   'PT403', 'NOT_COMPANY_MEMBER', 'revoked recruiter loses company access');
 
 reset role;
@@ -113,9 +113,9 @@ select ok(exists (
 
 reset role;
 select tests.login('outsider');
-select throws_ok($$select public.create_admin_job(
+select throws_ok($$q$select public.create_admin_job(
   'Fake Job', 'Fake Co', 'An outsider must not create platform jobs.',
-  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$$,
+  null, 'ONSITE', null, 'FULL_TIME', 'JUNIOR')$q$$,
   'PT403', 'ADMIN_REQUIRED', 'ordinary user cannot create a platform job');
 
 reset role;

@@ -1,0 +1,706 @@
+openapi: 3.0.3
+info:
+  title: Alumni Connect AI - Backend API (Supabase)
+  version: 0.1.0
+  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`; every operation except the token
+    endpoint also needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` =
+    stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
+servers:
+- url: '{supabaseUrl}'
+  variables:
+    supabaseUrl:
+      default: http://127.0.0.1:54321
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Project anon/publishable key. Required on EVERY request, including login. Safe to ship in the app.
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User access_token from /auth/v1/token. Required on every operation except the token endpoint itself.
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          example: ALREADY_APPLIED
+        details:
+          type: string
+          nullable: true
+    Application:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        opportunity_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - SUBMITTED
+          - WITHDRAWN
+          - SAMPLE_UNDER_REVIEW
+          - SAMPLE_INTERVIEW
+          - SAMPLE_ACCEPTED
+          - SAMPLE_REJECTED
+        status_source:
+          type: string
+          enum:
+          - APP_ACTION
+          - SEED_SAMPLE
+        applied_at:
+          type: string
+          format: date-time
+    EventRegistration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        opportunity_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - REGISTERED
+          - WAITLISTED
+          - CANCELLED
+    CareerRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_name:
+          type: string
+        job_title:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        is_current:
+          type: boolean
+    Recommendation:
+      type: object
+      properties:
+        opportunity_id:
+          type: string
+          format: uuid
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Match Score (not an acceptance probability)
+        band:
+          type: string
+          enum:
+          - HIGH
+          - GOOD
+          - MEDIUM
+          - LOW
+        matched_skill_ids:
+          type: array
+          items:
+            type: string
+        missing_skill_ids:
+          type: array
+          items:
+            type: string
+        gaps:
+          type: array
+          items:
+            type: object
+        reasons:
+          type: array
+          items:
+            type: string
+        explanation_ar:
+          type: string
+        model_version:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        opportunity:
+          type: object
+          description: Embedded opportunity (id,type,title,company_name,location,attendance_mode,status,deadline,start_at,end_at)
+    PasswordGrantRequest:
+      type: object
+      required:
+      - email
+      - password
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          format: password
+    RefreshTokenGrantRequest:
+      type: object
+      required:
+      - refresh_token
+      additionalProperties: false
+      properties:
+        refresh_token:
+          type: string
+    TokenResponse:
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - token_type
+      - expires_in
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum:
+          - bearer
+        expires_in:
+          type: integer
+        expires_at:
+          type: integer
+        refresh_token:
+          type: string
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+    AuthError:
+      type: object
+      description: Supabase Auth error body (field set can vary by version; not verified against a live project).
+      properties:
+        code:
+          type: integer
+        error_code:
+          type: string
+          example: invalid_credentials
+        msg:
+          type: string
+    GatewayError:
+      type: object
+      properties:
+        message:
+          type: string
+          example: No API key found in request
+    RecommendError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum:
+          - UNAUTHENTICATED
+          - METHOD_NOT_ALLOWED
+          - CANDIDATES_FAILED
+          - SAVE_FAILED
+          - STALE_SNAPSHOT
+          - READ_FAILED
+        retryable:
+          type: boolean
+        attempts:
+          type: integer
+        code:
+          type: string
+  responses:
+    BusinessError:
+      description: HTTP status mirrors the business meaning; body.message is a stable code. 401 UNAUTHENTICATED. 404 OPPORTUNITY_NOT_FOUND,
+        APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND. 409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED,
+        EVENT_FULL. 422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
+        INVALID_INPUT, START_BEFORE_PREVIOUS.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+security:
+- apiKeyAuth: []
+  jwt: []
+paths:
+  /rest/v1/graduate_profiles:
+    get:
+      summary: 'Own profile (RLS returns only the caller''s row). Filter: ?profile_id=eq.<uid>'
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: 'Update own profile. Writable columns: college, department, major, graduation_year, degree, employment_status,
+        location, career_interests, work_preferences, hidden_fields'
+      responses:
+        '204':
+          description: Updated
+  /rest/v1/graduate_skills:
+    get:
+      summary: Own skills
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add a skill manually (source is forced to MANUAL by RLS)
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Update level / years_experience of an own skill (?skill_id=eq.X)
+      responses:
+        '204':
+          description: Updated
+    delete:
+      summary: Remove own skill
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/skills:
+    get:
+      summary: Skills dictionary (read-only)
+      responses:
+        '200':
+          description: OK
+  /rest/v1/career_history:
+    get:
+      summary: Own career history
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add a PAST record (end_date required). Use set_current_job for the current job.
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Edit own record (not is_current)
+      responses:
+        '204':
+          description: Updated
+  /rest/v1/opportunities:
+    get:
+      summary: Read-only catalogue. Only open opportunities (ACTIVE, not expired) plus ones you applied/registered/saved.
+        Use PostgREST filters, e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
+      responses:
+        '200':
+          description: OK
+  /rest/v1/saved_opportunities:
+    get:
+      summary: Own saved
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Save (body {graduate_id, opportunity_id}; graduate_id must equal your uid)
+      responses:
+        '201':
+          description: Created
+    delete:
+      summary: 'Unsave: ?opportunity_id=eq.<id>'
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/applications:
+    get:
+      summary: Own applications (?select=*,opportunity:opportunities(title),application_status_history(*)). SEED_SAMPLE rows
+        are demo history.
+      responses:
+        '200':
+          description: OK
+  /rest/v1/event_registrations:
+    get:
+      summary: Own registrations
+      responses:
+        '200':
+          description: OK
+  /rest/v1/recommendations:
+    get:
+      summary: Cached recommendations (closed/expired opportunities are hidden). Prefer POST /functions/v1/recommend to refresh.
+      responses:
+        '200':
+          description: OK
+  /rest/v1/notifications:
+    get:
+      summary: In-app notifications (?order=created_at.desc)
+      responses:
+        '200':
+          description: OK
+    patch:
+      summary: 'Mark read: ?id=eq.<id> body {is_read:true}'
+      responses:
+        '204':
+          description: Updated
+  /rest/v1/rpc/apply_for_job:
+    post:
+      summary: Create a SUBMITTED application (one per job; eligibility and deadline enforced server-side)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_opportunity_id
+              properties:
+                p_opportunity_id:
+                  type: string
+                  format: uuid
+                p_cv_document_id:
+                  type: string
+                  format: uuid
+                p_note:
+                  type: string
+      responses:
+        '200':
+          description: Application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/withdraw_application:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_application_id
+              properties:
+                p_application_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Application
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/register_for_event:
+    post:
+      summary: Register (status REGISTERED, or WAITLISTED when full and waitlist enabled)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_opportunity_id
+              properties:
+                p_opportunity_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventRegistration'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/cancel_event_registration:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_opportunity_id
+              properties:
+                p_opportunity_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Registration
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/set_current_job:
+    post:
+      summary: Close the current job (if any) and start a new one atomically; sets employment_status=EMPLOYED
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_company_name
+              - p_job_title
+              - p_start_date
+              properties:
+                p_company_name:
+                  type: string
+                p_job_title:
+                  type: string
+                p_start_date:
+                  type: string
+                  format: date
+                p_field:
+                  type: string
+                p_description:
+                  type: string
+      responses:
+        '200':
+          description: New record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CareerRecord'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/get_opportunity_eligibility:
+    post:
+      summary: List failed hard requirements for the caller, e.g. ["MISSING_CERTIFICATION:Security+"]. Empty = eligible.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_opportunity_id
+              properties:
+                p_opportunity_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: text[] of failed requirements
+  /rest/v1/rpc/confirm_cv_suggestions:
+    post:
+      summary: Confirm/reject pending CV skill suggestions (nothing is saved without this call)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_confirm:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+                p_reject:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+              required:
+              - p_confirm
+      responses:
+        '200':
+          description: '{confirmed, rejected}'
+  /rest/v1/rpc/get_my_insights:
+    post:
+      summary: Personal insights for the caller only
+      responses:
+        '200':
+          description: JSON
+  /rest/v1/rpc/get_skill_gaps:
+    post:
+      summary: Most frequent missing skills with learning opportunities
+      responses:
+        '200':
+          description: JSON
+  /functions/v1/recommend:
+    post:
+      summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Deterministic scoring;
+        no external AI call in v0.1.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+      responses:
+        '200':
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  source:
+                    type: string
+                    enum:
+                    - cache
+                    - computed
+                  model_version:
+                    type: string
+                  ai_mode:
+                    type: string
+                    example: deterministic
+                  disclaimer:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recommendation'
+        '401':
+          description: UNAUTHENTICATED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendError'
+        '409':
+          description: 'STALE_SNAPSHOT: profile kept changing during calculation (3 bounded attempts); previous cache is untouched;
+            retry later'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendError'
+        '500':
+          description: CANDIDATES_FAILED / SAVE_FAILED / READ_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendError'
+  /auth/v1/token:
+    post:
+      summary: Sign in (password grant) or renew the session (refresh_token grant). No pre-existing JWT is needed; the apikey
+        header IS needed.
+      security:
+      - apiKeyAuth: []
+      parameters:
+      - name: grant_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - password
+          - refresh_token
+        description: password -> body PasswordGrantRequest; refresh_token -> body RefreshTokenGrantRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/PasswordGrantRequest'
+              - $ref: '#/components/schemas/RefreshTokenGrantRequest'
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid credentials or invalid/used refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+        '401':
+          description: Missing or wrong apikey header
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /rest/v1/profiles:
+    get:
+      summary: Own profile row
+      responses: &id001
+        '200':
+          description: OK
+    patch:
+      summary: Update full_name / avatar_url only
+      responses:
+        '204':
+          description: Updated
+  /rest/v1/projects:
+    get:
+      summary: Own projects
+      responses: *id001
+    post:
+      summary: Add own project
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Edit own
+      responses:
+        '204':
+          description: Updated
+    delete:
+      summary: Delete own
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/certifications:
+    get:
+      summary: Own certifications
+      responses: *id001
+    post:
+      summary: Add own certification
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Edit own
+      responses:
+        '204':
+          description: Updated
+    delete:
+      summary: Delete own
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/cv_documents:
+    get:
+      summary: Own CV records
+      responses: *id001
+    post:
+      summary: Register an uploaded CV (storage_path must start with <uid>/)
+      responses:
+        '201':
+          description: Created
+    patch:
+      summary: Set is_active (deactivate the previous one first)
+      responses:
+        '204':
+          description: Updated
+    delete:
+      summary: Delete CV record (storage object must be removed separately)
+      responses:
+        '204':
+          description: Deleted
+  /rest/v1/cv_suggestions:
+    get:
+      summary: Pending/decided CV skill suggestions (confirm via RPC)
+      responses: *id001
+  /rest/v1/job_details:
+    get:
+      summary: Job details (embed from opportunities)
+      responses: *id001
+  /rest/v1/event_details:
+    get:
+      summary: Event details (embed from opportunities)
+      responses: *id001
+  /rest/v1/opportunity_skills:
+    get:
+      summary: Required/taught skills of an opportunity
+      responses: *id001
+  /rest/v1/opportunity_eligibility:
+    get:
+      summary: Hard eligibility rules of an opportunity
+      responses: *id001
+  /rest/v1/application_status_history:
+    get:
+      summary: History of own applications
+      responses: *id001

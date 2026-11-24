@@ -1,0 +1,214 @@
+[
+ {
+  "email": "graduate.demo@alumni.test",
+  "full_name": "Sara Hassan (demo)",
+  "college": "Faculty of Computers and Information",
+  "department": "Information Systems",
+  "major": "Information Systems",
+  "graduation_year": 2025,
+  "degree": "Bachelor",
+  "employment_status": "SEEKING",
+  "location": "Mansoura",
+  "career_interests": [
+   "Data Analysis",
+   "Business Intelligence"
+  ],
+  "work_preferences": {
+   "work_mode": "HYBRID",
+   "preferred_cities": [
+    "Mansoura",
+    "Cairo"
+   ]
+  },
+  "skills": [
+   {
+    "skill_id": "SQL",
+    "level": 4
+   },
+   {
+    "skill_id": "POWER_BI",
+    "level": 3
+   },
+   {
+    "skill_id": "EXCEL",
+    "level": 4
+   },
+   {
+    "skill_id": "DATA_VISUALIZATION",
+    "level": 3
+   }
+  ],
+  "career_history": [],
+  "certifications": [],
+  "applications": [
+   {
+    "job": "job-qa-engineer",
+    "status": "SAMPLE_REJECTED",
+    "days_ago": 40
+   }
+  ],
+  "registrations": []
+ },
+ {
+  "email": "graduate.android@alumni.test",
+  "full_name": "Ahmed Samir (demo)",
+  "college": "Faculty of Computers and Information",
+  "department": "Computer Science",
+  "major": "Computer Science",
+  "graduation_year": 2025,
+  "degree": "Bachelor",
+  "employment_status": "SEEKING",
+  "location": "Cairo",
+  "career_interests": [
+   "Android Development",
+   "Mobile"
+  ],
+  "work_preferences": {
+   "work_mode": "HYBRID",
+   "preferred_cities": [
+    "Cairo"
+   ]
+  },
+  "skills": [
+   {
+    "skill_id": "KOTLIN",
+    "level": 4
+   },
+   {
+    "skill_id": "JAVA",
+    "level": 4
+   },
+   {
+    "skill_id": "ANDROID",
+    "level": 4
+   },
+   {
+    "skill_id": "JETPACK_COMPOSE",
+    "level": 3
+   },
+   {
+    "skill_id": "SQL",
+    "level": 3
+   }
+  ],
+  "career_history": [],
+  "certifications": [],
+  "applications": [
+   {
+    "job": "job-frontend",
+    "status": "SAMPLE_UNDER_REVIEW",
+    "days_ago": 12
+   }
+  ],
+  "registrations": []
+ },
+ {
+  "email": "graduate.data@alumni.test",
+  "full_name": "Mona Adel (demo)",
+  "college": "Faculty of Science",
+  "department": "Statistics",
+  "major": "Statistics",
+  "graduation_year": 2023,
+  "degree": "Bachelor",
+  "employment_status": "EMPLOYED",
+  "location": "Cairo",
+  "career_interests": [
+   "Data Science",
+   "Machine Learning"
+  ],
+  "work_preferences": {
+   "work_mode": "REMOTE"
+  },
+  "skills": [
+   {
+    "skill_id": "PYTHON",
+    "level": 3
+   },
+   {
+    "skill_id": "SQL",
+    "level": 3
+   },
+   {
+    "skill_id": "STATISTICS",
+    "level": 4
+   },
+   {
+    "skill_id": "DATA_CLEANING",
+    "level": 3
+   }
+  ],
+  "career_history": [
+   {
+    "company": "Metric Labs (sample)",
+    "title": "Junior Data Analyst",
+    "field": "Data",
+    "start": "2024-02-01",
+    "end": null
+   }
+  ],
+  "certifications": [],
+  "applications": [
+   {
+    "job": "job-ml-junior",
+    "status": "SAMPLE_INTERVIEW",
+    "days_ago": 20
+   }
+  ],
+  "registrations": [
+   {
+    "event": "evt-full-nowait",
+    "status": "REGISTERED",
+    "days_ago": 2
+   }
+  ]
+ },
+ {
+  "email": "graduate.cyber@alumni.test",
+  "full_name": "Omar Khaled (demo)",
+  "college": "Faculty of Computers and Information",
+  "department": "Computer Science",
+  "major": "Cybersecurity",
+  "graduation_year": 2022,
+  "degree": "Master",
+  "employment_status": "POSTGRADUATE",
+  "location": "Cairo",
+  "career_interests": [
+   "Cybersecurity",
+   "Information Security"
+  ],
+  "work_preferences": {
+   "work_mode": "ONSITE",
+   "preferred_cities": [
+    "Cairo"
+   ]
+  },
+  "skills": [
+   {
+    "skill_id": "NETWORKING",
+    "level": 3
+   },
+   {
+    "skill_id": "LINUX",
+    "level": 3
+   },
+   {
+    "skill_id": "CYBERSECURITY",
+    "level": 3
+   },
+   {
+    "skill_id": "PENETRATION_TESTING",
+    "level": 2
+   }
+  ],
+  "career_history": [],
+  "certifications": [],
+  "applications": [],
+  "registrations": [
+   {
+    "event": "evt-full-event",
+    "status": "REGISTERED",
+    "days_ago": 3
+   }
+  ]
+ }
+]

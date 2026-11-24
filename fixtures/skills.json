@@ -1,0 +1,415 @@
+[
+ {
+  "id": "JAVA",
+  "name": "Java",
+  "category": "Programming",
+  "aliases": [
+   "Java SE",
+   "Core Java"
+  ]
+ },
+ {
+  "id": "KOTLIN",
+  "name": "Kotlin",
+  "category": "Programming",
+  "aliases": []
+ },
+ {
+  "id": "ANDROID",
+  "name": "Android",
+  "category": "Mobile",
+  "aliases": [
+   "Android Development",
+   "Android SDK"
+  ]
+ },
+ {
+  "id": "JETPACK_COMPOSE",
+  "name": "Jetpack Compose",
+  "category": "Mobile",
+  "aliases": [
+   "Compose UI"
+  ]
+ },
+ {
+  "id": "PYTHON",
+  "name": "Python",
+  "category": "Programming",
+  "aliases": [
+   "Python 3"
+  ]
+ },
+ {
+  "id": "SQL",
+  "name": "SQL",
+  "category": "Data",
+  "aliases": [
+   "T-SQL",
+   "MySQL",
+   "PL/SQL"
+  ]
+ },
+ {
+  "id": "POWER_BI",
+  "name": "Power BI",
+  "category": "Data",
+  "aliases": [
+   "PowerBI"
+  ]
+ },
+ {
+  "id": "EXCEL",
+  "name": "Excel",
+  "category": "Data",
+  "aliases": [
+   "Microsoft Excel",
+   "MS Excel"
+  ]
+ },
+ {
+  "id": "STATISTICS",
+  "name": "Statistics",
+  "category": "Data",
+  "aliases": [
+   "Statistical Analysis"
+  ]
+ },
+ {
+  "id": "MACHINE_LEARNING",
+  "name": "Machine Learning",
+  "category": "Data",
+  "aliases": [
+   "ML"
+  ]
+ },
+ {
+  "id": "DATA_VISUALIZATION",
+  "name": "Data Visualization",
+  "category": "Data",
+  "aliases": [
+   "Dashboards"
+  ]
+ },
+ {
+  "id": "JAVASCRIPT",
+  "name": "JavaScript",
+  "category": "Programming",
+  "aliases": [
+   "JS",
+   "ECMAScript"
+  ]
+ },
+ {
+  "id": "TYPESCRIPT",
+  "name": "TypeScript",
+  "category": "Programming",
+  "aliases": [
+   "TS"
+  ]
+ },
+ {
+  "id": "REACT",
+  "name": "React",
+  "category": "Web",
+  "aliases": [
+   "React.js",
+   "ReactJS"
+  ]
+ },
+ {
+  "id": "HTML_CSS",
+  "name": "HTML/CSS",
+  "category": "Web",
+  "aliases": [
+   "HTML",
+   "CSS",
+   "HTML5"
+  ]
+ },
+ {
+  "id": "NODE_JS",
+  "name": "Node.js",
+  "category": "Web",
+  "aliases": [
+   "NodeJS"
+  ]
+ },
+ {
+  "id": "REST_API",
+  "name": "REST APIs",
+  "category": "Backend",
+  "aliases": [
+   "REST",
+   "RESTful API",
+   "REST API"
+  ]
+ },
+ {
+  "id": "GIT",
+  "name": "Git",
+  "category": "Tools",
+  "aliases": [
+   "GitHub",
+   "Version Control"
+  ]
+ },
+ {
+  "id": "DOCKER",
+  "name": "Docker",
+  "category": "Tools",
+  "aliases": [
+   "Containers"
+  ]
+ },
+ {
+  "id": "LINUX",
+  "name": "Linux",
+  "category": "Systems",
+  "aliases": [
+   "Ubuntu",
+   "Bash"
+  ]
+ },
+ {
+  "id": "NETWORKING",
+  "name": "Networking",
+  "category": "Systems",
+  "aliases": [
+   "TCP/IP",
+   "Computer Networks"
+  ]
+ },
+ {
+  "id": "CYBERSECURITY",
+  "name": "Cybersecurity",
+  "category": "Security",
+  "aliases": [
+   "Information Security",
+   "InfoSec",
+   "Cyber Security"
+  ]
+ },
+ {
+  "id": "PENETRATION_TESTING",
+  "name": "Penetration Testing",
+  "category": "Security",
+  "aliases": [
+   "Pentesting",
+   "Ethical Hacking"
+  ]
+ },
+ {
+  "id": "SIEM",
+  "name": "SIEM",
+  "category": "Security",
+  "aliases": [
+   "Splunk"
+  ]
+ },
+ {
+  "id": "CRYPTOGRAPHY",
+  "name": "Cryptography",
+  "category": "Security",
+  "aliases": [
+   "Encryption"
+  ]
+ },
+ {
+  "id": "TESTING",
+  "name": "Software Testing",
+  "category": "Engineering",
+  "aliases": [
+   "QA",
+   "Unit Testing",
+   "Test Automation"
+  ]
+ },
+ {
+  "id": "AGILE",
+  "name": "Agile",
+  "category": "Process",
+  "aliases": [
+   "Scrum"
+  ]
+ },
+ {
+  "id": "UI_UX",
+  "name": "UI/UX Design",
+  "category": "Design",
+  "aliases": [
+   "UX",
+   "User Experience"
+  ]
+ },
+ {
+  "id": "FIGMA",
+  "name": "Figma",
+  "category": "Design",
+  "aliases": []
+ },
+ {
+  "id": "COMMUNICATION",
+  "name": "Communication",
+  "category": "Soft",
+  "aliases": [
+   "Communication Skills"
+  ]
+ },
+ {
+  "id": "TEAMWORK",
+  "name": "Teamwork",
+  "category": "Soft",
+  "aliases": [
+   "Collaboration"
+  ]
+ },
+ {
+  "id": "PROBLEM_SOLVING",
+  "name": "Problem Solving",
+  "category": "Soft",
+  "aliases": []
+ },
+ {
+  "id": "PROJECT_MANAGEMENT",
+  "name": "Project Management",
+  "category": "Process",
+  "aliases": [
+   "PMP"
+  ]
+ },
+ {
+  "id": "CLOUD_BASICS",
+  "name": "Cloud Fundamentals",
+  "category": "Cloud",
+  "aliases": [
+   "Cloud Computing"
+  ]
+ },
+ {
+  "id": "AWS",
+  "name": "AWS",
+  "category": "Cloud",
+  "aliases": [
+   "Amazon Web Services"
+  ]
+ },
+ {
+  "id": "POSTGRESQL",
+  "name": "PostgreSQL",
+  "category": "Data",
+  "aliases": [
+   "Postgres"
+  ]
+ },
+ {
+  "id": "MONGODB",
+  "name": "MongoDB",
+  "category": "Data",
+  "aliases": [
+   "NoSQL"
+  ]
+ },
+ {
+  "id": "C_SHARP",
+  "name": "C#",
+  "category": "Programming",
+  "aliases": [
+   "CSharp",
+   ".NET"
+  ]
+ },
+ {
+  "id": "CPP",
+  "name": "C++",
+  "category": "Programming",
+  "aliases": [
+   "CPP"
+  ]
+ },
+ {
+  "id": "FLUTTER",
+  "name": "Flutter",
+  "category": "Mobile",
+  "aliases": [
+   "Dart"
+  ]
+ },
+ {
+  "id": "TABLEAU",
+  "name": "Tableau",
+  "category": "Data",
+  "aliases": []
+ },
+ {
+  "id": "DATA_CLEANING",
+  "name": "Data Cleaning",
+  "category": "Data",
+  "aliases": [
+   "Data Wrangling",
+   "Data Preparation"
+  ]
+ },
+ {
+  "id": "ETL",
+  "name": "ETL",
+  "category": "Data",
+  "aliases": [
+   "Data Pipelines"
+  ]
+ },
+ {
+  "id": "DEVOPS_CI_CD",
+  "name": "CI/CD",
+  "category": "Tools",
+  "aliases": [
+   "Continuous Integration",
+   "GitHub Actions"
+  ]
+ },
+ {
+  "id": "ENGLISH_PROFESSIONAL",
+  "name": "Professional English",
+  "category": "Soft",
+  "aliases": [
+   "Business English"
+  ]
+ },
+ {
+  "id": "PUBLIC_SPEAKING",
+  "name": "Public Speaking",
+  "category": "Soft",
+  "aliases": [
+   "Presentation Skills"
+  ]
+ },
+ {
+  "id": "TECHNICAL_WRITING",
+  "name": "Technical Writing",
+  "category": "Soft",
+  "aliases": [
+   "Documentation"
+  ]
+ },
+ {
+  "id": "API_DESIGN",
+  "name": "API Design",
+  "category": "Backend",
+  "aliases": []
+ },
+ {
+  "id": "ALGORITHMS",
+  "name": "Algorithms",
+  "category": "Programming",
+  "aliases": [
+   "Data Structures"
+  ]
+ },
+ {
+  "id": "OOP",
+  "name": "Object-Oriented Programming",
+  "category": "Programming",
+  "aliases": [
+   "OOP"
+  ]
+ }
+]

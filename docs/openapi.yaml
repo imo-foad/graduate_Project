@@ -161,6 +161,7 @@ components:
       - matched_skill_ids
       - matched_core_skill_ids
       - matched_supporting_skill_ids
+      - specialization_signal_skill_ids
       - missing_core_skill_ids
       - next_skill_ids
       - core_match_count
@@ -183,6 +184,10 @@ components:
           items: { type: string }
         matched_supporting_skill_ids:
           type: array
+          items: { type: string }
+        specialization_signal_skill_ids:
+          type: array
+          description: Matched core skills satisfying any required specialization gate for this path.
           items: { type: string }
         missing_core_skill_ids:
           type: array

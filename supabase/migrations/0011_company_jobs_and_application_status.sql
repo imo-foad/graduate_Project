@@ -359,10 +359,10 @@ declare
   v_uid uuid := public._require_uid();
   o public.opportunities; f text[]; app public.applications;
 begin
-  select * into o from public.opportunities where id = p_opportunity_id;
+  select * into o from public.opportunities where id = p_opportunity_id for update;
   if not found then raise exception 'OPPORTUNITY_NOT_FOUND' using errcode = 'PT404'; end if;
   if o.type <> 'JOB' then raise exception 'NOT_A_JOB' using errcode = 'PT422'; end if;
-  if o.status <> 'ACTIVE' or (o.deadline is not null and o.deadline < now()) then
+  if not public.is_opportunity_open(o.status, o.deadline, o.end_at) then
     raise exception 'OPPORTUNITY_CLOSED' using errcode = 'PT422';
   end if;
   f := public.eligibility_failures(v_uid, o.id);

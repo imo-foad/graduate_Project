@@ -39,7 +39,7 @@ def functions():
 
 def exec_granted(role):
     names = set()
-    for m in re.finditer(r"grant execute on function\s+(.*?)\s+to\s+([^;]+);", SQL, re.S | re.I):
+    for m in re.finditer(r"(?ims)^[ \\t]*grant[ \\t]+(.+?)[ \\t]+on[ \\t]+(?!function\\b)(.+?)[ \\t]+to[ \\t]+([^;]+);", SQL):
         if role in [r.strip() for r in m.group(2).split(",")]:
             names |= set(re.findall(r"public\.(\w+)\(", m.group(1)))
     return names

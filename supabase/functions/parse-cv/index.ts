@@ -30,13 +30,6 @@ function statusFor(code: string): number {
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
 
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body !== "object" || Array.isArray(body)
-      || Object.keys(body).length !== 1 || !("cv_document_id" in body)
-      || typeof body.cv_document_id !== "string" || !UUID.test(body.cv_document_id)) {
-    return json({ error: "INVALID_REQUEST" }, 400);
-  }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -49,6 +42,13 @@ Deno.serve(async (req) => {
   });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "UNAUTHENTICATED" }, 401);
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)
+      || Object.keys(body).length !== 1 || !("cv_document_id" in body)
+      || typeof body.cv_document_id !== "string" || !UUID.test(body.cv_document_id)) {
+    return json({ error: "INVALID_REQUEST" }, 400);
+  }
 
   const admin = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

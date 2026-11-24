@@ -195,6 +195,7 @@ try {
     baselineRecommendations.status === 200 && baselineRecommendations.json?.source === "computed" &&
     baselineDataJob && Number.isFinite(baselineDataJob.score));
   const baselineDataScore = baselineDataJob?.score ?? -1;
+  const baselineSkillScore = baselineDataJob?.score_breakdown?.skills ?? -1;
 
   const recommendationUpload = await upload(
     recommendationPdfPath, a.token, recommendationPdf, "application/pdf",
@@ -243,10 +244,11 @@ try {
     .find((item) => item.opportunity?.title === "Data Analyst");
   pass("confirming CV skills invalidates and recomputes recommendations without force=true",
     updatedRecommendations.status === 200 && updatedRecommendations.json?.source === "computed");
+  const updatedSkillGaps = new Map((updatedDataJob?.gaps ?? []).map((gap) => [gap.skill_id, gap]));
   pass("recommendation uses newly confirmed CV skills and improves the Data Analyst match",
     updatedDataJob && updatedDataJob.score > baselineDataScore &&
-    ["PYTHON", "STATISTICS"].every((id) => (updatedDataJob.matched_skill_ids ?? []).includes(id)) &&
-    !["PYTHON", "STATISTICS"].some((id) => (updatedDataJob.missing_skill_ids ?? []).includes(id)));
+    updatedDataJob.score_breakdown?.skills > baselineSkillScore &&
+    ["PYTHON", "STATISTICS"].every((id) => (updatedSkillGaps.get(id)?.current_level ?? 0) > 0));
 
   const docxUpload = await upload(docxPath, b.token, docx,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document");

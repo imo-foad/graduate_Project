@@ -1,60 +1,84 @@
-# Backend runtime-verification task — Alumni Connect AI (v0.4)
+# Alumni Connect AI — Backend Audit Report
 
-## FINAL STATUS: **BLOCKED**
-The first real PostgreSQL run **has not happened**. Blockers (verified, not assumed):
-1. **No usable GitHub repository.** A GitHub search for the project returned only other people's public repos (none is this backend), so I could not identify a repository to push a branch to, and I did not guess one. There is also no tool available to me that triggers or reads GitHub Actions runs or logs (only branch/file/PR tools; PR check-runs would need a PR on a known repo).
-2. **No local runtime.** In this workspace `supabase`, `psql`, `docker`, `deno`, `postgres` are all NOT FOUND and there is no network. `npm run test:db` was executed and stopped at its own preflight: `MISSING TOOL: supabase` (exit 3).
+**Audit date:** 2026-11-24  
+**Repository:** `imo-foad/graduate_Project` (private)  
+**Review branch:** `fix/postgres-runtime-test-failures`  
+**Pull request:** [#2 — PostgreSQL and Storage test fixes](https://github.com/imo-foad/graduate_Project/pull/2)
 
-Consequently **no migration (0001–0009), seed, pgTAP file, RLS/Storage test or concurrency test has been executed on PostgreSQL**, and nothing below should be read as runtime proof of them. The Cloud Supabase project (`qikqbvohqjblbcysbvel`) was not touched in this task: no Supabase tool was called, no `apply_migration`, no branch, no link, and its URL is rejected by the new guard.
+## Snapshot and safety
 
-## A. Environment
-| Item | Value | Source |
-|---|---|---|
-| GitHub runner OS / Docker / Supabase CLI / psql / PostgreSQL there | **NOT RUN** (no workflow run) | — |
-| Workflow targets | `ubuntu-24.04`, Node 22, `supabase/setup-cli@v1` (`version: latest`), `postgresql-client` via apt | workflow file (unverified on GitHub) |
-| This sandbox | Node v22.23.5, python3; no supabase/psql/docker/deno/postgres; no network | commands executed |
+A full repository snapshot was created before the current audit on branch `backup/pre-full-audit-2026-11-24`. The snapshot points to commit `08d5af2f4ca6aefb03073c22bf2972793b647d5c`.
 
-## B. Migration results
-| Migration | Applied successfully | Evidence |
-|---|---|---|
-| 0001 … 0007 | **NOT RUN** | No PostgreSQL available. The runner (`scripts/run-db-tests.sh`) now verifies each file name in the `supabase db reset` output AND the versions in `supabase_migrations.schema_migrations` — that check is untested against a real CLI. |
+All corrective work is isolated on `fix/postgres-runtime-test-failures` and proposed through PR #2, which targets `backend-initial-import`. The `main` branch has not been changed. No Cloud Supabase project has been linked, reset, migrated, or otherwise modified.
 
-## C. Test results
-| Suite | Executed | Result | Failures |
-|---|---|---|---|
-| TypeScript (`npm test`) | Yes | **PASS 72/72** | none |
-| OpenAPI (`npm run test:contract`) | Yes | **PASS 18/18** | none |
-| Workflow/script policy (`npm run test:workflow`, new) | Yes | **PASS 11/11** | none (found 1 real workflow bug, see D) |
-| Migrations on PostgreSQL | **No** | NOT RUN | — |
-| pgTAP (5 files) | **No** | NOT RUN | — |
-| RLS | **No** | NOT RUN | — |
-| Storage | **No** | NOT RUN | — |
-| Concurrency | **No** | NOT RUN | — |
-| `npm run test:db` here | Yes (preflight only) | **BLOCKED** | `MISSING TOOL: supabase` |
+## What the real CI run proved
 
-The 72 TypeScript tests include control-flow tests of `run-db-tests.sh` with **fake** tools. They prove the runner fails on a missing migration, a pgTAP file that never ran, wrong seed counts, pgTAP failure and concurrency failure. They are **not** database evidence.
+GitHub Actions run [#17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871), at commit `08d5af2f4ca6aefb03073c22bf2972793b647d5c`, was the first successful start of the real local PostgreSQL/Supabase test stack for this repository.
 
-## D. Changes made (every discovered problem)
-| Problem | Root cause | Files | Fix | Regression test | Result |
-|---|---|---|---|---|---|
-| DB guard accepted remote databases | `case "$DB_URL" in *127.0.0.1*\|*localhost*)` is a substring test: `postgresql://127.0.0.1:pw@db.<ref>.supabase.co:5432/postgres` passed (proved: with the old guard the real `run-db-tests.sh` ran past the check and started executing) | `scripts/assert-local-db.mjs` (new), `scripts/run-db-tests.sh`, `tests/db/concurrency.sh` | Parse the URL; host must be exactly `127.0.0.1`/`localhost`/`[::1]`; explicit numeric port 1024–65535 (and equal to the local Supabase DB port 54322 in the runner); scheme postgres(ql); reject multi-host, malformed, whitespace, any libpq query parameter other than sslmode/connect_timeout/application_name (`host=`, `hostaddr=`…), and `PGHOST/PGHOSTADDR/PGSERVICE/PGSERVICEFILE` in the environment. Guard runs before any other tool. | `tests/assert-local-db.test.ts` (8): attack URLs the old check accepted, remote/pooler hosts, tricky hosts, malformed URLs, query/env redirection, and both scripts exit 2 before invoking any tool | PASS |
-| Runner comment/flow outdated; no verification | said "0001..0006"; never checked migrations, seeds or that all pgTAP files ran | `scripts/run-db-tests.sh` | Phases A–E with preflight (Docker reachable, tool versions logged to `.ci-logs/environment.txt`), PostgreSQL readiness wait, per-file + migration-table check for 0001–0009, seeds loaded twice (idempotency) with count/FK checks against the fixtures, requires all five pgTAP files in the output and no failures, runs concurrency, tees logs | `tests/db-script-flow.test.ts` (7, fake tools) | PASS (flow logic only) |
-| Workflow YAML was invalid | job name contained `: ` unquoted (found by the new lint; GitHub would have rejected the file) | `.github/workflows/backend-tests.yml` | rewritten: `permissions: contents: read`, `timeout-minutes` (10/45), pinned `ubuntu-24.04`, Docker verification, explicit `postgresql-client` install, Supabase CLI install + version print, failing `run-db-tests.sh` step (no `continue-on-error`), diagnostics + artifact upload + `supabase stop` with `if: always()`, no secrets, no Cloud references; static and contract jobs preserved, workflow-lint job step added | `tests/workflow_lint.py` (11) incl. mutation check (4 injected violations → 4 failures) | PASS |
-| pgTAP might not be enabled | tests assumed the extension | `supabase/tests/database/*.test.sql` | `create extension if not exists pgtap with schema extensions;` in each file | (needs real run) | NOT RUN |
-| Local PG version could differ from Cloud | no `[db]` section | `supabase/config.toml` | `[db] major_version = 17` (Cloud is 17.12, read-only inspection) | — | NOT RUN |
-| `ci` logs would be committed | — | `.gitignore` | `.ci-logs/` ignored | — | — |
-No migration was modified in this task (no SQL failure has been observed yet).
+The database job reached and completed the following stages:
+- Docker and PostgreSQL client checks passed.
+- Supabase CLI installed and verified.
+- Migrations 0001–0008 applied.
+- Catalogue seeds loaded and checked.
+- All five pgTAP files executed: 203 assertions total.
 
-## E. GitHub Actions evidence
-None: no workflow run exists. Workflow run URL: **N/A**. Branch/commit: **N/A** (nothing was pushed anywhere).
-To obtain the proof (exact steps):
-1. Create a (private) GitHub repository for this backend and push the project: `git init && git add -A && git commit -m "backend" && git branch -M main && git remote add origin <url> && git push -u origin main`.
-2. `git switch -c ci/db-runtime-verification && git push -u origin ci/db-runtime-verification` (the workflow runs on every push; or Actions → backend-tests → *Run workflow*).
-3. Open the run → job `database`; download artifact `database-test-logs` (`environment.txt`, `db-reset.log`, `pgtap.log`, `concurrency.log`, Docker/DB container logs) and send me the job output. I will fix whatever fails and you re-run.
-Alternatively locally (Docker + Supabase CLI + psql): `npm run test:db`.
-If you give me the `owner/repo` of the project repository I can push a branch to it with the GitHub tools; I still cannot read Actions logs, so you would send me the output.
+The pgTAP result was **200 passing / 3 failing**. The failures were concrete:
 
-## F. Remaining risks (unverified, expected first-run corrections)
-- Everything marked NOT RUN, including SQL syntax/semantics of 0001–0007 and the pgTAP/concurrency files.
-- Assumptions about the Supabase CLI to be checked on first run: migration files named `0001_name.sql` are accepted and recorded with version `0001`; `supabase test db` prints each `*.test.sql` name; required columns of `auth.users`/`storage.objects`; `supabase/setup-cli@v1` with `version: latest` (pin after the first green run).
-- Unchanged earlier limits: CV storage objects are not deleted with their row; client-declared `size_bytes`; no rate limit on `force=true`; waitlist promotion unspecified; open decisions A2/A3.
+1. **RLS recursion — tests 37 and 38 in `03_rls_security.test.sql`.** Saving an opportunity caused PostgreSQL error `42P17: infinite recursion detected in policy for relation "saved_opportunities"`. The catalogue SELECT policy queries `saved_opportunities`, while the saved-opportunity INSERT policy queried `opportunities`, creating a policy cycle.
+2. **Storage test expectation — test 9 in `04_storage_cv_ownership.test.sql`.** The test expected SQLSTATE `P0001`; Supabase returned `42501` with the message that direct deletion from Storage tables is not allowed and the Storage API must be used. The test was asserting the wrong SQLSTATE.
+
+The other pgTAP files, including RPC rules and recommendation-cache integrity, passed in that run. The concurrency phase did **not** execute because the runner stops after a failed pgTAP suite.
+
+The static job in run #17 also failed one fake-runner test: its expected error still named migration 0007 even though the runner correctly stopped at the missing migration 0008. That test fixture has been updated to migration 0009.
+
+## Corrections committed on the review branch
+
+### Migration 0008 — safe text-array appends
+
+File: `supabase/migrations/0008_fix_array_appends.sql`
+
+- Replaced scalar text concatenation with `array_append()` in the final `eligibility_failures()` implementation.
+- Replaced scalar text concatenation with `array_append()` in `get_my_insights()`.
+- Preserved the existing function signatures and return contracts.
+- Added static regression checks and an RPC test that exercises missing profile fields.
+
+The prior real PostgreSQL run applied migration 0008, and the RPC/eligibility pgTAP file passed in that run.
+
+### Migration 0009 — break saved-opportunity RLS recursion
+
+File: `supabase/migrations/0009_fix_saved_opportunity_rls_recursion.sql`
+
+- Added `public._opportunity_exists_for_saved_item(uuid)`, a SECURITY DEFINER helper with an empty search path.
+- Replaced the recursive subquery in the `saved_insert` policy with that helper.
+- Explicitly revoked default execution rights and granted execution only to `authenticated`.
+
+This change is designed to preserve the existing rule that a graduate may save only an existing opportunity for their own account, without re-entering the catalogue RLS policy. It still needs a fresh real pgTAP run to confirm the fix.
+
+### Storage test and runner
+
+- Corrected the Storage direct-SQL delete assertion to expect SQLSTATE `42501`.
+- Added an assertion that the `cv_objects_delete` policy is a DELETE policy scoped to the authenticated user's folder.
+- Updated migration-count checks, fake runner fixtures, README, and audit documentation for migrations 0001–0009.
+
+**Important Storage limitation:** The pgTAP test does not perform the delete through the HTTP Storage API. It verifies that direct SQL deletion is blocked and inspects the owner-folder policy. An API-level upload/delete test is still a separate verification item; do not interpret this pgTAP assertion as end-to-end proof that a user can delete their own object through the API.
+
+## Remaining verification
+
+The review branch must receive a fresh GitHub Actions run and pass all of these before the PR is considered ready:
+
+- Static TypeScript tests.
+- OpenAPI contract tests.
+- Workflow/script lint tests.
+- All nine migrations on the disposable local PostgreSQL stack.
+- Seed idempotency and integrity checks.
+- All five pgTAP files, including saved-opportunity RLS and Storage policy assertions.
+- Real concurrent registration, application, and recommendation-cache tests.
+
+Until the fresh run is green, the status is **FIXES PREPARED — RUNTIME RE-VERIFICATION PENDING**, not fully passed.
+
+## Files and branches
+
+- Snapshot: `backup/pre-full-audit-2026-11-24`
+- Active fixes: `fix/postgres-runtime-test-failures`
+- Review: [Pull request #2](https://github.com/imo-foad/graduate_Project/pull/2)
+- Actions evidence: [Run #17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871)

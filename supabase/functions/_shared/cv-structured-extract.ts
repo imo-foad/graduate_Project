@@ -43,9 +43,17 @@ function extractSections(text:string):Record<string,string[]> {
 }
 function dateToIso(token:string,end:boolean):string|undefined {
   const value=token.trim(), numeric=value.match(/^(\d{1,2})\/(\d{4})$/);
-  if(numeric) return numeric[2]+"-"+numeric[1].padStart(2,"0")+(end?"-28":"-01");
+  if(numeric) {
+    const month=numeric[1].padStart(2,"0");
+    const last=new Date(Date.UTC(Number(numeric[2]),Number(month),0)).getUTCDate();
+    return numeric[2]+"-"+month+(end?"-"+String(last).padStart(2,"0"):"-01");
+  }
   const named=value.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
-  if(named&&MONTHS[named[1].toLowerCase()]) return named[2]+"-"+MONTHS[named[1].toLowerCase()]+(end?"-28":"-01");
+  if(named&&MONTHS[named[1].toLowerCase()]) {
+    const month=MONTHS[named[1].toLowerCase()];
+    const last=new Date(Date.UTC(Number(named[2]),Number(month),0)).getUTCDate();
+    return named[2]+"-"+month+(end?"-"+String(last).padStart(2,"0"):"-01");
+  }
   const year=value.match(/^(\d{4})$/);
   if(year) return year[1]+(end?"-12-31":"-01-01");
   return undefined;
@@ -53,7 +61,8 @@ function dateToIso(token:string,end:boolean):string|undefined {
 function readDateRange(s:string) {
   const m=s.match(DATE_RANGE); if(!m) return {is_current:false};
   const current=/^(present|current|now)$/i.test(m[2]);
-  return {start_date:dateToIso(m[1],false),...(current?{}:{end_date:dateToIso(m[3]??"",true)}),is_current:current};
+  const start=dateToIso(m[1],false) ?? ((m[1].match(/(?:19|20)\d{2}/)?.[0] ?? "")+"-01-01");
+  return {start_date:start || undefined,...(current?{}:{end_date:dateToIso(m[3]??"",true)}),is_current:current};
 }
 function splitHeader(s:string):{company_name?:string;job_title?:string} {
   const parts=s.split(/\s+(?:\||·|—|–|@|at)\s+/i).map(x=>x.trim()).filter(Boolean);
@@ -96,7 +105,8 @@ function parseCredential(line:string):CvCredentialSuggestion|null {
   const year=line.match(/\b(?:19|20)\d{2}\b/), duration=line.match(/\b\d+\s*(?:hours?|hrs?|weeks?|months?|days?)\b/i)?.[0];
   const clean=line.replace(/https?:\/\/[^\s)]+/ig," ").replace(/\b(?:19|20)\d{2}\b/g," ")
     .replace(/\b\d+\s*(?:hours?|hrs?|weeks?|months?|days?)\b/ig," ").replace(/\s+/g," ").trim();
-  const parts=clean.split(/\s+(?:\||—|–| at )\s+/i).map(x=>x.trim()).filter(Boolean);
+  const normalised=clean.replace(/[\s|—–]+$/g,"").trim();
+  const parts=normalised.split(/\s*(?:\||—|–| at )\s*/i).map(x=>x.trim()).filter(Boolean);
   const title=(parts[0]??clean).slice(0,200); if(!title)return null;
   const confidence=0.55+(parts.length>1?0.2:0)+(year?0.15:0)+(url?0.1:0);
   return {title,...(parts[1]?{issuer:parts[1].slice(0,200)}:{}),...(year?{issue_date:year[0]+"-01-01"}:{}),

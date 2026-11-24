@@ -79,6 +79,19 @@ select ok(exists (
     and new_status = 'UNDER_REVIEW'
     and source_type = 'COMPANY_ACTION'
 ), 'company action is added to status history with the correct transition');
+select throws_ok($select public.update_application_status(tests.id('application'), 'ACCEPTED', null)$,
+  'PT422', 'INVALID_STATUS_TRANSITION', 'company cannot skip directly from review to acceptance');
+reset role;
+select tests.login('admin');
+select is((public.update_application_status(tests.id('application'), 'SHORTLISTED', 'Admin review')).status,
+  'SHORTLISTED', 'platform admin can advance an application');
+select ok(exists (
+  select 1 from public.application_status_history
+  where application_id = tests.id('application')
+    and old_status = 'UNDER_REVIEW'
+    and new_status = 'SHORTLISTED'
+    and source_type = 'ADMIN_ACTION'
+), 'admin action is attributed in status history');
 reset role;
 select tests.login('graduate');
 select ok(exists (select 1 from public.notifications where profile_id = tests.id('graduate')

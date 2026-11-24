@@ -10,7 +10,7 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 7 days idle) are **not verified against supabase.com/pricing** — check before relying on them.
 
 ## Layout
-- `supabase/migrations/0001..0008` — schema, catalogue, activity, RPCs, grants/RLS/storage bucket, audit fixes (0006), recommendation cache integrity + profile_version (0007)
+- `supabase/migrations/0001..0009` — schema, catalogue, activity, RPCs, grants/RLS/storage bucket, audit fixes (0006), recommendation cache integrity + profile_version (0007)
 - `fixtures/*.json` -> `npm run build:seed` -> `supabase/seed/01_skills.sql, 02_catalogue.sql, 03_demo_profiles.sql`
 - `supabase/functions/_shared/` — `scoring.ts` (weights from doc 6.5), `cv-extract.ts`; `recommend/` Edge Function
 - `scripts/provision-demo-users.mjs` — creates the 4 demo Auth users (no public sign-up)
@@ -29,7 +29,7 @@ Cloud: `supabase link` to the **exact** project, review `supabase db push --dry-
 
 ## Verification status — see `docs/AUDIT_REPORT.md` (authoritative)
 - **Executed here:** `npm test` (72), `npm run test:contract` (18), `npm run test:workflow` (11). Static / fake-based only.
-- **Never executed (no PostgreSQL/Docker/Supabase CLI/GitHub Actions access in the authoring workspace):** migrations 0001–0007, seeds,
+- **Never executed (no PostgreSQL/Docker/Supabase CLI/GitHub Actions access in the authoring workspace):** migrations 0001–0009, seeds,
   pgTAP files 01–05, `tests/db/concurrency.sh`. **Status: BLOCKED** until `npm run test:db` (needs Docker, Supabase CLI, psql, Node)
   or the CI job `database` passes. The DB scripts only accept a local database URL (parsed host check) and reset the LOCAL database.
 

@@ -92,7 +92,7 @@ const DISCLAIMER =
 function normalizedSkillLevels(skills: GradSkill[]): Map<string, number> {
   const levels = new Map<string, number>();
   for (const skill of skills ?? []) {
-    if (typeof skill?.skill_id !== "string" || !Number.isFinite(skill.level)) continue;
+    if (!skill || typeof skill.skill_id !== "string" || !Number.isFinite(skill.level)) continue;
     const id = skill.skill_id.trim().toUpperCase();
     if (!id) continue;
     const level = Math.floor(Math.min(5, Math.max(0, skill.level)));

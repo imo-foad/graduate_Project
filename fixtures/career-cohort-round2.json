@@ -61,7 +61,8 @@
         "NODE_JS",
         "REST_API",
         "POSTGRESQL",
-        "MONGODB"
+        "MONGODB",
+        "JAVA"
       ],
       "reject_skill_id": "FIGMA",
       "work_mode": "HYBRID",
@@ -415,7 +416,8 @@
         "REACT",
         "NODE_JS",
         "REST_API",
-        "POSTGRESQL"
+        "POSTGRESQL",
+        "JAVA"
       ],
       "reject_skill_id": "FLUTTER",
       "work_mode": "HYBRID",

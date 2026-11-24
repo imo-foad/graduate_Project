@@ -81,11 +81,14 @@ const b = await login(demoB);
 const pdfPath = a.id + "/cv-parser-" + randomUUID() + ".pdf";
 const docxPath = b.id + "/cv-parser-" + randomUUID() + ".docx";
 const blankPdfPath = a.id + "/cv-parser-blank-" + randomUUID() + ".pdf";
+const recommendationPdfPath = a.id + "/cv-recommendations-" + randomUUID() + ".pdf";
 const pdf = buildPdf("Skills: Kotlin, JavaScript, React, Docker.");
+const recommendationPdf = buildPdf("Projects: Python, Machine Learning, Statistics.");
 const blankPdf = buildPdf("");
 const docx = Buffer.from("UEsDBBQAAAAIAKSTeF3JTxqw6wAAAK4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH1QvU7DMBDeeQrLK4odGBBCSTrwMwJDeYCTfUks7LPlc0v79jht6YAK4933q69b7YIXW8zsIvXyRrVSIJloHU29/Fi/NPdScAGy4CNhL/fIcjVcdet9QhZVTNzLuZT0oDWbGQOwigmpImPMAUo986QTmE+YUN+27Z02kQpSacriIYfuCUfY+CKed/V9LJLRsxSPR+KS1UtIyTsDpeJ6S/ZXSnNKUFV54PDsEl9XgtQXExbk74CT7q0uk51F8Q65vEKoLP0Vs9U2mk2oSvW/zYWecRydwbN+cUs5GmSukwevzkgARz/99WHu4RtQSwMEFAAAAAgApJN4XbmBRHGwAAAAKgEAAAsAAABfcmVscy8ucmVsc43POw7CMAwG4J1TRN5pWgaEUJMuCKkrKgeIEjeNaB5KwqO3JwMDIAZG278/y233sDO5YUzGOwZNVQNBJ70yTjM4D8f1DkjKwikxe4cMFkzQ8VV7wlnkspMmExIpiEsMppzDntIkJ7QiVT6gK5PRRytyKaOmQciL0Eg3db2l8d0A/mGSXjGIvWqADEvAf2w/jkbiwcurRZd/nPhKFFlEjZnB3UdF1atdFRYob+nHi/wJUEsDBBQAAAAIAKSTeF2Z6QuA1AAAAD4BAAARAAAAd29yZC9kb2N1bWVudC54bWxtj8FKBDEMhu8+Rejd6ehBZJiZBVn27EEfoLZxp2yblDbj7Ly97YII4uUPIeTLl/FwjQG+MBfPNKmHrleAZNl5Ok/q/e10/6ygiCFnAhNOaseiDvPduA2O7RqRBCqByrBNahFJg9bFLhhN6Tgh1dkn52iktvmsN84uZbZYSj0Qg37s+ycdjSc1V+QHu73V1CK3kPl1l4UJqgEc2V4wA14TZl8tETyBLAg28OpA0MRu1G2pZb5l+st7WX0QSD5h8ITlBjarcHXExihV9R+I/rHTv5/P31BLAQIUAxQAAAAIAKSTeF3JTxqw6wAAAK4BAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAgApJN4XbmBRHGwAAAAKgEAAAsAAAAAAAAAAAAAAIABHAEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAgApJN4XZnpC4DUAAAAPgEAABEAAAAAAAAAAAAAAIAB9QEAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAADAAMAuQAAAPgCAAAAAA==", "base64");let pdfId = null;
 let docxId = null;
 let blankPdfId = null;
+let recommendationPdfId = null;
 
 async function upload(path, token, bytes, mime) {
   return request("/storage/v1/object/cv-documents/" + encodePath(path), {
@@ -179,6 +182,72 @@ try {
   pass("completed PDF cannot be parsed again", duplicateParse.status === 409 &&
     duplicateParse.json?.error === "CV_ALREADY_PARSED");
 
+  // End-to-end proof: a real PDF adds new skills, confirmation invalidates the cache,
+  // and the actual recommendation Edge Function recomputes a better match.
+  const baselineRecommendations = await request("/functions/v1/recommend", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ force: true }),
+  });
+  const baselineDataJob = (baselineRecommendations.json?.items ?? [])
+    .find((item) => item.opportunity?.title === "Data Analyst");
+  pass("baseline Data Analyst recommendation is computed before the second CV", 
+    baselineRecommendations.status === 200 && baselineRecommendations.json?.source === "computed" &&
+    baselineDataJob && Number.isFinite(baselineDataJob.score));
+  const baselineDataScore = baselineDataJob?.score ?? -1;
+
+  const recommendationUpload = await upload(
+    recommendationPdfPath, a.token, recommendationPdf, "application/pdf",
+  );
+  pass("graduate uploads a second valid PDF for recommendation testing",
+    recommendationUpload.status === 200 || recommendationUpload.status === 201);
+  const recommendationMetadata = await createMetadata(
+    a.token, a.id, recommendationPdfPath, "pdf", recommendationPdf,
+  );
+  pass("graduate registers recommendation-test PDF metadata",
+    recommendationMetadata.status === 201 && recommendationMetadata.json?.length === 1);
+  recommendationPdfId = recommendationMetadata.json?.[0]?.id ?? null;
+
+  const parsedRecommendationPdf = await parse(a.token, recommendationPdfId);
+  const recommendationSuggestions = await request(
+    "/rest/v1/cv_suggestions?select=id,payload,status&cv_document_id=eq." + recommendationPdfId,
+    { headers: headers(a.token) },
+  );
+  const recommendationSkillIds = new Set(
+    (recommendationSuggestions.json ?? []).map((row) => row.payload?.skill_id),
+  );
+  pass("CV parser extracts Python, Machine Learning and Statistics from PDF",
+    parsedRecommendationPdf.status === 200 && parsedRecommendationPdf.json?.status === "DONE" &&
+    parsedRecommendationPdf.json?.suggestions_count === 3 &&
+    recommendationSuggestions.status === 200 &&
+    recommendationSuggestions.json?.length === 3 &&
+    recommendationSuggestions.json.every((row) => row.status === "PENDING") &&
+    ["PYTHON", "MACHINE_LEARNING", "STATISTICS"].every((id) => recommendationSkillIds.has(id)));
+
+  const recommendationConfirmIds = (recommendationSuggestions.json ?? []).map((row) => row.id);
+  const recommendationConfirmation = await request("/rest/v1/rpc/confirm_cv_suggestions", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_confirm: recommendationConfirmIds, p_reject: [] }),
+  });
+  pass("graduate explicitly confirms all recommendation-test skills",
+    recommendationConfirmation.status === 200 && recommendationConfirmation.json?.confirmed === 3 &&
+    recommendationConfirmation.json?.rejected === 0);
+
+  const updatedRecommendations = await request("/functions/v1/recommend", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: "{}",
+  });
+  const updatedDataJob = (updatedRecommendations.json?.items ?? [])
+    .find((item) => item.opportunity?.title === "Data Analyst");
+  pass("confirming CV skills invalidates and recomputes recommendations without force=true",
+    updatedRecommendations.status === 200 && updatedRecommendations.json?.source === "computed");
+  pass("recommendation uses newly confirmed CV skills and improves the Data Analyst match",
+    updatedDataJob && updatedDataJob.score > baselineDataScore &&
+    ["PYTHON", "STATISTICS"].every((id) => (updatedDataJob.matched_skill_ids ?? []).includes(id)) &&
+    !["PYTHON", "STATISTICS"].some((id) => (updatedDataJob.missing_skill_ids ?? []).includes(id)));
+
   const docxUpload = await upload(docxPath, b.token, docx,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   pass("graduate uploads a real DOCX file", docxUpload.status === 200 || docxUpload.status === 201);
@@ -217,7 +286,8 @@ try {
   await removeObject(service, pdfPath).catch(() => {});
   await removeObject(service, docxPath).catch(() => {});
   await removeObject(service, blankPdfPath).catch(() => {});
-  for (const id of [pdfId, docxId, blankPdfId]) {
+  await removeObject(service, recommendationPdfPath).catch(() => {});
+  for (const id of [pdfId, docxId, blankPdfId, recommendationPdfId]) {
     if (id) await request("/rest/v1/cv_documents?id=eq." + id, {
       method: "DELETE", headers: headers(service),
     }).catch(() => {});

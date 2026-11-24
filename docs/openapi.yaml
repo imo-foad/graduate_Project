@@ -45,6 +45,11 @@ components:
           type: string
           enum:
           - SUBMITTED
+          - UNDER_REVIEW
+          - SHORTLISTED
+          - INTERVIEW
+          - ACCEPTED
+          - REJECTED
           - WITHDRAWN
           - SAMPLE_UNDER_REVIEW
           - SAMPLE_INTERVIEW
@@ -54,6 +59,8 @@ components:
           type: string
           enum:
           - APP_ACTION
+          - COMPANY_ACTION
+          - ADMIN_ACTION
           - SEED_SAMPLE
         applied_at:
           type: string
@@ -221,10 +228,15 @@ components:
           type: string
   responses:
     BusinessError:
-      description: HTTP status mirrors the business meaning; body.message is a stable code. 401 UNAUTHENTICATED. 404 OPPORTUNITY_NOT_FOUND,
-        APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND. 409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED,
-        EVENT_FULL. 422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
-        INVALID_INPUT, START_BEFORE_PREVIOUS.
+      description: >-
+        HTTP status mirrors the business meaning; body.message is a stable code.
+        401 UNAUTHENTICATED.
+        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL.
+        422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
+        INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
+        OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE.
       content:
         application/json:
           schema:
@@ -704,3 +716,145 @@ paths:
     get:
       summary: History of own applications
       responses: *id001
+
+  /rest/v1/companies:
+    get:
+      summary: Companies the authenticated user belongs to (admins can review all companies)
+      responses:
+        '200':
+          description: OK
+  /rest/v1/company_memberships:
+    get:
+      summary: Own company memberships and memberships in companies the caller manages
+      responses:
+        '200':
+          description: OK
+  /rest/v1/company_verification_history:
+    get:
+      summary: Verification audit history for the caller's companies or platform admins
+      responses:
+        '200':
+          description: OK
+  /rest/v1/rpc/create_company:
+    post:
+      summary: Create a company in PENDING_REVIEW; creator becomes OWNER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_name]
+              properties:
+                p_name: { type: string }
+                p_website: { type: string }
+                p_description: { type: string }
+      responses:
+        '200': { description: Created company }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_company_job:
+    post:
+      summary: Create a JOB draft for a company where caller is OWNER or RECRUITER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_title, p_description]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_title: { type: string }
+                p_description: { type: string }
+                p_location: { type: string }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time }
+                p_employment_type: { type: string, enum: [FULL_TIME, PART_TIME, CONTRACT, INTERNSHIP] }
+                p_experience_level: { type: string, enum: [FRESH_GRADUATE, JUNIOR, MID, SENIOR] }
+      responses:
+        '200': { description: Draft opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_company_job:
+    post:
+      summary: Edit an owned DRAFT or ACTIVE company job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_title, p_description]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_title: { type: string }
+                p_description: { type: string }
+                p_location: { type: string }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time }
+      responses:
+        '200': { description: Updated opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/publish_company_job:
+    post:
+      summary: Publish a DRAFT job after platform verification of its company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Published opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/close_company_job:
+    post:
+      summary: Close an owned DRAFT or ACTIVE company job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Closed opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_company:
+    post:
+      summary: Platform-admin verification decision for a company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_decision]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_decision: { type: string, enum: [VERIFIED, REJECTED, SUSPENDED] }
+                p_note: { type: string }
+      responses:
+        '200': { description: Reviewed company }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_application_status:
+    post:
+      summary: Update a real application status for a job owned by the caller's company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id, p_status]
+              properties:
+                p_application_id: { type: string, format: uuid }
+                p_status: { type: string, enum: [UNDER_REVIEW, SHORTLISTED, INTERVIEW, ACCEPTED, REJECTED] }
+                p_note: { type: string }
+      responses:
+        '200': { description: Updated application }
+        4XX: { $ref: '#/components/responses/BusinessError' }

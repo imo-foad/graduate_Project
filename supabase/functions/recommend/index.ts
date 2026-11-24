@@ -5,6 +5,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runRecommend } from "../_shared/recommend-flow.ts";
 import { MODEL_VERSION } from "../_shared/scoring.ts";
+import { deriveCareerProfile } from "../_shared/career-profile.ts";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -19,6 +20,8 @@ Deno.serve(async (req) => {
   if (authError || !user) return json({ error: "UNAUTHENTICATED" }, 401);
 
   const body = await req.json().catch(() => ({}));
+  const { data: ownSkills } = await userClient.from("graduate_skills").select("skill_id,level");
+  const careerProfile = deriveCareerProfile(ownSkills ?? []);
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   const result = await runRecommend({
@@ -38,5 +41,5 @@ Deno.serve(async (req) => {
       .select("*, opportunity:opportunities(id,type,title,company_name,location,attendance_mode,status,deadline,start_at,end_at)")
       .order("score", { ascending: false }),
   }, { force: body?.force === true });
-  return json(result.body, result.status);
+  return json({ ...result.body, career_profile: careerProfile }, result.status);
 });

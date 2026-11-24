@@ -72,12 +72,12 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
-        self.assertEqual(len(migs), 13)
-        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"])
+        self.assertEqual(len(migs), 14)
+        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014"])
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]
@@ -91,7 +91,7 @@ class Scripts(unittest.TestCase):
                        "/functions/v1/recommend", "force: true", "cv-documents"):
             self.assertIn(needle, http)
         for needle in ("/functions/v1/parse-cv", "/functions/v1/recommend", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
-                       "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level"):
+                       "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])

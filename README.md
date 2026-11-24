@@ -47,10 +47,19 @@ Additional database/runtime evidence:
 
 ## Remaining product / security limitations
 
-- **CV parsing is not implemented as an endpoint yet.** The completed HTTP tests cover private file upload, ownership, CV metadata and deletion; they do not claim to test document parsing.
-- Recommendation matching is deterministic; its lexical similarity is a proxy, not an embedding model. Assumptions B1–B6 need calibration against a labeled dataset.
+- **CV parsing:** PDF/DOCX text extraction, dictionary-based skill extraction and section-rule extraction for work experience, certifications and courses are implemented. Structured items remain PENDING until the graduate reviews them with `review_cv_suggestions`. Scanned/image-only PDFs still need OCR and are not parsed by the free local parser.
+- Recommendation matching is deterministic and explainable; inferred career paths use a local skill taxonomy, interaction signals affect ranking, mandatory experience can exclude a candidate, and market gaps are measured against active platform jobs. Lexical similarity remains a proxy, not an embedding model.
 - Business assumptions A2 (INTERNSHIP application eligibility) and A3 (TRAINING registration eligibility) still need product-owner confirmation.
 - Automated local RLS/Storage tests are not a third-party penetration test or a production-cloud deployment rehearsal.
 - FCM push notifications remain out of scope; notifications are in-app only.
 
 See `docs/AUDIT_REPORT.md` for the subsystem scores, exact test evidence and remaining gaps.
+
+
+## Free-first career intelligence (migration 0014)
+- Structured CV suggestions now cover SKILL, EXPERIENCE, CERTIFICATION and COURSE. Extraction uses PDF.js/fflate plus local section/date rules; no paid API key or external model is needed.
+- Review through `POST /rest/v1/rpc/review_cv_suggestions` with `p_decisions: [{id,status,payload?}]`. Only confirmed suggestions are written to `graduate_skills`, `career_history`, `certifications` or `courses`.
+- `POST /rest/v1/rpc/get_career_market_insights` returns job-demand counts and skill gaps based only on active JOB/INTERNSHIP entries in this platform.
+- `POST /rest/v1/rpc/record_recommendation_interaction` records IMPRESSION, VIEW, DISMISS or NOT_INTERESTED. Saves, job applications and event registrations are recorded automatically.
+- Companies/admins can set a numeric minimum through `set_job_experience_requirement`; it can be mandatory (not recommended below threshold) or preferred (score penalty).
+- Career paths and recommendation scoring are local deterministic TypeScript. pgvector/hosted LLMs are intentionally deferred to avoid paid infrastructure and CV data sharing.

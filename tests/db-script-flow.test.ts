@@ -12,7 +12,7 @@ const MIGS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.ends
 const VERSIONS = MIGS.map((m) => m.split("_")[0]).join(",");
 const SKILLS = JSON.parse(readFileSync(join(ROOT, "fixtures/skills.json"), "utf8")).length;
 const OPPS = JSON.parse(readFileSync(join(ROOT, "fixtures/opportunities.json"), "utf8")).length;
-const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle"];
+const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence"];
 
 function fakeBin() {
   const dir = mkdtempSync(join(tmpdir(), "fake-"));
@@ -45,11 +45,11 @@ test("happy path (fake tools): every phase runs and the script reports success",
   const r = run();
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.equal(MIGS.length, 13);
+  assert.equal(MIGS.length, 14);
 });
 test("a migration missing from `db reset` output fails the run", () => {
-  const r = run({ FAKE_MISSING: "0013_cv_parse_service_rpc.sql" });
-  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0013_cv_parse_service_rpc.sql as applied"));
+  const r = run({ FAKE_MISSING: "0014_cv_intelligence_recommendations.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0014_cv_intelligence_recommendations.sql as applied"));
 });
 test("a migration missing from the migration table fails the run", () => {
   const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0010", "") });

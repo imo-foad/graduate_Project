@@ -3,6 +3,7 @@
 // until that same graduate explicitly calls confirm_cv_suggestions.
 import { createClient } from "@supabase/supabase-js";
 import { extractSkillsFromText, validateExtraction } from "../_shared/cv-extract.ts";
+import { extractStructuredCvData } from "../_shared/cv-structured-extract.ts";
 import { CvFileError, extractCvText } from "../_shared/cv-file-parser.ts";
 
 const json = (body: unknown, status = 200) =>
@@ -121,10 +122,16 @@ Deno.serve(async (req) => {
     }, allowedSkillIds);
     if (validated.errors.length > 0) throw new Error("EXTRACTION_VALIDATION_FAILED");
 
-    const suggestions = extracted.map((item) => ({
-      skill_id: item.skill_id,
-      matched_term: item.matched_term,
-    }));
+    const structured = extractStructuredCvData(text);
+    const suggestions = [
+      ...extracted.map((item) => ({
+        kind: "SKILL",
+        payload: { skill_id: item.skill_id, matched_term: item.matched_term },
+      })),
+      ...structured.experiences.map((item) => ({ kind: "EXPERIENCE", payload: item })),
+      ...structured.certifications.map((item) => ({ kind: "CERTIFICATION", payload: item })),
+      ...structured.courses.map((item) => ({ kind: "COURSE", payload: item })),
+    ].slice(0, 200);
     const { data: savedCount, error: saveError } = await admin.rpc("complete_cv_parse", {
       p_cv_document_id: cvDocumentId,
       p_graduate_id: user.id,
@@ -137,9 +144,16 @@ Deno.serve(async (req) => {
       cv_document_id: cvDocumentId,
       status: "DONE",
       suggestions_count: Number(savedCount ?? 0),
+      suggestion_counts: {
+        skills: extracted.length,
+        experience: structured.experiences.length,
+        certifications: structured.certifications.length,
+        courses: structured.courses.length,
+      },
       suggestions,
       confirmation_required: true,
-      extraction_mode: "dictionary_text_match",
+      review_rpc: "review_cv_suggestions",
+      extraction_mode: "local_dictionary_and_section_rules",
     });
   } catch (error) {
     const code = error instanceof CvFileError

@@ -1,6 +1,6 @@
 // Deterministic match scoring (BR-016/017/022). Pure TypeScript: no Deno/Node APIs, so it is unit-testable.
 // The LLM never produces the score. Weights come from the business doc (6.5) except where marked ASSUMPTION.
-export const MODEL_VERSION = "deterministic-v1";
+export const MODEL_VERSION = "deterministic-v2-free-personalized";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }
@@ -10,6 +10,8 @@ export interface GraduateInput {
   career_interests: string[];
   work_preferences?: { work_mode?: string; preferred_cities?: string[] } | null;
   experience_years: number;
+  inferred_career_paths?: string[];
+  interaction_signals?: { target_field: string; weight: number }[];
   skills: GradSkill[];
 }
 export interface OppSkill { skill_id: string; importance: number; min_level: number; is_required: boolean }
@@ -17,6 +19,7 @@ export interface OpportunityInput {
   id: string; type: string; title: string; description?: string | null;
   location?: string | null; attendance_mode?: string | null;
   target_fields?: string[]; experience_level?: string | null; target_audience?: string | null;
+  minimum_experience_years?: number | null; minimum_experience_required?: boolean;
   skills: OppSkill[]; eligibility_failures: string[];
 }
 export interface Gap { skill_id: string; reason: "MISSING" | "LEVEL_TOO_LOW"; required_level: number; current_level: number }
@@ -28,17 +31,19 @@ export interface ScoredItem {
 }
 
 type Criterion = "semantic" | "skills" | "major" | "experience" | "interests" | "location"
-  | "relevance" | "audience" | "availability" | "gap_fill";
+  | "relevance" | "audience" | "availability" | "gap_fill" | "interaction";
 const WEIGHTS: Record<string, Partial<Record<Criterion, number>>> = {
-  JOB: { semantic: 35, skills: 30, major: 10, experience: 10, interests: 5, location: 10 },
-  EVENT: { interests: 30, semantic: 25, relevance: 15, audience: 10, location: 10, availability: 10 },
-  // ASSUMPTION B1: doc says only "increase weight of missing skills / prerequisites / level" for training.
-  TRAINING: { semantic: 30, gap_fill: 35, interests: 15, major: 10, location: 10 },
+  JOB: { semantic: 30, skills: 30, major: 10, experience: 15, interests: 5, interaction: 5, location: 5 },
+  EVENT: { interests: 25, semantic: 20, relevance: 15, audience: 10, location: 10, availability: 10, interaction: 10 },
+  TRAINING: { semantic: 25, gap_fill: 35, interests: 10, major: 10, location: 10, interaction: 10 },
+  SCHOLARSHIP: { semantic: 20, skills: 15, major: 15, experience: 5, interests: 15, audience: 20, interaction: 10 },
+  COMPETITION: { semantic: 20, skills: 25, experience: 10, interests: 15, interaction: 10, relevance: 10, location: 10 },
 };
-// ASSUMPTION B2: INTERNSHIP uses job weights; other non-job types use event weights.
 export function weightProfile(type: string): Partial<Record<Criterion, number>> {
   if (type === "JOB" || type === "INTERNSHIP") return WEIGHTS.JOB;
   if (type === "TRAINING") return WEIGHTS.TRAINING;
+  if (type === "SCHOLARSHIP") return WEIGHTS.SCHOLARSHIP;
+  if (type === "COMPETITION") return WEIGHTS.COMPETITION;
   return WEIGHTS.EVENT;
 }
 // ASSUMPTION B3: minimum years implied by each experience level.
@@ -58,7 +63,7 @@ const idTokens = (id: string) => id.toLowerCase().replace(/_/g, " ");
 
 // Lexical stand-in for embedding similarity (ASSUMPTION B4): cosine over token sets, scaled so 0.4 => 1.
 function semanticProxy(g: GraduateInput, o: OpportunityInput): number | null {
-  const gText = [g.major, g.department, ...g.career_interests, ...g.skills.map((s) => idTokens(s.skill_id))]
+  const gText = [g.major, g.department, ...g.career_interests, ...(g.inferred_career_paths ?? []), ...g.skills.map((s) => idTokens(s.skill_id))]
     .filter(Boolean).join(" ");
   const oText = [o.title, o.description, ...(o.target_fields ?? []), ...o.skills.map((s) => idTokens(s.skill_id))]
     .filter(Boolean).join(" ");
@@ -96,13 +101,25 @@ function majorScore(g: GraduateInput, o: OpportunityInput): number | null {
   return matchesAny(fields, own) ? 1 : 0;
 }
 function interestScore(g: GraduateInput, o: OpportunityInput): number | null {
-  if (g.career_interests.length === 0) return null;
+  const interests = [...g.career_interests, ...(g.inferred_career_paths ?? []).map(idTokens)];
+  if (interests.length === 0) return null;
   const hay = [...(o.target_fields ?? []), o.title, ...o.skills.map((s) => idTokens(s.skill_id))];
-  return matchesAny(g.career_interests, hay) ? 1 : 0;
+  return matchesAny(interests, hay) ? 1 : 0;
+}
+function interactionScore(g: GraduateInput, o: OpportunityInput): number | null {
+  const signals = g.interaction_signals ?? [];
+  const fields = o.target_fields ?? [];
+  if (signals.length === 0 || fields.length === 0) return null;
+  const matching = signals.filter((signal) => fields.some((field) =>
+    norm(field).includes(norm(signal.target_field)) || norm(signal.target_field).includes(norm(field))));
+  if (matching.length === 0) return null;
+  const total = Math.max(-4, Math.min(4, matching.reduce((sum, signal) => sum + signal.weight, 0)));
+  return Math.max(0, Math.min(1, 0.5 + total / 8));
 }
 function experienceScore(g: GraduateInput, o: OpportunityInput): number | null {
-  if (!o.experience_level || !(o.experience_level in LEVEL_YEARS)) return null;
-  const need = LEVEL_YEARS[o.experience_level];
+  const configured = o.minimum_experience_years;
+  if ((configured === null || configured === undefined) && (!o.experience_level || !(o.experience_level in LEVEL_YEARS))) return null;
+  const need = configured !== null && configured !== undefined ? configured : LEVEL_YEARS[o.experience_level!];
   return need === 0 ? 1 : Math.min(1, g.experience_years / need);
 }
 // ASSUMPTION B5: location heuristics (doc only says "city match and remote/onsite compatibility").
@@ -132,11 +149,13 @@ const BAND_AR: Record<Band, string> = {
 /** Returns null when a hard eligibility requirement fails (BR-017): such items are never recommended. */
 export function scoreOpportunity(g: GraduateInput, o: OpportunityInput): ScoredItem | null {
   if (o.eligibility_failures.length > 0) return null;
+  if (o.minimum_experience_required && o.minimum_experience_years !== null
+      && o.minimum_experience_years !== undefined && g.experience_years < o.minimum_experience_years) return null;
   const sa = skillAnalysis(g, o);
   const values: Partial<Record<Criterion, number | null>> = {
     semantic: semanticProxy(g, o), skills: sa.coverage, major: majorScore(g, o),
     experience: experienceScore(g, o), interests: interestScore(g, o), location: locationScore(g, o),
-    audience: audienceScore(g, o), availability: null, gap_fill: gapFill(sa, o),
+    audience: audienceScore(g, o), availability: null, gap_fill: gapFill(sa, o), interaction: interactionScore(g, o),
   };
   const rel = [sa.coverage, majorScore(g, o)].filter((x): x is number => x !== null);
   values.relevance = rel.length ? rel.reduce((a, b) => a + b, 0) / rel.length : null;

@@ -36,7 +36,7 @@ insert into tests.ids values ('job', (public.create_company_job(
 )).id);
 select is((select verification_status from public.companies where id = tests.id('company')), 'PENDING_REVIEW', 'new company waits for admin verification');
 select is((select status from public.opportunities where id = tests.id('job')), 'DRAFT', 'company job starts as draft');
-select throws_ok($$select public.publish_company_job(tests.id('job'))$$, 'PT422', 'COMPANY_NOT_VERIFIED', 'unverified company cannot publish');
+select throws_ok($$q$select public.publish_company_job(tests.id('job'))$q$$, 'PT422', 'COMPANY_NOT_VERIFIED', 'unverified company cannot publish');
 
 reset role;
 insert into private.platform_admins(user_id) values (tests.id('admin'));
@@ -65,7 +65,7 @@ select is((select status from public.applications where id = tests.id('applicati
 
 reset role;
 select tests.login('outsider');
-select throws_ok($$select public.update_application_status(tests.id('application'), 'UNDER_REVIEW', null)$$,
+select throws_ok($$q$select public.update_application_status(tests.id('application'), 'UNDER_REVIEW', null)$q$$,
   'PT403', 'NOT_COMPANY_MEMBER', 'unrelated user cannot update application status');
 
 reset role;
@@ -79,7 +79,7 @@ select ok(exists (
     and new_status = 'UNDER_REVIEW'
     and source_type = 'COMPANY_ACTION'
 ), 'company action is added to status history with the correct transition');
-select throws_ok($select public.update_application_status(tests.id('application'), 'ACCEPTED', null)$,
+select throws_ok($q$select public.update_application_status(tests.id('application'), 'ACCEPTED', null)$q$,
   'PT422', 'INVALID_STATUS_TRANSITION', 'company cannot skip directly from review to acceptance');
 reset role;
 select tests.login('admin');

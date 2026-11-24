@@ -285,6 +285,68 @@ paths:
       responses:
         '200':
           description: OK
+  /rest/v1/rpc/review_cv_suggestions:
+    post:
+      summary: Review extracted CV suggestions; only CONFIRMED items enter the graduate profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_decisions]
+              properties:
+                p_decisions:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, status]
+                    properties:
+                      id: { type: string, format: uuid }
+                      status: { type: string, enum: [CONFIRMED, REJECTED] }
+                      payload: { type: object, description: Optional corrected extraction payload }
+      responses:
+        '200': { description: Confirmed and rejected counts }
+        '422': { description: Incomplete or invalid reviewed data }
+  /rest/v1/rpc/get_career_market_insights:
+    post:
+      summary: Return aggregate skill demand from active platform jobs and this graduate's gaps
+      responses:
+        '200': { description: Market demand, personal skills and recommended gap priorities }
+  /rest/v1/rpc/record_recommendation_interaction:
+    post:
+      summary: Record IMPRESSION, VIEW, DISMISS or NOT_INTERESTED feedback for an owned recommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_interaction_type]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_interaction_type: { type: string, enum: [IMPRESSION, VIEW, DISMISS, NOT_INTERESTED] }
+      responses:
+        '200': { description: Interaction recorded }
+        '404': { description: Recommendation not found }
+  /rest/v1/rpc/set_job_experience_requirement:
+    post:
+      summary: Set a draft job's minimum experience years and whether it is mandatory (company owner/recruiter or admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_is_required]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_minimum_experience_years: { type: number, minimum: 0, maximum: 50, nullable: true }
+                p_is_required: { type: boolean }
+      responses:
+        '200': { description: Requirement updated }
+        '403': { description: Not company member }
+        '422': { description: Job is not draft or input invalid }
   /rest/v1/career_history:
     get:
       summary: Own career history

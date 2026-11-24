@@ -90,15 +90,18 @@ try {
   const getFunction = await request("/functions/v1/recommend", {
     method: "GET", headers: headers(a.token),
   });
-  pass("recommend endpoint rejects non-POST methods", getFunction.status === 405);
+  pass("recommend endpoint rejects non-POST methods", getFunction.status === 405,
+    { status: getFunction.status, body: getFunction.json ?? getFunction.text });
   const noAuth = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(null, { "Content-Type": "application/json" }), body: "{}",
   });
-  pass("recommend endpoint rejects missing JWT", noAuth.status === 401);
+  pass("recommend endpoint rejects missing JWT", noAuth.status === 401,
+    { status: noAuth.status, body: noAuth.json ?? noAuth.text });
   const invalidAuth = await request("/functions/v1/recommend", {
     method: "POST", headers: headers("invalid.jwt.token", { "Content-Type": "application/json" }), body: "{}",
   });
-  pass("recommend endpoint rejects invalid JWT", invalidAuth.status === 401);
+  pass("recommend endpoint rejects invalid JWT", invalidAuth.status === 401,
+    { status: invalidAuth.status, body: invalidAuth.json ?? invalidAuth.text });
 
   const first = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",

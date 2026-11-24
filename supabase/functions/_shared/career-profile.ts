@@ -17,6 +17,7 @@ export interface CareerPathMatch {
   matched_skill_ids: string[];
   matched_core_skill_ids: string[];
   matched_supporting_skill_ids: string[];
+  specialization_signal_skill_ids: string[];
   missing_core_skill_ids: string[];
   next_skill_ids: string[];
   core_match_count: number;
@@ -42,6 +43,7 @@ interface PathDefinition {
   label: string;
   skills: PathSkill[];
   minimum_core_matches: number;
+  required_core_any_skill_ids: string[];
 }
 
 const core = (id: string): PathSkill => ({ id, role: "CORE", weight: 3 });
@@ -52,11 +54,13 @@ const path = (
   coreIds: string[],
   supportingIds: string[] = [],
   minimumCoreMatches = 2,
+  requiredCoreAnySkillIds: string[] = [],
 ): PathDefinition => ({
   id,
   label,
   skills: [...coreIds.map(core), ...supportingIds.map(supporting)],
   minimum_core_matches: minimumCoreMatches,
+  required_core_any_skill_ids: requiredCoreAnySkillIds,
 });
 
 // A path is surfaced only when at least two of its core skills are present.
@@ -65,8 +69,8 @@ const PATHS: PathDefinition[] = [
   path("FRONTEND", "Frontend Development",
     ["HTML_CSS", "JAVASCRIPT", "TYPESCRIPT", "REACT"], ["GIT"]),
   path("BACKEND", "Backend Development",
-    ["NODE_JS", "REST_API", "API_DESIGN", "POSTGRESQL", "MONGODB", "JAVA", "C_SHARP"],
-    ["PYTHON", "DOCKER", "LINUX"]),
+    ["NODE_JS", "REST_API", "API_DESIGN", "POSTGRESQL", "MONGODB", "JAVA", "C_SHARP", "PYTHON"],
+    ["DOCKER", "LINUX"], 2, ["NODE_JS", "REST_API", "API_DESIGN", "POSTGRESQL", "MONGODB"]),
   path("MOBILE", "Mobile Development",
     ["KOTLIN", "ANDROID", "JETPACK_COMPOSE", "FLUTTER"], ["JAVA"]),
   path("DATA_ANALYTICS", "Data Analytics",
@@ -74,10 +78,10 @@ const PATHS: PathDefinition[] = [
     ["PYTHON", "POSTGRESQL", "ETL"]),
   path("DATA_SCIENCE", "Data Science / Machine Learning",
     ["PYTHON", "STATISTICS", "MACHINE_LEARNING", "DATA_CLEANING", "ETL"],
-    ["SQL", "DATA_VISUALIZATION"]),
+    ["SQL", "DATA_VISUALIZATION"], 2, ["PYTHON", "MACHINE_LEARNING", "ETL"]),
   path("CYBERSECURITY", "Cybersecurity",
     ["CYBERSECURITY", "PENETRATION_TESTING", "SIEM", "NETWORKING", "CRYPTOGRAPHY"],
-    ["LINUX", "DOCKER", "AWS"]),
+    ["LINUX", "DOCKER", "AWS"], 2, ["CYBERSECURITY", "PENETRATION_TESTING", "SIEM", "CRYPTOGRAPHY"]),
   path("DEVOPS_CLOUD", "DevOps & Cloud",
     ["DOCKER", "LINUX", "AWS", "CLOUD_BASICS", "DEVOPS_CI_CD"], ["NETWORKING"]),
   path("QA_AUTOMATION", "QA & Test Automation",
@@ -112,6 +116,10 @@ function scorePath(definition: PathDefinition, levels: Map<string, number>): Car
   const matchedCore = coreSkills.filter((skill) => (levels.get(skill.id) ?? 0) > 0);
   if (matchedCore.length < definition.minimum_core_matches) return null;
 
+  const specializationSignals = definition.required_core_any_skill_ids;
+  if (specializationSignals.length > 0 &&
+      !specializationSignals.some((id) => (levels.get(id) ?? 0) > 0)) return null;
+
   const matched = definition.skills.filter((skill) => (levels.get(skill.id) ?? 0) > 0);
   const matchedCoreIds = matched.filter((skill) => skill.role === "CORE").map((skill) => skill.id);
   const matchedSupportingIds = matched.filter((skill) => skill.role === "SUPPORTING").map((skill) => skill.id);
@@ -145,6 +153,7 @@ function scorePath(definition: PathDefinition, levels: Map<string, number>): Car
     matched_skill_ids: matched.map((skill) => skill.id),
     matched_core_skill_ids: matchedCoreIds,
     matched_supporting_skill_ids: matchedSupportingIds,
+    specialization_signal_skill_ids: matchedCoreIds.filter((id) => specializationSignals.includes(id)),
     missing_core_skill_ids: missingCoreIds,
     next_skill_ids: missingCoreIds.slice(0, 3),
     core_match_count: coreCount,

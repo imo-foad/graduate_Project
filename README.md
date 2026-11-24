@@ -27,19 +27,24 @@ supabase functions serve recommend
 ```
 Cloud: `supabase link` to the **exact** project, review `supabase db push --dry-run`, then push. Never reset a remote DB.
 
-## Runtime verification (2026-11-24)
+## Full verification status (2026-11-24)
 
-Latest full green evidence before the final hardening pass: [GitHub Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487).
+<https://github.com/imo-foad/graduate_Project/actions/runs/45411332204> — run #53, successful on commit `aefae8529778081626ea6cef10f57062ec5c01ec`.
 
-- Static checks: 74/74 Node/TypeScript tests, 18/18 OpenAPI contract tests and 11/11 workflow tests passed.
-- PostgreSQL 17.12 applied all ten migrations (0001–0010) successfully.
-- Catalogue seeds loaded twice: 50 skills and 29 opportunities; idempotency and referential integrity checks passed.
-- All five pgTAP files passed: 204 assertions.
-- All concurrency checks passed: registration capacity and waitlist races, duplicate submissions, concurrent applications, and recommendation snapshot/cache races.
-- The Storage pgTAP file verifies that direct SQL object deletion is blocked and that the delete policy is owner-folder scoped. It is not an HTTP Storage API upload/delete end-to-end test.
-- The CI runner does not provision demo Auth users or execute `03_demo_profiles.sql`; those integration steps still need a separate local Auth verification.
-- No Supabase Cloud project was linked, reset, or modified.
+- Static: 74/74 Node/TypeScript, 18/18 OpenAPI contract, 11/11 workflow lint.
+- PostgreSQL 17.12: all 10 migrations applied in order.
+- Seeds: 50 skills and 29 opportunities loaded twice; idempotency and reference checks passed.
+- pgTAP: all five files passed, 204 assertions.
+- Concurrency: all 21 checks passed, including capacity/waitlist races, double-click registration, concurrent applications, stale recommendation snapshots and competing cache writes.
+- Supabase CLI pinned to 3.3.0.
+- No Supabase Cloud project was linked, reset or modified.
 
-The current review branch has one additional security hardening change: migration 0009 now creates the RLS helper inside the private schema from the outset, rather than briefly exposing a helper in `public`. Migration 0010 remains as a compatibility cleanup for databases that applied an earlier public-helper version. This latest hardening pass must receive a fresh full CI run before the current branch is called fully green.
+## Remaining integration gaps
 
-See `docs/AUDIT_REPORT.md` for the detailed evidence and limitations.
+- Storage authorization is tested in SQL, but upload/delete through the HTTP Storage API is not yet tested end-to-end.
+- `03_demo_profiles.sql` is generated and statically tested, but the DB runner does not apply it or provision demo Auth users.
+- The recommend Edge Function is unit/contract tested, not deployed and exercised over HTTP in CI.
+- Recommendation semantic matching is a documented lexical proxy; assumptions B1–B6 need calibration against a real evaluation set.
+- Business assumptions A2 (INTERNSHIP application eligibility) and A3 (TRAINING registration eligibility) require confirmation.
+
+See `docs/AUDIT_REPORT.md` for subsystem scores and the full audit.

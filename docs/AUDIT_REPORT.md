@@ -5,64 +5,80 @@
 **Review branch:** `fix/postgres-runtime-test-failures`  
 **Pull request:** [#2 — PostgreSQL and Storage test fixes](https://github.com/imo-foad/graduate_Project/pull/2)
 
-## Snapshot and safety
+## Scope and backup
 
-The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The current reviewed branch has 53 tracked files.
+The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The current review branch contains 53 tracked files across application code, config, docs, fixtures, scripts, migrations, seeds and tests.
 
-All work is isolated on `fix/postgres-runtime-test-failures`; PR #2 targets `backend-initial-import`. The `main` branch has not been changed. No Cloud Supabase project has been linked, reset, migrated or modified.
+All changes are isolated on `fix/postgres-runtime-test-failures`; PR #2 targets `backend-initial-import`. `main` has not been changed. No Cloud Supabase project has been linked, reset, migrated or modified.
 
-## Full green test evidence — run #52
+## Latest full test result
 
-[GitHub Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487) completed successfully on commit `f9508073fa1bc65b11fe0627a8757376a3f7bb7c`.
+<https://github.com/imo-foad/graduate_Project/actions/runs/45411332204> — GitHub Actions run **#53**, successful on commit `aefae8529778081626ea6cef10f57062ec5c01ec`.
 
-| Test group | Result |
+| Area | Result |
 |---|---:|
 | Node / TypeScript | 74 / 74 passed |
 | OpenAPI contract | 18 / 18 passed |
 | Workflow lint | 11 / 11 passed |
 | PostgreSQL migrations | 10 / 10 applied |
 | pgTAP | 204 / 204 passed across five files |
-| Concurrency checks | 21 / 21 passed |
+| Concurrency | 21 / 21 checks passed |
+| **Total automated assertions/checks** | **328 / 328 passed** |
 
-Runtime environment: PostgreSQL 17.12; Supabase CLI 3.3.0. Catalogue seeds loaded twice and passed idempotency: 50 skills, 29 opportunities, no orphan opportunity-skill references. The real concurrency suite passed capacity and waitlist races, duplicate registration, concurrent applications, stale recommendation snapshots, dirty-flag handling and competing recommendation saves.
+Runtime evidence: PostgreSQL 17.12, Supabase CLI 3.3.0. Migrations 0001–0010 applied in order. Catalogue seeds were run twice; idempotency and reference checks passed with 50 skills and 29 opportunities. The concurrency script passed registration capacity and waitlist races, duplicate registration, concurrent applications, stale recommendation snapshots, dirty-flag protection, and competing recommendation saves.
 
-## Confirmed issues and fixes
+## Subsystem scores
+
+These are engineering-readiness scores, not a tool-generated coverage percentage. They combine actual test results with the scope of each test and the remaining unverified integrations.
+
+| Subsystem | Score / 100 | Assessment |
+|---|---:|---|
+| Database schema and migrations | 98 | All 10 migrations applied on PostgreSQL 17.12; pgTAP passed. No cloud upgrade rehearsal. |
+| RLS and database permissions | 98 | RLS isolation and write-denial tests passed; helper is private-schema only. No independent penetration test. |
+| RPCs and business rules | 96 | RPC pgTAP and concurrency tests passed. A2/A3 business assumptions still need owner confirmation. |
+| Concurrency and recommendation cache | 100 | 21/21 concurrent checks passed, including capacity and stale-snapshot races. |
+| API / OpenAPI contract | 94 | 18/18 contract checks passed; no live PostgREST/Edge HTTP deployment test. |
+| Storage and CV | 82 | Private bucket, ownership policies and SQL protection are tested; Storage API upload/delete E2E is absent and CV flow is not wired end-to-end. |
+| Recommendation and scoring | 88 | Unit, flow and database cache tests pass; semantic score is a lexical proxy and assumptions B1–B6 need evaluation data. |
+| Fixtures, seeds and demo Auth | 82 | Skills/catalogue seeds pass idempotency; demo profile SQL and Auth user provisioning are not executed end-to-end by CI. |
+| CI and test automation | 100 | Both static and real database jobs passed; CLI version is pinned. |
+| Documentation and Android integration | 93 | OpenAPI/Android contract tests pass; business-rule assumptions are still flagged. |
+| **Overall engineering readiness** | **93** | Strong verified database core, with clear integration/quality gaps listed below. |
+
+The overall score is the rounded mean of the ten subsystem scores.
+
+## Findings and fixes
 
 ### Migration 0008 — scalar-to-array bug
 
-`supabase/migrations/0008_fix_array_appends.sql` replaces ambiguous scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. This fixed the malformed array literal runtime errors.
+`supabase/migrations/0008_fix_array_appends.sql` replaces ambiguous scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. This addresses the malformed array-literal error in the earlier real database run.
 
-### Migrations 0009–0010 — RLS recursion and helper exposure
+### Migrations 0009–0010 — RLS recursion and private helper
 
-The original failure was an RLS recursion between the opportunity catalogue SELECT policy and saved-opportunity INSERT policy. The fix uses a narrowly scoped SECURITY DEFINER predicate to check opportunity existence without recursively evaluating the catalogue policy.
+The original RLS failure was a recursive dependency between the opportunity catalogue SELECT policy and saved-opportunity INSERT policy. The policy now calls a narrowly scoped SECURITY DEFINER existence predicate that bypasses the recursive catalogue RLS path while retaining the `graduate_id = auth.uid()` ownership check.
 
-A security review identified that an earlier draft placed this helper in `public`, which would expose it as a PostgREST RPC. The current hardening update changes migration 0009 to create it inside `private` from the outset. Migration 0010 remains an idempotent compatibility cleanup: it drops any legacy public helper, reasserts the private helper grants and policy, and ensures existing pre-review databases are cleaned up.
+Migration 0009 creates the helper in the `private` schema from the outset, avoiding exposure as a public PostgREST RPC. Migration 0010 is a compatibility cleanup: it drops any legacy public helper, reasserts private schema/function permissions, and recreates the policy against the private function. Both migrations passed in run #53.
 
-Run #52 passed migrations 0009 and 0010, pgTAP RLS tests and saved-opportunity ownership checks before this final adjustment to migration 0009. The branch must rerun CI after the adjustment to confirm the private-helper definition from the first migration still passes.
+### Storage
 
-### Storage test limitation
+Supabase blocks direct SQL deletion from `storage.objects` with SQLSTATE `42501`. The pgTAP test asserts that protection and inspects the owner-folder DELETE policy. It does not call the Storage HTTP API to upload and delete an object. That end-to-end check remains outstanding.
 
-Supabase rejects direct SQL deletion from `storage.objects` with SQLSTATE `42501`. The test now asserts that protection and checks the owner-folder DELETE policy. It does **not** perform an HTTP Storage API delete of an uploaded object; API-level upload/delete still requires a separate integration test.
+## Remaining gaps (not CI failures)
 
-## Inventory and quality limitations
+1. **Storage API E2E:** test authenticated upload, own-object deletion, and denial of another user's deletion through the Storage API.
+2. **Demo profile/Auth E2E:** run `scripts/provision-demo-users.mjs` against local Supabase Auth and execute `supabase/seed/03_demo_profiles.sql` in a disposable environment.
+3. **Edge Function E2E:** deploy/serve `recommend` locally and exercise authorization, request validation, cache hits, recomputation and error responses over HTTP.
+4. **Scoring calibration:** the semantic component is a lexical proxy rather than embeddings; evaluate it with a labeled recommendation dataset.
+5. **Business requirements:** assumptions A2 (INTERNSHIP application eligibility) and A3 (TRAINING registration eligibility) remain product-owner decisions.
+6. **Security assurance:** automated RLS tests passed, but this is not a third-party security review or penetration test.
 
-- 53 tracked files across docs/OpenAPI, configuration, fixtures, scripts, Edge Function source, ten migrations, three generated seed files, five pgTAP files and static tests.
-- Fixtures: 50 unique skill IDs, 29 unique opportunity seed keys across eight opportunity types, and four demo profiles with unique emails.
-- The scoring implementation documents assumptions B1–B6. Its lexical similarity is a proxy, not an embedding model; treat score quality as a product-quality limitation, not a runtime failure.
-- Business assumptions about INTERNSHIP application eligibility and TRAINING registration eligibility still need product-owner confirmation.
-- The CI runner loads `01_skills.sql` and `02_catalogue.sql` twice. It generates but does not apply `03_demo_profiles.sql`, because that requires provisioned Auth users. Provisioning and Auth integration have static request tests, not live HTTP integration tests.
-- The recommend Edge Function is unit-tested through injected dependencies and static contract checks; it is not deployed and exercised over HTTP in this CI workflow.
-- Storage API end-to-end upload/delete test remains outstanding.
-- Supabase CLI is pinned to 3.3.0 based on the green run rather than using `latest`.
-- README Node engine requirement matches package.json (Node >= 22.6).
+## Final status
 
-## Final verification status
+**All 328 automated checks passed on run #53**, including the final private-helper migration. The current branch is green for its implemented SQL, static contracts and concurrency runner. The remaining items are integration/quality gaps that are not currently covered by the automated CI suite, not failing tests.
 
-Run #52 proved the ten-migration branch and all static, pgTAP and concurrency suites green. The current branch makes one additional hardening change to migration 0009 and pins the already verified CLI version. A fresh full run on the updated branch is required before the updated source is considered green.
-
-## Branches
+## Branches and evidence
 
 - Snapshot: `backup/pre-full-audit-2026-11-24`
 - Active review branch: `fix/postgres-runtime-test-failures`
 - Review PR: [#2](https://github.com/imo-foad/graduate_Project/pull/2)
-- Prior full-green evidence: [Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487)
+- Full green CI: [run #53](https://github.com/imo-foad/graduate_Project/actions/runs/45411332204)

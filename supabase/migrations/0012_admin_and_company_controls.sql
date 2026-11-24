@@ -22,6 +22,12 @@ begin
   if not exists (select 1 from auth.users u where u.id = p_user_id) then
     raise exception 'USER_NOT_FOUND' using errcode = 'PT404';
   end if;
+  if p_is_active and exists (
+       select 1 from public.company_memberships
+       where company_id = p_company_id and user_id = p_user_id and role = 'OWNER'
+     ) then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
   if p_is_active then
     insert into public.company_memberships(company_id, user_id, role, is_active)
     values (p_company_id, p_user_id, p_role, true)
@@ -237,6 +243,53 @@ grant execute on function public.set_company_member(uuid, uuid, text, boolean),
   public.update_admin_job(uuid, text, text, text, text, text, timestamptz),
   public.publish_admin_job(uuid), public.close_admin_job(uuid)
 to authenticated;
+
+-- Preserve the shared eligibility/open-state checks and distinguish real admin-managed jobs
+-- from seed/demo opportunities when notifying the graduate.
+create or replace function public.apply_for_job(
+  p_opportunity_id uuid, p_cv_document_id uuid default null, p_note text default null)
+returns public.applications
+language plpgsql security definer set search_path = ''
+as $apply_for_job_v2$
+declare
+  v_uid uuid := public._require_uid();
+  o public.opportunities;
+  f text[];
+  app public.applications;
+begin
+  select * into o from public.opportunities where id = p_opportunity_id for update;
+  if not found then raise exception 'OPPORTUNITY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if o.type <> 'JOB' then raise exception 'NOT_A_JOB' using errcode = 'PT422'; end if;
+  if not public.is_opportunity_open(o.status, o.deadline, o.end_at) then
+    raise exception 'OPPORTUNITY_CLOSED' using errcode = 'PT422';
+  end if;
+  f := public.eligibility_failures(v_uid, o.id);
+  if cardinality(f) > 0 then
+    raise exception 'NOT_ELIGIBLE' using errcode = 'PT422', detail = array_to_string(f, ',');
+  end if;
+  if p_cv_document_id is not null and not exists (
+       select 1 from public.cv_documents where id = p_cv_document_id and graduate_id = v_uid) then
+    raise exception 'CV_NOT_FOUND' using errcode = 'PT404';
+  end if;
+  begin
+    insert into public.applications (opportunity_id, graduate_id, cv_document_id, note)
+    values (o.id, v_uid, p_cv_document_id, p_note) returning * into app;
+  exception when unique_violation then
+    raise exception 'ALREADY_APPLIED' using errcode = 'PT409';
+  end;
+  insert into public.application_status_history (application_id, old_status, new_status, source_type, actor_user_id)
+  values (app.id, null, 'SUBMITTED', 'APP_ACTION', v_uid);
+  insert into public.notifications (profile_id, title, body, type, related_entity_id)
+  values (v_uid, 'تم تقديم طلبك',
+          case when o.is_sample then
+            'تم إنشاء طلب التقديم على «' || o.title || '» (بيانات تجريبية، لا يوجد قرار توظيف حقيقي).'
+          else
+            'تم إرسال طلبك على فرصة «' || o.title || '» لدى ' || coalesce(o.company_name, 'جهة التوظيف') || '.'
+          end,
+          'APPLICATION_SUBMITTED', app.id);
+  return app;
+end
+$apply_for_job_v2$;
 
 comment on function public.set_company_member(uuid, uuid, text, boolean) is 'Company OWNER manages recruiter/viewer memberships; no client can create an OWNER.';
 create policy admin_opportunities_select on public.opportunities for select to authenticated

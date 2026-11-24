@@ -33,7 +33,7 @@ export function foundViolations(body: string): string[] {
     if (!/\bfound\b/i.test(s)) return;
     const prev = i > 0 ? stmts[i - 1] : "";
     const ok = /^select\b[\s\S]*\binto\b/i.test(prev) || /^perform\b/i.test(prev) ||
-      /^(?:update|insert|delete)\b[\s\S]*\breturning\b[\s\S]*\binto\b/i.test(prev) ||
+      /^(?:(?:else|then)\s+)?(?:update|insert|delete)\b[\s\S]*\breturning\b[\s\S]*\binto\b/i.test(prev) ||
       /\bselect\b[\s\S]*\binto\b[^;]*$/i.test(prev) && !/\bend\s+if\b/i.test(prev);
     if (!ok) bad.push(`${s.slice(0, 60).replace(/\s+/g, " ")}  <-- previous statement: ${prev.slice(0, 50).replace(/\s+/g, " ") || "(none)"}`);
   });

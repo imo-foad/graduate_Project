@@ -27,24 +27,14 @@ supabase functions serve recommend
 ```
 Cloud: `supabase link` to the **exact** project, review `supabase db push --dry-run`, then push. Never reset a remote DB.
 
-## Verification status — see `docs/AUDIT_REPORT.md` (authoritative)
-- **Executed here:** `npm test` (72), `npm run test:contract` (18), `npm run test:workflow` (11). Static / fake-based only.
-- **Never executed (no PostgreSQL/Docker/Supabase CLI/GitHub Actions access in the authoring workspace):** migrations 0001–0009, seeds,
-  pgTAP files 01–05, `tests/db/concurrency.sh`. **Status: BLOCKED** until `npm run test:db` (needs Docker, Supabase CLI, psql, Node)
-  or the CI job `database` passes. The DB scripts only accept a local database URL (parsed host check) and reset the LOCAL database.
+## Runtime verification (2026-11-24)
 
-## Assumptions and flagged conflicts (owner may overrule)
-- A1 hard eligibility = `opportunity_eligibility` (graduation year range, degrees, required certifications).
-- A2 only `JOB` is appliable (doc 7.1); internships cannot be applied to. **Conflict-adjacent: confirm.**
-- A3 `TRAINING` is registrable (doc 4.2 scenario) although 7.2 lists only EVENT/CONFERENCE/VOLUNTEER. **Conflict: confirm.**
-- A4 re-registering after cancelling reuses the same row. A5 confirmed CV skill without level = level 1.
-- A6 profile completion = 9 equal items. A7 for TRAINING/EVENT, `opportunity_skills` = skills developed.
-- Catalogue status stays ACTIVE/CLOSED/EXPIRED/CANCELLED; the doc's separate event states (OPEN, ONGOING, ...) are derived from dates.
-- Scoring: B1–B6 in `scoring.ts` (training weights, level->years map, lexical stand-in for embeddings, location heuristics).
-  Known limitation: events/internships with few criteria can score 100; calibrate with the AI evaluation set (doc 13.4).
-- Waitlist promotion after a cancellation is not specified in the source and is not implemented.
+- GitHub Actions run #17 applied migrations 0001–0008, loaded the catalogue seeds, and executed all five pgTAP files (203 assertions).
+- That run reported 200 passing assertions and 3 failures:
+  - Two RLS tests exposed infinite recursion between the saved-opportunity INSERT policy and catalogue SELECT policy. Migration 0009 replaces the recursive lookup with a narrowly scoped SECURITY DEFINER existence check.
+  - One Storage test expected SQLSTATE P0001, but Supabase correctly returned 42501 because direct SQL deletion from Storage tables is protected. The test now expects 42501 and checks the owner-folder DELETE policy in pg_policies.
+- The same Actions run had one static test-fixture failure because it still expected the previous migration sequence. The fixture was updated for migration 0009.
+- The concurrency suite did not run in that attempt because pgTAP failed first. Do not treat the backend as fully verified until a fresh workflow run passes both static and database jobs, including concurrency.
+- No Supabase Cloud project was linked, reset, or modified. All database runtime checks use the disposable local Supabase stack in CI.
 
-## Next phases
-CV parsing function (text extraction + validated `cv_suggestions`), optional Gemini explanations/embeddings only after
-re-checking current free quotas and data-use terms, recommendation notifications, DB-backed integration/RLS/concurrency
-tests, seed expansion to the doc's target counts.
+See `docs/AUDIT_REPORT.md` for the detailed findings and exact CI evidence.

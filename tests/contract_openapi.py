@@ -156,7 +156,8 @@ class Contract(unittest.TestCase):
         path_schema = schemas["CareerPathMatch"]
         self.assertTrue({
             "id", "label", "score", "matched_skill_ids", "matched_core_skill_ids",
-            "matched_supporting_skill_ids", "missing_core_skill_ids", "next_skill_ids",
+            "matched_supporting_skill_ids", "specialization_signal_skill_ids",
+            "missing_core_skill_ids", "next_skill_ids",
             "core_match_count", "required_core_match_count", "skill_evidence", "explanation_ar",
         } <= set(path_schema["properties"]))
         self.assertIn("$ref", profile["properties"]["paths"]["items"])

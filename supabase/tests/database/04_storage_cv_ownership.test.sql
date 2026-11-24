@@ -51,7 +51,7 @@ select throws_ok($q$insert into storage.objects (bucket_id, name) values ('cv-do
 select throws_ok($q$insert into storage.objects (bucket_id, name) values ('cv-documents', 'loose.pdf')$q$, '42501', null, 'upload outside any user folder denied');
 select is((select count(*)::int from storage.objects where bucket_id = 'cv-documents'), 1, 'sees only own objects');
 select is((select count(*)::int from storage.objects where name like tests.id('s2')::text || '/%'), 0, 'cannot list another graduate objects');
-select lives_ok($q$delete from storage.objects where name like tests.id('s2')::text || '/%'$q$, 'deleting another graduate objects is a silent no-op');
+select throws_ok($q$delete from storage.objects where name like tests.id('s2')::text || '/%'$q$, 'P0001', null, 'direct SQL deletion is blocked; Storage API is required');
 select lives_ok($q$update storage.objects set name = tests.id('s1')::text || '/renamed.pdf' where name like tests.id('s1')::text || '/%'$q$, 'no update policy: statement matches nothing');
 
 reset role;

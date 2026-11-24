@@ -12,7 +12,7 @@ export function extractSkillsFromText(text: string, dict: SkillDictEntry[]): Ski
       if (!term.trim()) continue;
       // Dot is part of dotted technology identifiers (Node.js, React.js). A short alias
       // such as "JS" must not match the suffix of "Node.js".
-      const re = new RegExp(`(?<![\\p{L}\\p{N}._+#])${esc(term.trim())}(?![\\p{L}\\p{N}._+#])`, "iu");
+      const re = new RegExp(`(?<![\\p{L}\\p{N}._+#])${esc(term.trim())}(?![\\p{L}\\p{N}_+#])`, "iu");
       if (re.test(text)) { if (!found.has(e.id)) found.set(e.id, term); break; }
     }
   }

@@ -10,7 +10,7 @@ def code(text):
 
 WF_TEXT = code(open(os.path.join(ROOT, ".github/workflows/backend-tests.yml")).read())
 WF = yaml.safe_load(WF_TEXT)
-SCRIPTS = {p: code(open(os.path.join(ROOT, p)).read()) for p in ("scripts/run-db-tests.sh", "tests/db/concurrency.sh")}
+SCRIPTS = {p: code(open(os.path.join(ROOT, p)).read()) for p in ("scripts/run-db-tests.sh", "scripts/run-local-integrations.sh", "tests/db/concurrency.sh")}
 
 
 def steps(job): return WF["jobs"][job]["steps"]
@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "node --check tests/integration/local-supabase.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -69,13 +69,20 @@ class Scripts(unittest.TestCase):
 
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
-        for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "schema_migrations",
+        for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
                        "01_register_for_event", "05_recommendation_cache", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
         self.assertEqual(len(migs), 10)
         self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010"])
+
+    def test_local_http_stage_covers_auth_storage_and_edge_function(self):
+        s = SCRIPTS["scripts/run-local-integrations.sh"]
+        for needle in ("provision-demo-users.mjs", "03_demo_profiles.sql", "supabase functions serve recommend",
+                       "/storage/v1/object/", "/functions/v1/recommend", "DEMO_PASSWORD", "assert-local-db.mjs"):
+            self.assertIn(needle, s)
+        self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):
         on_disk = sorted(f[:-len(".test.sql")] for f in os.listdir(os.path.join(ROOT, "supabase/tests/database")) if f.endswith(".test.sql"))

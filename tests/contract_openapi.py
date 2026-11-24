@@ -39,7 +39,7 @@ def functions():
 
 def exec_granted(role):
     names = set()
-    for m in re.finditer(r"(?ims)^[ \\t]*grant[ \\t]+(.+?)[ \\t]+on[ \\t]+(?!function\\b)(.+?)[ \\t]+to[ \\t]+([^;]+);", SQL):
+    for m in re.finditer(r"grant execute on function\s+(.*?)\s+to\s+([^;]+);", SQL, re.S | re.I):
         if role in [r.strip() for r in m.group(2).split(",")]:
             names |= set(re.findall(r"public\.(\w+)\(", m.group(1)))
     return names
@@ -47,7 +47,7 @@ def exec_granted(role):
 
 def table_grants(role="authenticated"):
     grants = {}
-    for m in re.finditer(r"grant\s+(.+?)\s+on\s+(?!function)(.+?)\s+to\s+([^;]+);", SQL, re.S | re.I):
+    for m in re.finditer(r"(?ims)^[ \t]*grant[ \t]+(.+?)[ \t]+on[ \t]+(?!function\b)(.+?)[ \t]+to[ \t]+([^;]+);", SQL):
         if role not in [r.strip() for r in m.group(3).split(",")]: continue
         privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(m.group(1))}
         for t in split_top(m.group(2)):

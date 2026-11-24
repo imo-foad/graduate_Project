@@ -82,13 +82,21 @@ const pdfPath = a.id + "/cv-parser-" + randomUUID() + ".pdf";
 const docxPath = b.id + "/cv-parser-" + randomUUID() + ".docx";
 const blankPdfPath = a.id + "/cv-parser-blank-" + randomUUID() + ".pdf";
 const recommendationPdfPath = a.id + "/cv-recommendations-" + randomUUID() + ".pdf";
+const structuredPdfPath = a.id + "/cv-structured-" + randomUUID() + ".pdf";
 const pdf = buildPdf("Skills: Kotlin, JavaScript, React, Docker.");
 const recommendationPdf = buildPdf("Projects: Python, Machine Learning, Statistics.");
+const structuredPdf = buildPdf([
+  "WORK EXPERIENCE", "Backend Intern | Integration Test Labs", "Jan 2022 - Dec 2023",
+  "Supported REST API development and database maintenance.", "CERTIFICATIONS",
+  "AWS Certified Cloud Practitioner | Amazon Web Services | 2024", "COURSES",
+  "Advanced TypeScript | Coursera | 2023 | 8 weeks",
+].join("\n"));
 const blankPdf = buildPdf("");
 const docx = Buffer.from("UEsDBBQAAAAIAKSTeF3JTxqw6wAAAK4BAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbH1QvU7DMBDeeQrLK4odGBBCSTrwMwJDeYCTfUks7LPlc0v79jht6YAK4933q69b7YIXW8zsIvXyRrVSIJloHU29/Fi/NPdScAGy4CNhL/fIcjVcdet9QhZVTNzLuZT0oDWbGQOwigmpImPMAUo986QTmE+YUN+27Z02kQpSacriIYfuCUfY+CKed/V9LJLRsxSPR+KS1UtIyTsDpeJ6S/ZXSnNKUFV54PDsEl9XgtQXExbk74CT7q0uk51F8Q65vEKoLP0Vs9U2mk2oSvW/zYWecRydwbN+cUs5GmSukwevzkgARz/99WHu4RtQSwMEFAAAAAgApJN4XbmBRHGwAAAAKgEAAAsAAABfcmVscy8ucmVsc43POw7CMAwG4J1TRN5pWgaEUJMuCKkrKgeIEjeNaB5KwqO3JwMDIAZG278/y233sDO5YUzGOwZNVQNBJ70yTjM4D8f1DkjKwikxe4cMFkzQ8VV7wlnkspMmExIpiEsMppzDntIkJ7QiVT6gK5PRRytyKaOmQciL0Eg3db2l8d0A/mGSXjGIvWqADEvAf2w/jkbiwcurRZd/nPhKFFlEjZnB3UdF1atdFRYob+nHi/wJUEsDBBQAAAAIAKSTeF2Z6QuA1AAAAD4BAAARAAAAd29yZC9kb2N1bWVudC54bWxtj8FKBDEMhu8+Rejd6ehBZJiZBVn27EEfoLZxp2yblDbj7Ly97YII4uUPIeTLl/FwjQG+MBfPNKmHrleAZNl5Ok/q/e10/6ygiCFnAhNOaseiDvPduA2O7RqRBCqByrBNahFJg9bFLhhN6Tgh1dkn52iktvmsN84uZbZYSj0Qg37s+ycdjSc1V+QHu73V1CK3kPl1l4UJqgEc2V4wA14TZl8tETyBLAg28OpA0MRu1G2pZb5l+st7WX0QSD5h8ITlBjarcHXExihV9R+I/rHTv5/P31BLAQIUAxQAAAAIAKSTeF3JTxqw6wAAAK4BAAATAAAAAAAAAAAAAACAAQAAAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAgApJN4XbmBRHGwAAAAKgEAAAsAAAAAAAAAAAAAAIABHAEAAF9yZWxzLy5yZWxzUEsBAhQDFAAAAAgApJN4XZnpC4DUAAAAPgEAABEAAAAAAAAAAAAAAIAB9QEAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAADAAMAuQAAAPgCAAAAAA==", "base64");let pdfId = null;
 let docxId = null;
 let blankPdfId = null;
 let recommendationPdfId = null;
+let structuredPdfId = null;
 
 async function upload(path, token, bytes, mime) {
   return request("/storage/v1/object/cv-documents/" + encodePath(path), {
@@ -250,6 +258,71 @@ try {
     updatedDataJob.score_breakdown?.skills > baselineSkillScore &&
     ["PYTHON", "STATISTICS"].every((id) => (updatedSkillGaps.get(id)?.current_level ?? 0) > 0));
 
+
+  // Structured CV parsing: extracted records remain PENDING until the graduate explicitly reviews them.
+  const structuredUpload = await upload(structuredPdfPath, a.token, structuredPdf, "application/pdf");
+  pass("graduate uploads structured CV PDF", structuredUpload.status === 200 || structuredUpload.status === 201);
+  const structuredMetadata = await createMetadata(a.token, a.id, structuredPdfPath, "pdf", structuredPdf);
+  pass("graduate registers structured CV metadata", structuredMetadata.status === 201 && structuredMetadata.json?.length === 1);
+  structuredPdfId = structuredMetadata.json?.[0]?.id ?? null;
+  const parsedStructured = await parse(a.token, structuredPdfId);
+  const structuredSuggestions = await request(
+    "/rest/v1/cv_suggestions?select=id,kind,payload,status&cv_document_id=eq." + structuredPdfId,
+    { headers: headers(a.token) },
+  );
+  const experienceSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "EXPERIENCE");
+  const certificationSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "CERTIFICATION");
+  const courseSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "COURSE");
+  pass("CV parser extracts experience, certification and course suggestions",
+    parsedStructured.status === 200 && experienceSuggestion?.payload?.company_name === "Integration Test Labs" &&
+    experienceSuggestion?.payload?.job_title === "Backend Intern" &&
+    certificationSuggestion?.payload?.title === "AWS Certified Cloud Practitioner" &&
+    courseSuggestion?.payload?.title === "Advanced TypeScript" &&
+    [experienceSuggestion, certificationSuggestion, courseSuggestion].every((row) => row.status === "PENDING"));
+  const reviewed = await request("/rest/v1/rpc/review_cv_suggestions", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_decisions: [
+      { id: experienceSuggestion.id, status: "CONFIRMED" },
+      { id: certificationSuggestion.id, status: "CONFIRMED" },
+      { id: courseSuggestion.id, status: "CONFIRMED" },
+    ] }),
+  });
+  pass("graduate confirms structured CV records through the review RPC",
+    reviewed.status === 200 && reviewed.json?.confirmed === 3 && reviewed.json?.rejected === 0);
+  const [storedExperience, storedCertification, storedCourse] = await Promise.all([
+    request("/rest/v1/career_history?select=company_name,job_title,source&company_name=eq.Integration%20Test%20Labs", { headers: headers(a.token) }),
+    request("/rest/v1/certifications?select=title,source&title=eq.AWS%20Certified%20Cloud%20Practitioner", { headers: headers(a.token) }),
+    request("/rest/v1/courses?select=title,source&title=eq.Advanced%20TypeScript", { headers: headers(a.token) }),
+  ]);
+  pass("only confirmed structured CV data enters the graduate profile",
+    storedExperience.status === 200 && storedExperience.json?.some((row) => row.source === "CV_CONFIRMED") &&
+    storedCertification.status === 200 && storedCertification.json?.some((row) => row.source === "CV_CONFIRMED") &&
+    storedCourse.status === 200 && storedCourse.json?.some((row) => row.source === "CV_CONFIRMED"));
+
+  const marketInsights = await request("/rest/v1/rpc/get_career_market_insights", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
+  });
+  pass("career market insights use active platform job data",
+    marketInsights.status === 200 && marketInsights.json?.market_basis?.includes("active JOB") &&
+    Array.isArray(marketInsights.json?.top_demand_skills) && Array.isArray(marketInsights.json?.priority_skill_gaps));
+  const dismissedJobId = updatedDataJob?.opportunity_id;
+  const dismissed = await request("/rest/v1/rpc/record_recommendation_interaction", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: dismissedJobId, p_interaction_type: "DISMISS" }),
+  });
+  pass("graduate can dismiss a recommendation and record feedback", dismissed.status === 200 && dismissed.json?.recorded === true);
+  const afterDismiss = await request("/functions/v1/recommend", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
+  });
+  pass("dismissal invalidates recommendations and suppresses that opportunity",
+    afterDismiss.status === 200 && afterDismiss.json?.source === "computed" &&
+    !(afterDismiss.json?.items ?? []).some((item) => item.opportunity_id === dismissedJobId));
+  const loggedInteraction = await request("/rest/v1/recommendation_interactions?select=interaction_type&opportunity_id=eq." + dismissedJobId, {
+    headers: headers(a.token),
+  });
+  pass("recommendation interactions are persisted and owner-scoped",
+    loggedInteraction.status === 200 && loggedInteraction.json?.some((row) => row.interaction_type === "DISMISS"));
+
   const docxUpload = await upload(docxPath, b.token, docx,
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
   pass("graduate uploads a real DOCX file", docxUpload.status === 200 || docxUpload.status === 201);
@@ -289,7 +362,7 @@ try {
   await removeObject(service, docxPath).catch(() => {});
   await removeObject(service, blankPdfPath).catch(() => {});
   await removeObject(service, recommendationPdfPath).catch(() => {});
-  for (const id of [pdfId, docxId, blankPdfId, recommendationPdfId]) {
+  for (const id of [pdfId, docxId, blankPdfId, recommendationPdfId, structuredPdfId]) {
     if (id) await request("/rest/v1/cv_documents?id=eq." + id, {
       method: "DELETE", headers: headers(service),
     }).catch(() => {});

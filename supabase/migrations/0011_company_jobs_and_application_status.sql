@@ -75,6 +75,13 @@ as $company_member_guard$
   );
 $company_member_guard$;
 
+
+
+alter table public.opportunities
+  add column company_id uuid references public.companies(id) on delete restrict,
+  add column created_by uuid references auth.users(id) on delete set null,
+  add column published_at timestamptz;
+
 -- Break the applications <-> opportunities policy cycle. The SECURITY DEFINER
 -- function reads the relationship without recursively invoking either table's RLS.
 create or replace function private.can_view_company_application(p_application_id uuid)
@@ -102,11 +109,6 @@ revoke all on function private.can_view_company_application(uuid) from public, a
 grant execute on function private.is_platform_admin() to authenticated;
 grant execute on function private.is_company_member(uuid, text[]) to authenticated;
 grant execute on function private.can_view_company_application(uuid) to authenticated;
-
-alter table public.opportunities
-  add column company_id uuid references public.companies(id) on delete restrict,
-  add column created_by uuid references auth.users(id) on delete set null,
-  add column published_at timestamptz;
 
 alter table public.opportunities drop constraint if exists opportunities_status_check;
 alter table public.opportunities add constraint opportunities_status_check

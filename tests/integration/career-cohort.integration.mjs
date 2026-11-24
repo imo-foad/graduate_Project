@@ -197,6 +197,20 @@ async function createUser(user) {
     ownProfile.json[0].career_interests?.[0] === user.interest[0],
     { status: ownProfile.status, body: ownProfile.json ?? ownProfile.text });
 }
+async function primeRecommendations(user) {
+  if (!user.token) {
+    record(user, "recommendations", "empty baseline recommendation snapshot can be computed", false);
+    return;
+  }
+  const baseline = await post("/functions/v1/recommend", user.token, {});
+  user.baselineRecommendation = baseline;
+  record(user, "recommendations", "new graduate starts with an explicit empty career profile before CV review",
+    baseline.status === 200 && baseline.json?.source === "computed" &&
+    Array.isArray(baseline.json?.career_profile?.paths) &&
+    baseline.json.career_profile.paths.length === 0,
+    { status: baseline.status, source: baseline.json?.source,
+      careerProfile: baseline.json?.career_profile ?? baseline.json ?? baseline.text });
+}
 async function uploadAndParse(user) {
   if (!user.token || !user.authId) {
     record(user, "cv_storage_privacy", "CV upload prerequisites are available", false);
@@ -233,6 +247,12 @@ async function uploadAndParse(user) {
     ownDocument.json[0].graduate_id === user.authId &&
     ownDocument.json[0].file_type === "pdf" && ownDocument.json[0].size_bytes === user.cvBytes.length,
     { status: ownDocument?.status, body: ownDocument?.json ?? ownDocument?.text });
+  const ownFile = await request("/storage/v1/object/cv-documents/" + encodePath(user.storagePath), {
+    headers: headers(user.token),
+  });
+  record(user, "cv_storage_privacy", "graduate can download the original bytes of their own private CV",
+    ownFile.status === 200 && ownFile.text.startsWith("%PDF-"),
+    { status: ownFile.status, header: ownFile.text.slice(0, 12) });
 
   if (!user.cvId) {
     record(user, "extraction_accuracy", "CV parser completes and returns DONE", false);
@@ -247,6 +267,11 @@ async function uploadAndParse(user) {
     parsed.status === 200 && parsed.json?.status === "DONE" && parsed.json?.confirmation_required === true,
     { status: parsed.status, body: parsed.json ?? parsed.text });
 
+  const completedDocument = await getById("cv_documents", "id,parse_status,error_message,parsed_at", user.cvId, user.token);
+  record(user, "extraction_accuracy", "CV document lifecycle is DONE with no processing error",
+    completedDocument.status === 200 && completedDocument.json?.[0]?.parse_status === "DONE" &&
+    completedDocument.json?.[0]?.error_message === null && Boolean(completedDocument.json?.[0]?.parsed_at),
+    { status: completedDocument.status, body: completedDocument.json ?? completedDocument.text });
   const suggestions = await request("/rest/v1/cv_suggestions?select=id,kind,payload,status,cv_document_id&cv_document_id=eq." + user.cvId, {
     headers: headers(user.token),
   });
@@ -410,6 +435,11 @@ async function testCareerAndRecommendations(user) {
 
   user.recommendationItems = first.json?.items ?? [];
   user._careerScores = paths.map((item) => ({ id: item.id, score: item.score }));
+  record(user, "recommendations", "confirming CV skills invalidates and recomputes the empty baseline snapshot",
+    first.status === 200 && first.json?.source === "computed" &&
+    user.baselineRecommendation?.json?.career_profile?.paths?.length === 0,
+    { baselineSource: user.baselineRecommendation?.json?.source, refreshedSource: first.json?.source,
+      expectedPaths, actualPaths });
   record(user, "recommendations", "recommend endpoint returns deterministic recommendations with the current model",
     first.status === 200 && first.json?.source === "computed" &&
     first.json?.ai_mode === "deterministic" &&
@@ -546,8 +576,10 @@ async function testInsightsAndFeedback(user) {
     market.json?.market_basis?.includes("active JOB") &&
     Array.isArray(market.json?.top_demand_skills) &&
     Array.isArray(market.json?.priority_skill_gaps) &&
-    user.skills.every((id) => (market.json?.your_skills ?? []).some((skill) => skill.skill_id === id)),
+    user.skills.every((id) => (market.json?.your_skills ?? []).some((skill) => skill.skill_id === id)) &&
+    Number(market.json?.your_experience_years) > 0,
     { status: market.status, marketBasis: market.json?.market_basis,
+      experienceYears: market.json?.your_experience_years,
       returnedSkills: (market.json?.your_skills ?? []).map((skill) => skill.skill_id) });
   const insights = await post("/rest/v1/rpc/get_my_insights", user.token, {});
   record(user, "insights_feedback", "personal graduate insights endpoint responds with a completion profile",
@@ -697,11 +729,18 @@ async function cleanup() {
 try {
   console.log("CAREER COHORT " + round.toUpperCase() + " - " + users.length + " independent graduate accounts");
   for (const user of users) await createUser(user);
-  for (const user of users) await uploadAndParse(user);
-  for (const user of users) await testStructuredPersistence(user);
-  for (const user of users) await testCareerAndRecommendations(user);
-  for (const user of users) await testGraduateWorkflows(user);
-  for (const user of users) await testInsightsAndFeedback(user);
+  // Complete every functional layer for one graduate before starting the next graduate.
+  for (const user of users) {
+    console.log("BEGIN USER JOURNEY " + user.code + " / " + user.track);
+    await primeRecommendations(user);
+    await uploadAndParse(user);
+    await testStructuredPersistence(user);
+    await testCareerAndRecommendations(user);
+    await testGraduateWorkflows(user);
+    await testInsightsAndFeedback(user);
+    console.log("END USER JOURNEY " + user.code + " / " + user.track);
+  }
+  // All ten accounts exist together, so cross-account RLS and private Storage are checked in a full ring.
   await testPrivacy(users);
 } catch (error) {
   console.error("CAREER COHORT HARNESS ERROR", error);

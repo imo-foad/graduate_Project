@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -94,6 +94,13 @@ class Scripts(unittest.TestCase):
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
+        self.assertIn("career-cohort.integration.mjs round1", runner)
+        self.assertIn("career-cohort.integration.mjs round2", runner)
+        self.assertIn('[ "$CODE" = "405" ]', runner)
+        self.assertIn("expected HTTP 405 for GET", runner)
+        self.assertIn("timeout 900s", runner)
+        self.assertIn("career-cohort-reports/", WF_TEXT)
+        self.assertIn("name: career-cohort-reports", WF_TEXT)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):

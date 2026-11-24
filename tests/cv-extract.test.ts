@@ -13,6 +13,11 @@ test("Java does not match JavaScript, and vice versa", () => {
   assert.deepEqual(ids("Frontend work in JavaScript and React.js"), ["JAVASCRIPT", "REACT"]);
   assert.deepEqual(ids("Backend in Java"), ["JAVA"]);
 });
+test("Node.js and React.js do not create JavaScript false positives from dotted suffix aliases", () => {
+  assert.deepEqual(ids("Backend uses Node.js and React.js services"), ["NODE_JS", "REACT"]);
+  assert.deepEqual(ids("Frontend JavaScript with Node.js runtime"), ["JAVASCRIPT", "NODE_JS"]);
+  assert.deepEqual(ids("JS is an abbreviation used independently"), ["JAVASCRIPT"]);
+});
 test("symbols in names are handled (C#, C++, CI/CD)", () => {
   assert.deepEqual(ids("Wrote C# and C++ services, CI/CD with GitHub Actions"), ["CPP", "C_SHARP", "DEVOPS_CI_CD", "GIT"].sort() /* "GitHub" is a Git alias */);
 });

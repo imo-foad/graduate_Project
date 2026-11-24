@@ -143,6 +143,44 @@ test("returns every credible path rather than truncating at four", () => {
   assert.deepEqual(result.primary_path, result.paths[0]);
 });
 
+test("all four requested tracks satisfy the exact two-core threshold; supporting skills cannot replace a core", () => {
+  const cases = [
+    { id: "FRONTEND", core: ["HTML_CSS", "JAVASCRIPT"], support: "GIT" },
+    { id: "BACKEND", core: ["NODE_JS", "REST_API"], support: "PYTHON" },
+    { id: "DATA_ANALYTICS", core: ["SQL", "POWER_BI"], support: "PYTHON" },
+    { id: "CYBERSECURITY", core: ["CYBERSECURITY", "PENETRATION_TESTING"], support: "LINUX" },
+  ];
+  for (const scenario of cases) {
+    const valid = deriveCareerProfile([
+      { skill_id: scenario.core[0], level: 1 },
+      { skill_id: scenario.core[1], level: 1 },
+      { skill_id: scenario.support, level: 5 },
+    ]);
+    assert.ok(valid.paths.some((item) => item.id === scenario.id), scenario.id + " must accept exactly two core skills");
+    const invalid = deriveCareerProfile([
+      { skill_id: scenario.core[0], level: 5 },
+      { skill_id: scenario.support, level: 5 },
+    ]);
+    assert.equal(invalid.paths.some((item) => item.id === scenario.id), false,
+      scenario.id + " must not substitute a supporting skill for a missing core skill");
+  }
+});
+
+test("reported skill contributions reconcile with the weighted path score", () => {
+  const result = deriveCareerProfile([
+    { skill_id: "HTML_CSS", level: 5 },
+    { skill_id: "JAVASCRIPT", level: 3 },
+    { skill_id: "REACT", level: 2 },
+    { skill_id: "GIT", level: 4 },
+  ]);
+  const frontend = result.paths.find((item) => item.id === "FRONTEND")!;
+  const contributionTotal = frontend.skill_evidence.reduce((sum, item) => sum + item.contribution, 0);
+  assert.ok(Math.abs(contributionTotal - frontend.score) <= 0.51,
+    "per-skill contributions should reconcile to the rounded score");
+  assert.ok(frontend.next_skill_ids.length <= 3);
+  assert.ok(frontend.next_skill_ids.every((id) => frontend.missing_core_skill_ids.includes(id)));
+});
+
 test("ranking is deterministic regardless of input skill order", () => {
   const profile = ["SQL", "POWER_BI", "STATISTICS", "NODE_JS", "REST_API", "POSTGRESQL"];
   const forward = deriveCareerProfile(skills(...profile));

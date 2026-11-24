@@ -67,18 +67,41 @@ create or replace function private.is_company_member(
 )
 returns boolean
 language sql stable security definer set search_path = ''
-as $$
+as $
   select auth.uid() is not null and exists (
     select 1 from public.company_memberships m
     where m.company_id = p_company_id and m.user_id = auth.uid()
       and m.is_active and m.role = any(p_roles)
   );
-$$;
+$;
+
+-- Break the applications <-> opportunities policy cycle. The SECURITY DEFINER
+-- function reads the relationship without recursively invoking either table's RLS.
+create or replace function private.can_view_company_application(p_application_id uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $
+  select auth.uid() is not null and (
+    private.is_platform_admin()
+    or exists (
+      select 1
+      from public.applications a
+      join public.opportunities o on o.id = a.opportunity_id
+      join public.company_memberships m on m.company_id = o.company_id
+      where a.id = p_application_id
+        and m.user_id = auth.uid()
+        and m.is_active
+        and m.role in ('OWNER','RECRUITER','VIEWER')
+    )
+  );
+$;
 
 revoke all on function private.is_platform_admin() from public, anon, authenticated;
 revoke all on function private.is_company_member(uuid, text[]) from public, anon, authenticated;
+revoke all on function private.can_view_company_application(uuid) from public, anon, authenticated;
 grant execute on function private.is_platform_admin() to authenticated;
 grant execute on function private.is_company_member(uuid, text[]) to authenticated;
+grant execute on function private.can_view_company_application(uuid) to authenticated;
 
 alter table public.opportunities
   add column company_id uuid references public.companies(id) on delete restrict,
@@ -320,13 +343,9 @@ create policy company_verification_history_select_members on public.company_veri
 create policy company_opportunities_select on public.opportunities for select to authenticated
   using (company_id is not null and private.is_company_member(company_id));
 create policy company_applications_select on public.applications for select to authenticated
-  using (exists (select 1 from public.opportunities o
-    where o.id = applications.opportunity_id and o.company_id is not null
-      and private.is_company_member(o.company_id, array['OWNER','RECRUITER','VIEWER']::text[])));
+  using (private.can_view_company_application(id));
 create policy company_application_history_select on public.application_status_history for select to authenticated
-  using (exists (select 1 from public.applications a join public.opportunities o on o.id = a.opportunity_id
-    where a.id = application_status_history.application_id and o.company_id is not null
-      and private.is_company_member(o.company_id, array['OWNER','RECRUITER','VIEWER']::text[])));
+  using (private.can_view_company_application(application_id));
 
 grant select on public.companies, public.company_memberships, public.company_verification_history to authenticated;
 

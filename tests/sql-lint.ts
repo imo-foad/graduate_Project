@@ -6,14 +6,14 @@ export const migrationFiles = () => readdirSync(migrationsDir).filter((f) => f.e
 export const readMigration = (f: string) => readFileSync(new URL(f, migrationsDir), "utf8");
 export const allMigrationsSql = () => migrationFiles().map(readMigration).join("\n");
 
-const FN_RE = /create or replace function\s+public\.(\w+)\s*\(([\s\S]*?)\)\s*returns[\s\S]*?\$\$([\s\S]*?)\$\$/gi;
+const FN_RE = /create or replace function\s+public\.(\w+)\s*\(([\s\S]*?)\)\s*returns[\s\S]*?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)([\s\S]*?)\\3/gi;
 
 /** Final definition of each function: later migrations override earlier ones (CREATE OR REPLACE semantics). */
 export function finalFunctions(sql: string): Map<string, { params: string; body: string; header: string }> {
   const out = new Map();
   for (const m of sql.matchAll(FN_RE)) {
-    const header = m[0].slice(0, m[0].indexOf("$$"));
-    out.set(m[1], { params: m[2], body: m[3], header });
+    const header = m[0].slice(0, m[0].indexOf(m[3]));
+    out.set(m[1], { params: m[2], body: m[4], header });
   }
   return out;
 }
@@ -43,7 +43,10 @@ export function foundViolations(body: string): string[] {
 export function structureErrors(sql: string): string[] {
   const errs: string[] = [];
   const noComments = stripComments(sql);
-  if ((noComments.match(/\$\$/g) ?? []).length % 2) errs.push("odd number of $$");
+  const tags = noComments.match(/\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/g) ?? [];
+  const tagCounts = new Map<string, number>();
+  for (const tag of tags) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+  for (const [tag, count] of tagCounts) if (count % 2) errs.push(`odd number of ${tag}`);
   let depth = 0;
   let inStr = false;
   let dollar = false;

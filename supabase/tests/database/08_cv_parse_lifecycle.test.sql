@@ -40,19 +40,23 @@ select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 select set_config('role', 'service_role', true);
 select is(public.complete_cv_parse(
   tests.id('cv'), tests.id('graduate'),
-  '[{"skill_id":"KOTLIN","matched_term":"Kotlin"},{"skill_id":"DOCKER","matched_term":"Docker"},{"skill_id":"KOTLIN","matched_term":"Kotlin"}]'::jsonb
-), 2, 'service finalization writes deduplicated pending suggestions atomically');
+  '[
+    {"kind":"SKILL","payload":{"skill_id":"KOTLIN","matched_term":"Kotlin"}},
+    {"kind":"SKILL","payload":{"skill_id":"DOCKER","matched_term":"Docker"}}
+  ]'::jsonb
+), 2, 'service finalization accepts the structured kind/payload contract atomically');
 select is((select parse_status from public.cv_documents where id = tests.id('cv')),
   'DONE', 'successful finalization marks the document DONE');
 select is((select count(*)::int from public.cv_suggestions
-  where cv_document_id = tests.id('cv') and status = 'PENDING'), 2,
-  'suggestions remain pending for the graduate');
+  where cv_document_id = tests.id('cv') and status = 'PENDING' and kind = 'SKILL'), 2,
+  'structured skill suggestions remain pending for the graduate');
 select is((select count(*)::int from public.graduate_skills
   where graduate_id = tests.id('graduate') and source = 'CV_CONFIRMED'), 0,
   'parsing never writes graduate skills before confirmation');
 
 insert into tests.ids values ('suggestion',
-  (select id from public.cv_suggestions where cv_document_id = tests.id('cv') and payload ->> 'skill_id' = 'KOTLIN'));
+  (select id from public.cv_suggestions
+   where cv_document_id = tests.id('cv') and kind = 'SKILL' and payload ->> 'skill_id' = 'KOTLIN'));
 
 reset role;
 select tests.login('other');

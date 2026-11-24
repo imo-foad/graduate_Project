@@ -36,7 +36,7 @@ insert into tests.ids values ('job', (public.create_company_job(
 )).id);
 select is((select verification_status from public.companies where id = tests.id('company')), 'PENDING_REVIEW', 'new company waits for admin verification');
 select is((select status from public.opportunities where id = tests.id('job')), 'DRAFT', 'company job starts as draft');
-select throws_ok($$q$select public.publish_company_job(tests.id('job'))$q$$, 'PT422', 'COMPANY_NOT_VERIFIED', 'unverified company cannot publish');
+select throws_ok($q$select public.publish_company_job(tests.id('job'))$q$, 'PT422', 'COMPANY_NOT_VERIFIED', 'unverified company cannot publish');
 
 reset role;
 insert into private.platform_admins(user_id) values (tests.id('admin'));
@@ -65,7 +65,7 @@ select is((select status from public.applications where id = tests.id('applicati
 
 reset role;
 select tests.login('outsider');
-select throws_ok($$q$select public.update_application_status(tests.id('application'), 'UNDER_REVIEW', null)$q$$,
+select throws_ok($q$select public.update_application_status(tests.id('application'), 'UNDER_REVIEW', null)$q$,
   'PT403', 'NOT_COMPANY_MEMBER', 'unrelated user cannot update application status');
 
 reset role;

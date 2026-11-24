@@ -144,6 +144,21 @@ class Contract(unittest.TestCase):
             self.assertRegex(EDGE, rf"\b{key}\b", f"{key} not produced by the Edge Function")
         self.assertIn("opportunity", API["components"]["schemas"]["Recommendation"]["properties"])
         self.assertIn("opportunity:opportunities(", EDGE)
+        self.assertIn("career_profile", resp)
+        self.assertIn("deriveCareerProfile", EDGE)
+
+    def test_career_profile_response_contract(self):
+        schemas = API["components"]["schemas"]
+        profile = schemas["CareerProfile"]
+        self.assertEqual(set(profile["required"]), {"primary_path", "paths", "disclaimer"})
+        path_schema = schemas["CareerPathMatch"]
+        self.assertTrue({
+            "id", "label", "score", "matched_skill_ids", "matched_core_skill_ids",
+            "matched_supporting_skill_ids", "missing_core_skill_ids", "next_skill_ids",
+            "core_match_count", "required_core_match_count", "skill_evidence", "explanation_ar",
+        } <= set(path_schema["properties"]))
+        self.assertIn("$ref", profile["properties"]["paths"]["items"])
+        self.assertIn("career_profile", EDGE)
 
     def test_refs_resolve_and_paths_have_methods(self):
         def walk(node):

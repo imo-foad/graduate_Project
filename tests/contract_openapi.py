@@ -27,13 +27,13 @@ def split_top(s):
 
 def functions():
     fns = {}
-    pat = r"create or replace function\s+public\.(\w+)\s*\((.*?)\)\s*returns.*?\$\$(.*?)\$\$"
+    pat = r"create or replace function\s+public\.(\w+)\s*\((.*?)\)\s*returns[\s\S]*?(\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$)(.*?)\\3"
     for m in re.finditer(pat, SQL, re.S | re.I):  # later definitions win
         params = []
         for p in split_top(m.group(2)):
             toks = p.split()
             params.append((toks[0], " default " in (" " + p.lower() + " ")))
-        fns[m.group(1)] = {"params": params, "body": m.group(3)}
+        fns[m.group(1)] = {"params": params, "body": m.group(4)}
     return fns
 
 

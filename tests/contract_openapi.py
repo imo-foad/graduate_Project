@@ -9,7 +9,7 @@ API = yaml.safe_load(open(os.path.join(ROOT, "docs/openapi.yaml")))
 EDGE_INDEX = open(os.path.join(ROOT, "supabase/functions/recommend/index.ts")).read()
 FLOW = open(os.path.join(ROOT, "supabase/functions/_shared/recommend-flow.ts")).read()
 EDGE = EDGE_INDEX + "\n" + FLOW  # the function = thin handler + orchestration module
-INTERNAL_OK = {"is_opportunity_open"}  # RLS helper: executable by clients but not an API endpoint
+INTERNAL_OK = {"is_opportunity_open"}  # helper is private-schema only and must never be exposed as a public RPC
 
 
 def split_top(s):
@@ -47,10 +47,15 @@ def exec_granted(role):
 
 def table_grants(role="authenticated"):
     grants = {}
-    for m in re.finditer(r"grant\s+(.+?)\s+on\s+(?!function)(.+?)\s+to\s+([^;]+);", SQL, re.S | re.I):
-        if role not in [r.strip() for r in m.group(3).split(",")]: continue
-        privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(m.group(1))}
-        for t in split_top(m.group(2)):
+    for statement in re.finditer(r"(?im)^[ \t]*grant\b(.*?);", SQL, re.S):
+        parsed = re.match(r"(?is)\s*(.+?)\s+on\s+(?!function\b)(.+?)\s+to\s+(.+?)\s*$", statement.group(1))
+        if not parsed: continue
+        priv_text, object_text, roles_text = parsed.groups()
+        if role not in [r.strip() for r in roles_text.split(",")]: continue
+        privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(priv_text)}
+        if not object_text.strip().lower().startswith("public."):
+            continue
+        for t in split_top(object_text):
             grants.setdefault(t.replace("public.", "").strip(), set()).update(privs)
     return grants
 

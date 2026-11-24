@@ -31,7 +31,7 @@ case "$q" in
   "db reset") for f in ${MIGS.map((m) => `"${m}"`).join(" ")}; do [ "$f" = "$FAKE_MISSING" ] || echo "Applying migration $f..."; done;;
   "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Result: PASS"; exit \${FAKE_TEST_EXIT:-0};;
 esac`);
-  put("bash", `case "$1" in *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \${FAKE_CONC_EXIT:-0};; esac\nexec /bin/bash "$@"`);
+  put("bash", `case "$1" in *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \${FAKE_CONC_EXIT:-0};; *run-local-integrations.sh) echo "LOCAL HTTP INTEGRATION PASSED: 20 checks"; exit \${FAKE_INTEGRATION_EXIT:-0};; esac\nexec /bin/bash "$@"`);
   return dir;
 }
 function run(over: Record<string, string> = {}) {
@@ -44,15 +44,15 @@ const out = (r: ReturnType<typeof run>) => r.stdout + r.stderr;
 test("happy path (fake tools): every phase runs and the script reports success", () => {
   const r = run();
   assert.equal(r.status, 0, out(r));
-  for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.equal(MIGS.length, 7);
+  for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
+  assert.equal(MIGS.length, 10);
 });
 test("a migration missing from `db reset` output fails the run", () => {
-  const r = run({ FAKE_MISSING: "0007_recommendation_cache_integrity.sql" });
-  assert.equal(r.status, 1); assert.match(out(r), /does not show 0007_recommendation_cache_integrity\.sql as applied/);
+  const r = run({ FAKE_MISSING: "0010_hide_saved_item_helper_from_api.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0010_hide_saved_item_helper_from_api.sql as applied"));
 });
 test("a migration missing from the migration table fails the run", () => {
-  const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0007", "") });
+  const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0010", "") });
   assert.equal(r.status, 1); assert.match(out(r), /migration table has/);
 });
 test("wrong seed counts fail the run", () => {
@@ -67,3 +67,5 @@ test("a pgTAP file that never ran fails the run (no silent skip)", () => {
 });
 test("pgTAP failure exit code fails the run", () => assert.notEqual(run({ FAKE_TEST_EXIT: "1" }).status, 0));
 test("concurrency failure fails the run", () => assert.notEqual(run({ FAKE_CONC_EXIT: "1" }).status, 0));
+
+test("local HTTP integration failure fails the database runner", () => assert.notEqual(run({ FAKE_INTEGRATION_EXIT: "1" }).status, 0));

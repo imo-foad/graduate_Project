@@ -1,60 +1,123 @@
-# Backend runtime-verification task — Alumni Connect AI (v0.4)
+# Alumni Connect AI — Full Repository Test & Audit
 
-## FINAL STATUS: **BLOCKED**
-The first real PostgreSQL run **has not happened**. Blockers (verified, not assumed):
-1. **No usable GitHub repository.** A GitHub search for the project returned only other people's public repos (none is this backend), so I could not identify a repository to push a branch to, and I did not guess one. There is also no tool available to me that triggers or reads GitHub Actions runs or logs (only branch/file/PR tools; PR check-runs would need a PR on a known repo).
-2. **No local runtime.** In this workspace `supabase`, `psql`, `docker`, `deno`, `postgres` are all NOT FOUND and there is no network. `npm run test:db` was executed and stopped at its own preflight: `MISSING TOOL: supabase` (exit 3).
+**Audit date:** 2026-11-24  
+**Repository:** `imo-foad/graduate_Project` (private)  
+**Review branch:** `fix/postgres-runtime-test-failures`  
+**Pull request:** [#2 — PostgreSQL and Storage test fixes](https://github.com/imo-foad/graduate_Project/pull/2)
 
-Consequently **no migration (0001–0007), seed, pgTAP file, RLS/Storage test or concurrency test has been executed on PostgreSQL**, and nothing below should be read as runtime proof of them. The Cloud Supabase project (`qikqbvohqjblbcysbvel`) was not touched in this task: no Supabase tool was called, no `apply_migration`, no branch, no link, and its URL is rejected by the new guard.
+## Scope and safety
 
-## A. Environment
-| Item | Value | Source |
-|---|---|---|
-| GitHub runner OS / Docker / Supabase CLI / psql / PostgreSQL there | **NOT RUN** (no workflow run) | — |
-| Workflow targets | `ubuntu-24.04`, Node 22, `supabase/setup-cli@v1` (`version: latest`), `postgresql-client` via apt | workflow file (unverified on GitHub) |
-| This sandbox | Node v22.23.5, python3; no supabase/psql/docker/deno/postgres; no network | commands executed |
+The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The current review branch contains **55 tracked files** across application code, config, documentation, fixtures, scripts, migrations, seeds and test suites.
 
-## B. Migration results
-| Migration | Applied successfully | Evidence |
-|---|---|---|
-| 0001 … 0007 | **NOT RUN** | No PostgreSQL available. The runner (`scripts/run-db-tests.sh`) now verifies each file name in the `supabase db reset` output AND the versions in `supabase_migrations.schema_migrations` — that check is untested against a real CLI. |
+All changes are isolated on `fix/postgres-runtime-test-failures`; PR #2 targets `backend-initial-import`. `main` has not been changed. No Supabase Cloud project has been linked, reset, migrated or modified. All live integration checks use a disposable local Supabase stack in GitHub Actions.
 
-## C. Test results
-| Suite | Executed | Result | Failures |
-|---|---|---|---|
-| TypeScript (`npm test`) | Yes | **PASS 72/72** | none |
-| OpenAPI (`npm run test:contract`) | Yes | **PASS 18/18** | none |
-| Workflow/script policy (`npm run test:workflow`, new) | Yes | **PASS 11/11** | none (found 1 real workflow bug, see D) |
-| Migrations on PostgreSQL | **No** | NOT RUN | — |
-| pgTAP (5 files) | **No** | NOT RUN | — |
-| RLS | **No** | NOT RUN | — |
-| Storage | **No** | NOT RUN | — |
-| Concurrency | **No** | NOT RUN | — |
-| `npm run test:db` here | Yes (preflight only) | **BLOCKED** | `MISSING TOOL: supabase` |
+## Latest full test result
 
-The 72 TypeScript tests include control-flow tests of `run-db-tests.sh` with **fake** tools. They prove the runner fails on a missing migration, a pgTAP file that never ran, wrong seed counts, pgTAP failure and concurrency failure. They are **not** database evidence.
+[GitHub Actions run #67](https://github.com/imo-foad/graduate_Project/actions/runs/45416127368) completed successfully on commit `1a8ae70164034690af9722f2c7de6fb43943e3f1`.
 
-## D. Changes made (every discovered problem)
-| Problem | Root cause | Files | Fix | Regression test | Result |
-|---|---|---|---|---|---|
-| DB guard accepted remote databases | `case "$DB_URL" in *127.0.0.1*\|*localhost*)` is a substring test: `postgresql://127.0.0.1:pw@db.<ref>.supabase.co:5432/postgres` passed (proved: with the old guard the real `run-db-tests.sh` ran past the check and started executing) | `scripts/assert-local-db.mjs` (new), `scripts/run-db-tests.sh`, `tests/db/concurrency.sh` | Parse the URL; host must be exactly `127.0.0.1`/`localhost`/`[::1]`; explicit numeric port 1024–65535 (and equal to the local Supabase DB port 54322 in the runner); scheme postgres(ql); reject multi-host, malformed, whitespace, any libpq query parameter other than sslmode/connect_timeout/application_name (`host=`, `hostaddr=`…), and `PGHOST/PGHOSTADDR/PGSERVICE/PGSERVICEFILE` in the environment. Guard runs before any other tool. | `tests/assert-local-db.test.ts` (8): attack URLs the old check accepted, remote/pooler hosts, tricky hosts, malformed URLs, query/env redirection, and both scripts exit 2 before invoking any tool | PASS |
-| Runner comment/flow outdated; no verification | said "0001..0006"; never checked migrations, seeds or that all pgTAP files ran | `scripts/run-db-tests.sh` | Phases A–E with preflight (Docker reachable, tool versions logged to `.ci-logs/environment.txt`), PostgreSQL readiness wait, per-file + migration-table check for 0001–0007, seeds loaded twice (idempotency) with count/FK checks against the fixtures, requires all five pgTAP files in the output and no failures, runs concurrency, tees logs | `tests/db-script-flow.test.ts` (7, fake tools) | PASS (flow logic only) |
-| Workflow YAML was invalid | job name contained `: ` unquoted (found by the new lint; GitHub would have rejected the file) | `.github/workflows/backend-tests.yml` | rewritten: `permissions: contents: read`, `timeout-minutes` (10/45), pinned `ubuntu-24.04`, Docker verification, explicit `postgresql-client` install, Supabase CLI install + version print, failing `run-db-tests.sh` step (no `continue-on-error`), diagnostics + artifact upload + `supabase stop` with `if: always()`, no secrets, no Cloud references; static and contract jobs preserved, workflow-lint job step added | `tests/workflow_lint.py` (11) incl. mutation check (4 injected violations → 4 failures) | PASS |
-| pgTAP might not be enabled | tests assumed the extension | `supabase/tests/database/*.test.sql` | `create extension if not exists pgtap with schema extensions;` in each file | (needs real run) | NOT RUN |
-| Local PG version could differ from Cloud | no `[db]` section | `supabase/config.toml` | `[db] major_version = 17` (Cloud is 17.12, read-only inspection) | — | NOT RUN |
-| `ci` logs would be committed | — | `.gitignore` | `.ci-logs/` ignored | — | — |
-No migration was modified in this task (no SQL failure has been observed yet).
+| Test group | Result |
+|---|---:|
+| Node / TypeScript | 75 / 75 passed |
+| OpenAPI contract | 18 / 18 passed |
+| Workflow lint | 12 / 12 passed |
+| PostgreSQL migrations | 10 / 10 applied |
+| pgTAP | 204 / 204 passed across five files |
+| Concurrency | 21 / 21 checks passed |
+| Local HTTP integration | 22 / 22 checks passed |
+| **Total counted automated checks** | **352 / 352 passed** |
 
-## E. GitHub Actions evidence
-None: no workflow run exists. Workflow run URL: **N/A**. Branch/commit: **N/A** (nothing was pushed anywhere).
-To obtain the proof (exact steps):
-1. Create a (private) GitHub repository for this backend and push the project: `git init && git add -A && git commit -m "backend" && git branch -M main && git remote add origin <url> && git push -u origin main`.
-2. `git switch -c ci/db-runtime-verification && git push -u origin ci/db-runtime-verification` (the workflow runs on every push; or Actions → backend-tests → *Run workflow*).
-3. Open the run → job `database`; download artifact `database-test-logs` (`environment.txt`, `db-reset.log`, `pgtap.log`, `concurrency.log`, Docker/DB container logs) and send me the job output. I will fix whatever fails and you re-run.
-Alternatively locally (Docker + Supabase CLI + psql): `npm run test:db`.
-If you give me the `owner/repo` of the project repository I can push a branch to it with the GitHub tools; I still cannot read Actions logs, so you would send me the output.
+The total is the sum of the six assertion-based suites above (75 + 18 + 12 + 204 + 21 + 22). Additional setup and seed-integrity guards ran successfully but are not double-counted in that total.
 
-## F. Remaining risks (unverified, expected first-run corrections)
-- Everything marked NOT RUN, including SQL syntax/semantics of 0001–0007 and the pgTAP/concurrency files.
-- Assumptions about the Supabase CLI to be checked on first run: migration files named `0001_name.sql` are accepted and recorded with version `0001`; `supabase test db` prints each `*.test.sql` name; required columns of `auth.users`/`storage.objects`; `supabase/setup-cli@v1` with `version: latest` (pin after the first green run).
-- Unchanged earlier limits: CV storage objects are not deleted with their row; client-declared `size_bytes`; no rate limit on `force=true`; waitlist promotion unspecified; open decisions A2/A3.
+Runtime evidence: PostgreSQL 17.12 and Supabase CLI 3.3.0. Migrations 0001–0010 applied in order. Catalogue seeds were run twice; idempotency and foreign-key reference checks passed with 50 skills and 29 opportunities. All 21 concurrency checks passed, covering capacity/waitlist races, duplicate registration, concurrent applications, stale recommendation snapshots, dirty-flag protection and competing recommendation saves.
+
+## Newly covered integration tests
+
+### Auth and demo profiles
+
+- The local Supabase Auth Admin API provisioned all four synthetic demo users. The provisioning script was executed twice to check that existing users are handled idempotently.
+- The Auth trigger created four corresponding rows in `profiles` and four rows in `graduate_profiles`.
+- `supabase/seed/03_demo_profiles.sql` was applied twice. Counts remained stable: 17 seeded skill rows, 3 sample applications and 3 sample history records.
+- Two demo users successfully completed the password-grant login over HTTP.
+
+### Storage and CV metadata
+
+The test uploads a PDF through the real local Storage HTTP API, inserts a `cv_documents` metadata record, and verifies:
+- Owner can upload/read/delete their own object and delete their own metadata.
+- Another graduate cannot read the private object or metadata.
+- Another graduate cannot upload into the owner's folder or delete the owner's object.
+- The object remains available to its owner after the unauthorized delete attempt.
+
+The pgTAP Storage test separately verifies Supabase's direct-SQL deletion guard (SQLSTATE `42501`) and owner-folder policy.
+
+**Scope boundary:** CV document parsing/extraction is not an implemented HTTP endpoint yet. These tests prove upload/storage ownership and metadata handling, not parsing correctness.
+
+### Recommendation Edge Function
+
+The actual `recommend` Edge Function was served through the disposable local Supabase gateway and exercised over HTTP with JWT verification enabled. Tests verified:
+- GET is rejected; missing and invalid JWTs are rejected.
+- Two separate users can independently compute recommendations.
+- The next request for the first user serves the cached result.
+- `force=true` causes recomputation.
+- Recommendation rows exposed through PostgREST are scoped to the authenticated graduate.
+
+## Subsystem scores
+
+Scores below are engineering-readiness judgments, not a code-coverage percentage. They consider both the successful tests and the limitations explicitly listed in this report.
+
+| Subsystem | Score / 100 | Assessment |
+|---|---:|---|
+| Database schema and migrations | 98 | All ten migrations applied on PostgreSQL 17.12; clean reset and pgTAP passed. No cloud upgrade rehearsal. |
+| RLS and database permissions | 98 | pgTAP and cross-user HTTP tests passed; the policy helper is private-schema only. No independent penetration test. |
+| RPCs and business rules | 96 | RPC rules, eligibility, ownership and concurrency tests passed. A2/A3 business assumptions still need owner confirmation. |
+| Concurrency and recommendation cache | 100 | All 21 real concurrent-session checks passed. |
+| API / OpenAPI contract | 96 | All 18 contract tests passed; recommend Edge Function exercised over local HTTP. No production deployment rehearsal. |
+| Storage and CV metadata | 96 | Private Storage upload/read/delete and cross-user denial passed over HTTP. CV parsing itself is not implemented. |
+| Auth, demo users and demo seed | 98 | Four demo users provisioned, trigger-created profiles checked, demo seed applied twice and logins verified. |
+| Recommendation and scoring | 95 | Function HTTP behavior and cache/RLS tested. Semantic quality still depends on lexical proxy assumptions B1–B6. |
+| CI and test automation | 100 | Static, SQL, concurrency and local HTTP jobs pass; CLI version is pinned and cleanup is bounded. |
+| Documentation and Android contract | 95 | OpenAPI and Android integration checks pass; CV parsing and A2/A3 business decisions remain outside the verified contract. |
+| **Overall engineering readiness** | **97** | Strong verified local backend core; remaining points are product/quality and deployment assurance gaps, not failing CI tests. |
+
+The overall score is the rounded mean of the ten subsystem scores.
+
+## Findings and fixes
+
+### Migration 0008 — scalar-to-array runtime bug
+
+`supabase/migrations/0008_fix_array_appends.sql` replaces ambiguous scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. This fixes the malformed array-literal runtime errors found in the earlier PostgreSQL test.
+
+### Migrations 0009–0010 — RLS recursion and private helper
+
+The original RLS failure was a recursive dependency between the opportunity catalogue SELECT policy and saved-opportunity INSERT policy. Migration 0009 now uses a narrowly scoped SECURITY DEFINER existence predicate inside the non-exposed `private` schema, retaining the `graduate_id = auth.uid()` ownership check. Migration 0010 is a compatibility cleanup for databases that may have applied an earlier public-helper draft. Both migrations passed in run #67.
+
+### CI / HTTP integration runner
+
+The database job now runs after migrations, seeds, pgTAP and concurrency:
+- Local Auth Admin provisioning and demo profile seed idempotency.
+- Local HTTP calls to the recommendation Edge Function.
+- Real Storage HTTP API upload/read/delete and cross-user denial.
+- Bounded per-request and whole-suite timeouts.
+- Local URL validation before provisioning or API operations.
+- Bounded Supabase cleanup and an isolated workflow concurrency group.
+
+The CI runner pins Supabase CLI 3.3.0 and does not use cloud credentials or perform cloud deployments.
+
+## Remaining gaps (not CI failures)
+
+1. **CV parsing:** parsing/extraction is not yet available as a backend endpoint. Current end-to-end coverage ends at upload, ownership and CV metadata.
+2. **Scoring quality:** the semantic similarity component is a lexical proxy rather than embeddings. It needs evaluation against a labeled recommendation dataset before making quality claims.
+3. **Business requirements:** assumptions A2 (INTERNSHIP application eligibility) and A3 (TRAINING registration eligibility) still need product-owner confirmation.
+4. **Security assurance:** automated local RLS and Storage tests passed, but this is not a third-party security audit or penetration test.
+5. **Production rehearsal:** no production/cloud project was linked or modified. Production configuration, secrets and rollout still require a separately reviewed deployment plan.
+6. **Push notifications:** FCM is not implemented; notifications are in-app only and this remains outside the current backend scope.
+
+## Final status
+
+**All 352 counted automated checks passed on run #67**, including the new Auth/demo-seed, Storage HTTP and recommendation Edge Function HTTP integration tests. The current branch is green for the automated local backend test scope described here. Remaining items are unimplemented product capabilities or external assurance/release tasks, not current CI failures.
+
+## Branches and evidence
+
+- Snapshot: `backup/pre-full-audit-2026-11-24`
+- Active review branch: `fix/postgres-runtime-test-failures`
+- Review PR: [#2](https://github.com/imo-foad/graduate_Project/pull/2)
+- Full green CI: [run #67](https://github.com/imo-foad/graduate_Project/actions/runs/45416127368)

@@ -83,3 +83,31 @@ test("Edge Function: user-facing reads use the user client; service role only fo
   const adminUses = [...src.matchAll(/admin\.(\w+)\(\s*"(\w+)"/g)].map((m) => `${m[1]}:${m[2]}`).sort();
   assert.deepEqual(adminUses, ["rpc:get_recommendation_candidates", "rpc:save_recommendations"]);
 });
+
+
+test("REGRESSION: scalar text values are appended safely to text arrays", () => {
+  const fns = finalFunctions(allMigrationsSql());
+  const eligibility = fns.get("eligibility_failures")!;
+  const insights = fns.get("get_my_insights")!;
+  assert.match(eligibility.body, /array_append\(f,\s*'GRADUATION_YEAR_TOO_EARLY'\)/);
+  assert.match(eligibility.body, /array_append\(f,\s*'MISSING_CERTIFICATION:'\s*\|\|\s*cert\)/);
+  assert.doesNotMatch(eligibility.body, /\bf\s*:=\s*f\s*\|\|/);
+  assert.match(insights.body, /array_append\(missing,\s*'college'\)/);
+  assert.doesNotMatch(insights.body, /\bmissing\s*:=\s*missing\s*\|\|/);
+});
+
+
+test("saved-opportunity RLS helper is private from its first migration and cleans up legacy public versions", () => {
+  const sql = allMigrationsSql();
+  const migration9 = readMigration("0009_fix_saved_opportunity_rls_recursion.sql");
+  const migration10 = readMigration("0010_hide_saved_item_helper_from_api.sql");
+  assert.match(migration9, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
+  assert.match(migration9, /security definer[\s\S]*?set search_path\s*=\s*''/i);
+  assert.match(migration9, /revoke all on function private\._opportunity_exists_for_saved_item\(uuid\) from public, anon, authenticated/i);
+  assert.match(migration9, /grant execute on function private\._opportunity_exists_for_saved_item\(uuid\) to authenticated/i);
+  assert.match(migration9, /create policy saved_insert[\s\S]*?private\._opportunity_exists_for_saved_item\(opportunity_id\)/i);
+  assert.doesNotMatch(migration9, /create or replace function public\._opportunity_exists_for_saved_item\(/i);
+  assert.doesNotMatch(sql, /grant execute on function public\._opportunity_exists_for_saved_item\(/i);
+  assert.match(migration10, /drop function if exists public\._opportunity_exists_for_saved_item\(uuid\)/i);
+  assert.match(migration10, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
+});

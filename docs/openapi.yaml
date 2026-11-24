@@ -868,7 +868,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [p_company_id, p_user_id, p_role, p_is_active]
+              required: [p_company_id, p_user_id, p_role]
               properties:
                 p_company_id: { type: string, format: uuid }
                 p_user_id: { type: string, format: uuid }

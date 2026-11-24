@@ -73,4 +73,8 @@ if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fa
 echo "=== E. concurrency"
 bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
 
+# ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function
+echo "=== F. local Supabase HTTP integration"
+bash scripts/run-local-integrations.sh 2>&1 | tee "$LOG_DIR/local-integrations.log"
+
 echo "DB TESTS PASSED"

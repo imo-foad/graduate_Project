@@ -20,15 +20,25 @@ Deno.serve(async (req) => {
   if (authError || !user) return json({ error: "UNAUTHENTICATED" }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const { data: ownSkills } = await userClient.from("graduate_skills").select("skill_id,level");
+  const { data: ownSkills, error: skillsError } = await userClient.from("graduate_skills").select("skill_id,level");
+  if (skillsError) return json({ error: "PROFILE_SKILLS_READ_FAILED" }, 500);
   const careerProfile = deriveCareerProfile(ownSkills ?? []);
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   const result = await runRecommend({
     async cacheState() {
-      const { data: gp } = await userClient.from("graduate_profiles").select("recommendations_dirty").single();
-      const { count } = await userClient.from("recommendations").select("id", { count: "exact", head: true });
-      return { dirty: gp?.recommendations_dirty ?? null, count: count ?? 0 };
+      const [profileState, recommendationCount, outdatedModels] = await Promise.all([
+        userClient.from("graduate_profiles").select("recommendations_dirty").single(),
+        userClient.from("recommendations").select("id", { count: "exact", head: true }),
+        userClient.from("recommendations").select("id", { count: "exact", head: true })
+          .neq("model_version", MODEL_VERSION),
+      ]);
+      const dirty = outdatedModels.error
+        ? null
+        : (outdatedModels.count ?? 0) > 0
+          ? true
+          : profileState.data?.recommendations_dirty ?? null;
+      return { dirty, count: recommendationCount.count ?? 0 };
     },
     candidates: () => admin.rpc("get_recommendation_candidates", { p_graduate_id: user.id }),
     save: async (items, profileVersion) => {

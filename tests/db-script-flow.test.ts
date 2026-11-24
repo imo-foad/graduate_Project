@@ -45,14 +45,14 @@ test("happy path (fake tools): every phase runs and the script reports success",
   const r = run();
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.equal(MIGS.length, 7);
+  assert.equal(MIGS.length, 8);
 });
 test("a migration missing from `db reset` output fails the run", () => {
-  const r = run({ FAKE_MISSING: "0007_recommendation_cache_integrity.sql" });
+  const r = run({ FAKE_MISSING: "0008_fix_array_appends.sql" });
   assert.equal(r.status, 1); assert.match(out(r), /does not show 0007_recommendation_cache_integrity\.sql as applied/);
 });
 test("a migration missing from the migration table fails the run", () => {
-  const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0007", "") });
+  const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0008", "") });
   assert.equal(r.status, 1); assert.match(out(r), /migration table has/);
 });
 test("wrong seed counts fail the run", () => {

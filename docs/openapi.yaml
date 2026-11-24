@@ -292,6 +292,7 @@ components:
           - SAVE_FAILED
           - STALE_SNAPSHOT
           - READ_FAILED
+          - PROFILE_SKILLS_READ_FAILED
         retryable:
           type: boolean
         attempts:

@@ -1,0 +1,13 @@
+begin;
+select plan(9);
+select has_table('public','courses','courses table exists');
+select has_table('public','recommendation_interactions','recommendation interactions table exists');
+select has_column('public','job_details','minimum_experience_years','job minimum experience is stored');
+select has_column('public','certifications','source','certification provenance is tracked');
+select ok((select relrowsecurity from pg_class where oid='public.courses'::regclass),'courses RLS is enabled');
+select ok((select relrowsecurity from pg_class where oid='public.recommendation_interactions'::regclass),'interaction RLS is enabled');
+select has_function('public','review_cv_suggestions',array['jsonb'],'graduate CV review RPC exists');
+select has_function('public','get_career_market_insights',array[]::text[],'career market insight RPC exists');
+select has_function('public','record_recommendation_interaction',array['uuid','text'],'interaction feedback RPC exists');
+select * from finish();
+rollback;

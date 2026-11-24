@@ -47,7 +47,14 @@ def exec_granted(role):
 
 def table_grants(role="authenticated"):
     grants = {}
-    for m in re.finditer(r"(?ims)^[ \t]*grant[ \t]+(.+?)[ \t]+on[ \t]+(?!function\b)(.+?)[ \t]+to[ \t]+([^;]+);", SQL):
+    for statement in re.finditer(r"(?im)^[ \t]*grant\b(.*?);", SQL, re.S):
+        parsed = re.match(r"(?is)\s*(.+?)\s+on\s+(?!function\b)(.+?)\s+to\s+(.+?)\s*$", statement.group(1))
+        if not parsed: continue
+        priv_text, object_text, roles_text = parsed.groups()
+        if role not in [r.strip() for r in roles_text.split(",")]: continue
+        privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(priv_text)}
+        for t in split_top(object_text):
+            grants.setdefault(t.replace("public.", "").strip(), set()).update(privs)
         if role not in [r.strip() for r in m.group(3).split(",")]: continue
         privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(m.group(1))}
         for t in split_top(m.group(2)):

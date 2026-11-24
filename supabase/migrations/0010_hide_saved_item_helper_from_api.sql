@@ -1,7 +1,6 @@
--- 0010: keep the saved-opportunity RLS helper out of PostgREST's exposed public schema.
--- Migration 0009 fixed the policy recursion, but its public SECURITY DEFINER helper
--- was also executable as a public RPC. Keep the policy helper in the unexposed
--- private schema instead, while granting only the role needed to evaluate the policy.
+-- 0010: reassert the private RLS helper and remove any legacy public helper.
+-- Fresh installs now create the private helper in 0009. This migration also safely
+-- cleans up databases that had applied the earlier public-helper form of 0009.
 
 drop policy if exists saved_insert on public.saved_opportunities;
 drop function if exists public._opportunity_exists_for_saved_item(uuid);

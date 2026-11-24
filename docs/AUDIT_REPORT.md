@@ -5,72 +5,64 @@
 **Review branch:** `fix/postgres-runtime-test-failures`  
 **Pull request:** [#2 — PostgreSQL and Storage test fixes](https://github.com/imo-foad/graduate_Project/pull/2)
 
-## Snapshot and scope
+## Snapshot and safety
 
-The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The active audit covers the complete 51-file repository tree: configuration, workflows, docs/OpenAPI, JSON fixtures, scripts, Edge Function source, SQL migrations and seeds, pgTAP tests, TypeScript tests, Python contract checks and concurrency scripts.
+The pre-audit snapshot is preserved on `backup/pre-full-audit-2026-11-24` at `08d5af2f4ca6aefb03073c22bf2972793b647d5c` (51 tracked files). The current reviewed branch has 53 tracked files.
 
-The audit and fixes remain on `fix/postgres-runtime-test-failures`. PR #2 targets `backend-initial-import`; `main` has not been changed. No Cloud Supabase project has been linked, reset, migrated or modified.
+All work is isolated on `fix/postgres-runtime-test-failures`; PR #2 targets `backend-initial-import`. The `main` branch has not been changed. No Cloud Supabase project has been linked, reset, migrated or modified.
 
-## Confirmed runtime findings
+## Full green test evidence — run #52
 
-GitHub Actions run [#17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871) applied migrations 0001–0008, loaded the catalogue seeds, and ran all five pgTAP files (203 assertions). It reported 200 pass / 3 fail:
+[GitHub Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487) completed successfully on commit `f9508073fa1bc65b11fe0627a8757376a3f7bb7c`.
 
-1. RLS recursion in saved-opportunity insertion (two tests): SQLSTATE `42P17`, because `saved_insert` queried opportunities while the opportunities SELECT policy queried saved opportunities.
-2. Storage test expectation (one test): the test expected `P0001`, while Supabase's Storage protection returned `42501` for direct SQL deletion.
+| Test group | Result |
+|---|---:|
+| Node / TypeScript | 74 / 74 passed |
+| OpenAPI contract | 18 / 18 passed |
+| Workflow lint | 11 / 11 passed |
+| PostgreSQL migrations | 10 / 10 applied |
+| pgTAP | 204 / 204 passed across five files |
+| Concurrency checks | 21 / 21 passed |
 
-The runner stopped after pgTAP, so the concurrency suite did not execute in that run.
+Runtime environment: PostgreSQL 17.12; Supabase CLI 3.3.0. Catalogue seeds loaded twice and passed idempotency: 50 skills, 29 opportunities, no orphan opportunity-skill references. The real concurrency suite passed capacity and waitlist races, duplicate registration, concurrent applications, stale recommendation snapshots, dirty-flag handling and competing recommendation saves.
 
-The same run found an outdated fake-runner assertion that still expected migration 0007 while the runner was checking migration 0008. That test fixture was subsequently updated.
+## Confirmed issues and fixes
 
-## Fixes on the review branch
+### Migration 0008 — scalar-to-array bug
 
-### Migration 0008 — safe text-array appends
+`supabase/migrations/0008_fix_array_appends.sql` replaces ambiguous scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. This fixed the malformed array literal runtime errors.
 
-`supabase/migrations/0008_fix_array_appends.sql` replaces scalar concatenation with `array_append()` in the final `eligibility_failures()` and `get_my_insights()` definitions. It preserves the function signatures and return values. The previous real PostgreSQL run applied migration 0008, and the RPC/eligibility pgTAP file passed in that run.
+### Migrations 0009–0010 — RLS recursion and helper exposure
 
-### Migration 0009 — RLS recursion fix
+The original failure was an RLS recursion between the opportunity catalogue SELECT policy and saved-opportunity INSERT policy. The fix uses a narrowly scoped SECURITY DEFINER predicate to check opportunity existence without recursively evaluating the catalogue policy.
 
-`supabase/migrations/0009_fix_saved_opportunity_rls_recursion.sql` introduced a SECURITY DEFINER existence helper to break the recursive policy dependency while preserving the ownership predicate. The policy fix itself needs a fresh pgTAP run to confirm it.
+A security review identified that an earlier draft placed this helper in `public`, which would expose it as a PostgREST RPC. The current hardening update changes migration 0009 to create it inside `private` from the outset. Migration 0010 remains an idempotent compatibility cleanup: it drops any legacy public helper, reasserts the private helper grants and policy, and ensures existing pre-review databases are cleaned up.
 
-### Migration 0010 — hide the RLS helper from the public API
+Run #52 passed migrations 0009 and 0010, pgTAP RLS tests and saved-opportunity ownership checks before this final adjustment to migration 0009. The branch must rerun CI after the adjustment to confirm the private-helper definition from the first migration still passes.
 
-The full static contract review found a follow-on security concern in migration 0009: its helper was in `public` and had EXECUTE granted to `authenticated`, making it a callable public-schema function rather than only an internal RLS implementation detail.
+### Storage test limitation
 
-`supabase/migrations/0010_hide_saved_item_helper_from_api.sql` moves the helper to the `private` schema, which is not included in `supabase/config.toml`'s PostgREST exposed schemas. It revokes default privileges, grants the minimum schema/function access needed by authenticated RLS evaluation, drops the public helper, and recreates `saved_insert` against the private helper.
+Supabase rejects direct SQL deletion from `storage.objects` with SQLSTATE `42501`. The test now asserts that protection and checks the owner-folder DELETE policy. It does **not** perform an HTTP Storage API delete of an uploaded object; API-level upload/delete still requires a separate integration test.
 
-### Storage and CI regressions
+## Inventory and quality limitations
 
-- Storage test now expects the observed `42501` direct-SQL protection response and checks the owner-folder DELETE policy.
-- Migration-count, fake-runner, SQL-static, API-contract and documentation checks are updated for migrations 0001–0010.
-- The Storage pgTAP assertion is not an HTTP Storage API end-to-end test. It does not yet prove upload-then-delete through the Storage API.
+- 53 tracked files across docs/OpenAPI, configuration, fixtures, scripts, Edge Function source, ten migrations, three generated seed files, five pgTAP files and static tests.
+- Fixtures: 50 unique skill IDs, 29 unique opportunity seed keys across eight opportunity types, and four demo profiles with unique emails.
+- The scoring implementation documents assumptions B1–B6. Its lexical similarity is a proxy, not an embedding model; treat score quality as a product-quality limitation, not a runtime failure.
+- Business assumptions about INTERNSHIP application eligibility and TRAINING registration eligibility still need product-owner confirmation.
+- The CI runner loads `01_skills.sql` and `02_catalogue.sql` twice. It generates but does not apply `03_demo_profiles.sql`, because that requires provisioned Auth users. Provisioning and Auth integration have static request tests, not live HTTP integration tests.
+- The recommend Edge Function is unit-tested through injected dependencies and static contract checks; it is not deployed and exercised over HTTP in this CI workflow.
+- Storage API end-to-end upload/delete test remains outstanding.
+- Supabase CLI is pinned to 3.3.0 based on the green run rather than using `latest`.
+- README Node engine requirement matches package.json (Node >= 22.6).
 
-## Static review notes
+## Final verification status
 
-- `fixtures/skills.json`: 50 unique skill IDs.
-- `fixtures/opportunities.json`: 29 unique opportunity seed keys across 8 types.
-- `fixtures/demo-profiles.json`: 4 demo profiles with unique emails.
-- The deterministic scoring implementation explicitly documents six assumptions (B1–B6); its lexical similarity is a proxy, not an embedding model. These are product/quality limitations, not unreported runtime failures.
-- Demo-user provisioning requires the operator to set the target URL and server-side credentials correctly; the script prints its destination before issuing Auth Admin requests.
-- Supabase CLI is configured as `latest` in CI rather than a pinned version; this is a reproducibility risk.
-- README's stated Node engine minimum and `package.json` engine minimum differ; CI currently uses Node 22 and the recorded runner used Node 22.23.5.
-
-## Verification status
-
-Run #17 is historical evidence for migrations 0001–0008 only. It is **not** evidence that migrations 0009 or 0010 pass. The latest source changes must pass a fresh GitHub Actions run covering:
-
-- all Node/TypeScript tests;
-- all OpenAPI contract tests;
-- workflow and migration-count lint;
-- all ten migrations on disposable local PostgreSQL;
-- seed generation, idempotency, counts and referential integrity;
-- all five pgTAP files;
-- concurrency tests for registrations, applications and recommendation snapshot/cache races.
-
-Until the fresh workflow is green, the overall status remains **IN PROGRESS — latest runtime verification pending**.
+Run #52 proved the ten-migration branch and all static, pgTAP and concurrency suites green. The current branch makes one additional hardening change to migration 0009 and pins the already verified CLI version. A fresh full run on the updated branch is required before the updated source is considered green.
 
 ## Branches
 
 - Snapshot: `backup/pre-full-audit-2026-11-24`
 - Active review branch: `fix/postgres-runtime-test-failures`
 - Review PR: [#2](https://github.com/imo-foad/graduate_Project/pull/2)
-- Historical runtime evidence: [Actions run #17](https://github.com/imo-foad/graduate_Project/actions/runs/45402124871)
+- Prior full-green evidence: [Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487)

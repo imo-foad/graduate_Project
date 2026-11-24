@@ -47,7 +47,7 @@ jobs:
           psql --version
           pg_isready --version
       - uses: supabase/setup-cli@v1
-        with: { version: latest }   # pin to the exact version printed below after the first green run
+        with: { version: "3.3.0" }   # pinned to the version verified by CI run #52
       - name: Verify Supabase CLI
         run: supabase --version
       - name: "Database tests (local stack only, fails on any error)"

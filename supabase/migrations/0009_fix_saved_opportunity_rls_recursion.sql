@@ -1,7 +1,13 @@
--- 0009: remove the saved-opportunity / catalogue RLS recursion.
--- saved_insert previously queried opportunities, while opp_select queried saved_opportunities.
--- This SECURITY DEFINER predicate checks existence without re-entering opportunities RLS.
-create or replace function public._opportunity_exists_for_saved_item(p_opportunity_id uuid)
+-- 0009: remove saved-opportunity / catalogue RLS recursion without exposing an RPC.
+-- The old saved_insert policy queried public.opportunities while opp_select queried
+-- public.saved_opportunities. This SECURITY DEFINER helper bypasses catalogue RLS
+-- for the existence check, but lives in the private (non-PostgREST-exposed) schema.
+
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+grant usage on schema private to authenticated;
+
+create or replace function private._opportunity_exists_for_saved_item(p_opportunity_id uuid)
 returns boolean
 language sql
 stable
@@ -16,13 +22,13 @@ as $$
      );
 $$;
 
-revoke all on function public._opportunity_exists_for_saved_item(uuid) from public, anon, authenticated;
-grant execute on function public._opportunity_exists_for_saved_item(uuid) to authenticated;
+revoke all on function private._opportunity_exists_for_saved_item(uuid) from public, anon, authenticated;
+grant execute on function private._opportunity_exists_for_saved_item(uuid) to authenticated;
 
 drop policy if exists saved_insert on public.saved_opportunities;
 create policy saved_insert on public.saved_opportunities
 for insert to authenticated
 with check (
   graduate_id = (select auth.uid())
-  and public._opportunity_exists_for_saved_item(opportunity_id)
+  and private._opportunity_exists_for_saved_item(opportunity_id)
 );

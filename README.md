@@ -14,7 +14,7 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 - `fixtures/*.json` -> `npm run build:seed` -> `supabase/seed/01_skills.sql, 02_catalogue.sql, 03_demo_profiles.sql`
 - `supabase/functions/_shared/` — `scoring.ts` (weights from doc 6.5), `cv-extract.ts`; `recommend/` Edge Function
 - `scripts/provision-demo-users.mjs` — creates the 4 demo Auth users (no public sign-up)
-- `tests/` — `npm test` (Node >= 22.18, no dependencies)
+- `tests/` — `npm test` (Node >= 22.6, no dependencies)
 
 ## Local run (needs Supabase CLI + Docker; NOT run in the authoring workspace)
 ```
@@ -29,12 +29,17 @@ Cloud: `supabase link` to the **exact** project, review `supabase db push --dry-
 
 ## Runtime verification (2026-11-24)
 
-- GitHub Actions run #17 applied migrations 0001–0008, loaded the catalogue seeds, and executed all five pgTAP files (203 assertions).
-- That run reported 200 passing assertions and 3 failures:
-  - Two RLS tests exposed infinite recursion between the saved-opportunity INSERT policy and catalogue SELECT policy. Migration 0009 replaces the recursive lookup with a narrowly scoped SECURITY DEFINER existence check.
-  - One Storage test expected SQLSTATE P0001, but Supabase correctly returned 42501 because direct SQL deletion from Storage tables is protected. The test now expects 42501 and checks the owner-folder DELETE policy in pg_policies.
-- The same Actions run had one static test-fixture failure because it still expected the previous migration sequence. The fixture was updated for migration 0009.
-- The concurrency suite did not run in that attempt because pgTAP failed first. Do not treat the backend as fully verified until a fresh workflow run passes both static and database jobs, including concurrency.
-- No Supabase Cloud project was linked, reset, or modified. All database runtime checks use the disposable local Supabase stack in CI.
+Latest full green evidence before the final hardening pass: [GitHub Actions run #52](https://github.com/imo-foad/graduate_Project/actions/runs/45410157487).
 
-See `docs/AUDIT_REPORT.md` for the detailed findings and exact CI evidence.
+- Static checks: 74/74 Node/TypeScript tests, 18/18 OpenAPI contract tests and 11/11 workflow tests passed.
+- PostgreSQL 17.12 applied all ten migrations (0001–0010) successfully.
+- Catalogue seeds loaded twice: 50 skills and 29 opportunities; idempotency and referential integrity checks passed.
+- All five pgTAP files passed: 204 assertions.
+- All concurrency checks passed: registration capacity and waitlist races, duplicate submissions, concurrent applications, and recommendation snapshot/cache races.
+- The Storage pgTAP file verifies that direct SQL object deletion is blocked and that the delete policy is owner-folder scoped. It is not an HTTP Storage API upload/delete end-to-end test.
+- The CI runner does not provision demo Auth users or execute `03_demo_profiles.sql`; those integration steps still need a separate local Auth verification.
+- No Supabase Cloud project was linked, reset, or modified.
+
+The current review branch has one additional security hardening change: migration 0009 now creates the RLS helper inside the private schema from the outset, rather than briefly exposing a helper in `public`. Migration 0010 remains as a compatibility cleanup for databases that applied an earlier public-helper version. This latest hardening pass must receive a fresh full CI run before the current branch is called fully green.
+
+See `docs/AUDIT_REPORT.md` for the detailed evidence and limitations.

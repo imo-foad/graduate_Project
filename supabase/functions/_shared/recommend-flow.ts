@@ -4,6 +4,7 @@
 import { MODEL_VERSION, rankOpportunities } from "./scoring.ts";
 import type { GraduateInput, OpportunityInput, ScoredItem } from "./scoring.ts";
 import { filterOpenRecommendations } from "./opportunity-state.ts";
+import { deriveCareerProfile } from "./career-profile.ts";
 
 export const MAX_ATTEMPTS = 3;
 export const RETRYABLE = new Set(["STALE_SNAPSHOT", "OPPORTUNITY_UNAVAILABLE"]);
@@ -12,6 +13,7 @@ export interface Candidates {
   profile_version: number;
   profile: Omit<GraduateInput, "skills">;
   skills: GraduateInput["skills"];
+  interaction_signals?: { target_field: string; weight: number }[];
   opportunities: OpportunityInput[];
 }
 export interface FlowDeps {
@@ -27,12 +29,19 @@ export async function runRecommend(deps: FlowDeps, opts: { force?: boolean; maxA
   const state = await deps.cacheState();
   const stale = opts.force === true || state.dirty !== false || state.count === 0;
   let source = "cache";
+  let careerProfile: ReturnType<typeof deriveCareerProfile> | null = null;
   if (stale) {
     let saved = false;
     for (let attempt = 1; attempt <= maxAttempts && !saved; attempt++) {
       const { data: cand, error } = await deps.candidates();
       if (error || !cand) return { status: 500, body: { error: "CANDIDATES_FAILED" } };
-      const ranked = rankOpportunities({ ...cand.profile, skills: cand.skills }, cand.opportunities);
+      careerProfile = deriveCareerProfile(cand.skills);
+      const rankingProfile = {
+        ...cand.profile,
+        inferred_career_paths: careerProfile.paths.map((path) => path.id),
+        interaction_signals: cand.interaction_signals ?? [],
+      };
+      const ranked = rankOpportunities({ ...rankingProfile, skills: cand.skills }, cand.opportunities);
       const { error: saveError } = await deps.save(ranked, cand.profile_version);
       if (!saveError) { saved = true; break; }
       if (!RETRYABLE.has(saveError.message)) return { status: 500, body: { error: "SAVE_FAILED", code: saveError.message } };
@@ -46,6 +55,7 @@ export async function runRecommend(deps: FlowDeps, opts: { force?: boolean; maxA
     status: 200,
     body: {
       source, model_version: MODEL_VERSION, ai_mode: "deterministic",
+      career_profile: careerProfile,
       disclaimer: "Match Score is not a hiring probability.",
       items: filterOpenRecommendations(data ?? []),
     },

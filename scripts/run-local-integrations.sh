@@ -75,13 +75,16 @@ echo "PASS demo profile seed idempotency: skills=$SKILL_COUNT, sample applicatio
 supabase functions serve --env-file "$LOCAL_ENV" > "$LOG_DIR/functions-serve.log" 2>&1 &
 FUNCTION_PID=$!
 READY=0
+CODE="000"
 for _ in $(seq 1 60); do
   CODE="$(curl -sS -o /dev/null -w '%{http_code}' -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/functions/v1/recommend" 2>/dev/null || true)"
-  if [ "$CODE" != "000" ] && [ -n "$CODE" ]; then READY=1; break; fi
-  if ! kill -0 "$FUNCTION_PID" >/dev/null 2>&1; then echo "Edge Function serve process exited early" >&2; tail -100 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; fi
+  # verify_jwt=true: the expected readiness response without a Bearer token is HTTP 401.
+  # A 404/503 from the gateway is not proof that the Edge Function has finished loading.
+  if [ "$CODE" = "401" ]; then READY=1; break; fi
+  if ! kill -0 "$FUNCTION_PID" >/dev/null 2>&1; then echo "Edge Function serve process exited early (last HTTP $CODE)" >&2; tail -100 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; fi
   sleep 1
 done
-[ "$READY" = "1" ] || { echo "Edge Function gateway did not become ready" >&2; tail -80 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; }
+[ "$READY" = "1" ] || { echo "Edge Function gateway did not become ready: expected HTTP 401 without JWT, got $CODE" >&2; tail -80 "$LOG_DIR/recommend-function-serve.log" >&2; exit 1; }
 
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"

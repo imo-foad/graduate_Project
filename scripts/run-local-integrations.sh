@@ -20,7 +20,10 @@ cleanup() {
 trap cleanup EXIT
 
 # Export only the local stack values needed by Auth, Storage and the Function.
-supabase status -o env --override-name API_URL=SUPABASE_URL,ANON_KEY=SUPABASE_ANON_KEY,SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY > "$LOCAL_ENV"
+supabase status -o env \
+  --override-name api.url=SUPABASE_URL \
+  --override-name auth.anon_key=SUPABASE_ANON_KEY \
+  --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY > "$LOCAL_ENV"
 set -a
 . "$LOCAL_ENV"
 set +a

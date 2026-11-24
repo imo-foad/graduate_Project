@@ -81,7 +81,8 @@ class Scripts(unittest.TestCase):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]
         http = code(open(os.path.join(ROOT, "tests/integration/local-supabase.integration.mjs")).read())
         for needle in ("provision-demo-users.mjs", "03_demo_profiles.sql", "supabase functions serve recommend",
-                       "DEMO_PASSWORD", "assert-local-db.mjs"):
+                       "api.url=SUPABASE_URL", "auth.anon_key=SUPABASE_ANON_KEY",
+                       "auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY", "DEMO_PASSWORD", "assert-local-db.mjs"):
             self.assertIn(needle, runner)
         for needle in ("/auth/v1/token", "/storage/v1/object/", "/rest/v1/cv_documents",
                        "/functions/v1/recommend", "force: true", "cv-documents"):

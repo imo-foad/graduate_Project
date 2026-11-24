@@ -232,11 +232,11 @@ components:
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND.
         409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
-        OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE.
+        OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION.
       content:
         application/json:
           schema:
@@ -857,4 +857,96 @@ paths:
                 p_note: { type: string }
       responses:
         '200': { description: Updated application }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+
+  /rest/v1/rpc/set_company_member:
+    post:
+      summary: Company OWNER adds or revokes a RECRUITER or VIEWER membership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_user_id, p_role, p_is_active]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_user_id: { type: string, format: uuid }
+                p_role: { type: string, enum: [RECRUITER, VIEWER] }
+                p_is_active: { type: boolean }
+      responses:
+        '200': { description: Membership created or updated }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_admin_job:
+    post:
+      summary: Platform admin creates a platform-managed JOB draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_title, p_company_name, p_description]
+              properties:
+                p_title: { type: string }
+                p_company_name: { type: string }
+                p_description: { type: string }
+                p_location: { type: string }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time }
+                p_employment_type: { type: string, enum: [FULL_TIME, PART_TIME, CONTRACT, INTERNSHIP] }
+                p_experience_level: { type: string, enum: [FRESH_GRADUATE, JUNIOR, MID, SENIOR] }
+      responses:
+        '200': { description: Draft opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_admin_job:
+    post:
+      summary: Platform admin edits a platform or company-managed DRAFT/ACTIVE job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_title, p_company_name, p_description]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_title: { type: string }
+                p_company_name: { type: string }
+                p_description: { type: string }
+                p_location: { type: string }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time }
+      responses:
+        '200': { description: Updated opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/publish_admin_job:
+    post:
+      summary: Platform admin publishes a draft job; company-owned jobs still require verified companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Published opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/close_admin_job:
+    post:
+      summary: Platform admin closes a DRAFT or ACTIVE job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Closed opportunity }
         4XX: { $ref: '#/components/responses/BusinessError' }

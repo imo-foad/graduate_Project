@@ -10,7 +10,7 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 7 days idle) are **not verified against supabase.com/pricing** — check before relying on them.
 
 ## Layout
-- `supabase/migrations/0001..0007` — schema, catalogue, activity, RPCs, grants/RLS/storage bucket, audit fixes (0006), recommendation cache integrity + profile_version (0007)
+- `supabase/migrations/0001..0008` — schema, catalogue, activity, RPCs, grants/RLS/storage bucket, audit fixes (0006), recommendation cache integrity + profile_version (0007)
 - `fixtures/*.json` -> `npm run build:seed` -> `supabase/seed/01_skills.sql, 02_catalogue.sql, 03_demo_profiles.sql`
 - `supabase/functions/_shared/` — `scoring.ts` (weights from doc 6.5), `cv-extract.ts`; `recommend/` Edge Function
 - `scripts/provision-demo-users.mjs` — creates the 4 demo Auth users (no public sign-up)

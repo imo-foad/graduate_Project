@@ -37,7 +37,7 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 10 ] || fail "expected at least 10 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -ge 10 ] || fail "expected at least 11 migration files, found ${#MIGRATIONS[@]}"
 for f in "${MIGRATIONS[@]}"; do
   grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
 done
@@ -61,9 +61,9 @@ WANT_OPPS="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("fixture
 [ "$(q 'select count(*) from public.opportunity_skills os left join public.skills s on s.id = os.skill_id where s.id is null')" = "0" ] || fail "opportunity_skills reference unknown skills"
 echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on second load)"
 
-# ---- D. pgTAP: all five files must run and pass
+# ---- D. pgTAP: all six files must run and pass
 echo "=== D. supabase test db"
-EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache)
+EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done

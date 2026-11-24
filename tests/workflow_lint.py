@@ -99,6 +99,8 @@ class Scripts(unittest.TestCase):
         self.assertIn('[ "$CODE" = "405" ]', runner)
         self.assertIn("expected HTTP 405 for GET", runner)
         self.assertIn("timeout 900s", runner)
+        self.assertIn("career-cohort-reports/", SCRIPTS[".github/workflows/backend-tests.yml"])
+        self.assertIn("name: career-cohort-reports", SCRIPTS[".github/workflows/backend-tests.yml"])
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):

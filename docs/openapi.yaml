@@ -627,6 +627,10 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Recommendation'
+                  career_profile:
+                    type: object
+                    nullable: true
+                    description: Inferred career paths based on the graduate's confirmed skills; an empty profile is null.
         '401':
           description: UNAUTHENTICATED
           content:

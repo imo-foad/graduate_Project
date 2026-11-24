@@ -36,8 +36,24 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
 9. **CV upload and parsing**: upload to private bucket `cv-documents` at `<uid>/<file>.pdf|docx` (max 5 MB),
    then insert `cv_documents` metadata (`graduate_id`, `storage_path`, `file_type`, `size_bytes`). Call
    `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<id>" }`; the verified JWT determines ownership.
-   Digital-text PDF and DOCX files are parsed for dictionary-matched skills. The response creates `PENDING`
-   `cv_suggestions`; it does not write `graduate_skills`. After the graduate reviews the suggestions, call
-   `POST /rest/v1/rpc/confirm_cv_suggestions` with `p_confirm` and optional `p_reject` UUID arrays.
-   Scanned/image-only PDFs that need OCR are not supported in this version.
+   Digital-text PDF and DOCX files are parsed for dictionary-matched skills plus section-based work experience,
+   certifications and courses. Every extracted item is a `PENDING` row in `cv_suggestions`; education and
+   projects are intentionally ignored. Review/adjust/reject items through
+   `POST /rest/v1/rpc/review_cv_suggestions` with `p_decisions: [{id,status,payload?}]`. Only confirmed items
+   reach `graduate_skills`, `career_history`, `certifications` or `courses`. The older
+   `confirm_cv_suggestions` RPC remains available for skill-only clients. Scanned/image-only PDFs requiring OCR
+   are not supported by the free local parser.
 10. **Notifications**: in-app only (`notifications` table); no FCM in this scope.
+
+
+11. **Career market gaps**: call `POST /rest/v1/rpc/get_career_market_insights`. Demand counts are based only on
+    active JOB/INTERNSHIP posts in this platform, not an external market survey. The response includes your confirmed
+    skills, experience years, top-demand skills and missing skills with matching learning opportunities.
+12. **Recommendation feedback**: use `POST /rest/v1/rpc/record_recommendation_interaction` to log
+    `IMPRESSION`, `VIEW`, `DISMISS` or `NOT_INTERESTED` for a recommendation owned by the caller. SAVE,
+    APPLY and REGISTER are captured automatically from their existing operations. A later view/save/apply/register
+    can reactivate an opportunity previously dismissed.
+13. **Job experience requirement**: the company owner/recruiter (or platform admin) calls
+    `POST /rest/v1/rpc/set_job_experience_requirement` while the job is DRAFT with
+    `p_opportunity_id`, `p_minimum_experience_years` (number or null) and `p_is_required`. Mandatory minimums
+    exclude candidates below the threshold; preferred minimums reduce the experience match score.

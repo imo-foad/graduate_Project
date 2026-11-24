@@ -10,7 +10,10 @@ assert.ok(["127.0.0.1", "localhost", "::1"].includes(new URL(base).hostname),
   "refusing to run against a non-local Supabase URL");
 
 let passed = 0;
-const pass = (name, condition) => {
+const pass = (name, condition, diagnostic) => {
+  if (!condition && diagnostic !== undefined) {
+    console.error("DIAGNOSTIC " + name + ": " + JSON.stringify(diagnostic, null, 2));
+  }
   assert.equal(Boolean(condition), true, name);
   passed++;
   console.log("PASS " + name);
@@ -49,9 +52,18 @@ async function removeObject(token, path) {
 function encodePath(path) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
+function escapePdfLiteral(value) {
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
 function buildPdf(text) {
-  const escaped = text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-  const stream = "BT\n/F1 12 Tf\n50 750 Td\n(" + escaped + ") Tj\nET";
+  // Use real PDF text positioning for each visual line. A literal string containing
+  // embedded newline characters is not a reliable way to model separate PDF lines:
+  // pdf.js may return it as one text item, which erases CV section boundaries.
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const textCommands = lines.map((line, index) =>
+    (index === 0 ? "" : "T*\n") + "(" + escapePdfLiteral(line) + ") Tj"
+  ).join("\n");
+  const stream = ["BT", "/F1 12 Tf", "14 TL", "50 750 Td", textCommands, "ET"].join("\n");
   const objects = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
     "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
@@ -273,12 +285,23 @@ try {
   const experienceSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "EXPERIENCE");
   const certificationSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "CERTIFICATION");
   const courseSuggestion = (structuredSuggestions.json ?? []).find((row) => row.kind === "COURSE");
+  const structuredDiagnostic = {
+    parseStatus: parsedStructured.status,
+    parseBody: parsedStructured.json ?? parsedStructured.text,
+    suggestionsStatus: structuredSuggestions.status,
+    suggestions: structuredSuggestions.json ?? structuredSuggestions.text,
+  };
   pass("CV parser extracts experience, certification and course suggestions",
-    parsedStructured.status === 200 && experienceSuggestion?.payload?.company_name === "Integration Test Labs" &&
+    parsedStructured.status === 200 &&
+    parsedStructured.json?.suggestion_counts?.experience === 1 &&
+    parsedStructured.json?.suggestion_counts?.certifications === 1 &&
+    parsedStructured.json?.suggestion_counts?.courses === 1 &&
+    experienceSuggestion?.payload?.company_name === "Integration Test Labs" &&
     experienceSuggestion?.payload?.job_title === "Backend Intern" &&
     certificationSuggestion?.payload?.title === "AWS Certified Cloud Practitioner" &&
     courseSuggestion?.payload?.title === "Advanced TypeScript" &&
-    [experienceSuggestion, certificationSuggestion, courseSuggestion].every((row) => row.status === "PENDING"));
+    [experienceSuggestion, certificationSuggestion, courseSuggestion].every((row) => row.status === "PENDING"),
+    structuredDiagnostic);
   const reviewed = await request("/rest/v1/rpc/review_cv_suggestions", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ p_decisions: [

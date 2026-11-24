@@ -73,7 +73,7 @@ select is((select status from public.cv_suggestions where id = tests.id('suggest
 
 reset role;
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
-set_config('role', 'service_role', true);
+select set_config('role', 'service_role', true);
 select throws_ok($q$select public.complete_cv_parse(
   tests.id('cv'), tests.id('graduate'), '[]'::jsonb
 )$q$, 'PT422', 'CV_NOT_PROCESSING', 'a completed CV cannot be finalized again');

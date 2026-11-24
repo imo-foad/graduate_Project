@@ -49,7 +49,7 @@ test("happy path (fake tools): every phase runs and the script reports success",
 });
 test("a migration missing from `db reset` output fails the run", () => {
   const r = run({ FAKE_MISSING: "0009_fix_saved_opportunity_rls_recursion.sql" });
-  assert.equal(r.status, 1); assert.match(out(r), /does not show 0009_fix_saved_opportunity_rls_recursion\\.sql as applied/);
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0009_fix_saved_opportunity_rls_recursion.sql as applied"));
 });
 test("a migration missing from the migration table fails the run", () => {
   const r = run({ FAKE_MIGRATIONS: VERSIONS.replace(",0009", "") });

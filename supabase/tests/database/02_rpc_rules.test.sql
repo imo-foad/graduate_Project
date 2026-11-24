@@ -122,6 +122,8 @@ select is((select status from public.cv_suggestions where id = '00000000-0000-00
 -- insights are scoped to the caller
 select tests.login('a1');
 select is((public.get_my_insights() -> 'applications' ->> 'total')::int, 2, 'insights count only own applications');
+select ok((public.get_my_insights() -> 'profile_completion' -> 'missing_fields') ? 'college', 'insights safely report missing profile fields');
+select ok(jsonb_array_length(public.get_my_insights() -> 'profile_completion' -> 'missing_fields') > 0, 'missing fields are returned as a JSON array');
 
 reset role;
 select * from finish();

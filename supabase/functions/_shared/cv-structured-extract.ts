@@ -72,16 +72,18 @@ function experienceBlocks(lines:string[]):string[] {
   for(const line of lines) {
     const hasRange=DATE_RANGE.test(line);
     const header=ROLE.test(line)&&(line.includes("|")||line.includes("@")||/\bat\b/i.test(line));
-    if((hasDate&&hasRange)||(hasDate&&header)){if(current.length)blocks.push(current.join(" "));current=[];hasDate=false;}
+    if((hasDate&&hasRange)||(hasDate&&header)){if(current.length)blocks.push(current.join("\n"));current=[];hasDate=false;}
     current.push(line); if(hasRange)hasDate=true;
   }
-  if(current.length)blocks.push(current.join(" "));
+  if(current.length)blocks.push(current.join("\n"));
   return blocks.slice(0,30);
 }
 function parseExperience(block:string):CvExperienceSuggestion|null {
-  const dates=readDateRange(block), clean=block.replace(DATE_RANGE," ").replace(/\s+/g," ").trim();
-  const headerLine=clean.split(/[.;]\s+/)[0]??clean, header=splitHeader(headerLine);
-  const description=clean.length>headerLine.length?clean.slice(headerLine.length).replace(/^[-|:,\s]+/,"").slice(0,1200):undefined;
+  const dates=readDateRange(block);
+  const cleanedLines=block.split(/\r?\n/).map(line=>line.replace(DATE_RANGE," ").replace(/\s+/g," ").trim()).filter(Boolean);
+  const headerLine=(cleanedLines[0]??block).replace(/[()[\]]/g," ").replace(/\s+/g," ").trim();
+  const header=splitHeader(headerLine);
+  const description=cleanedLines.slice(1).join(" ").trim().slice(0,1200)||undefined;
   const confidence=(dates.start_date?0.35:0)+(header.company_name?0.25:0)+(header.job_title?0.25:0)+(description?0.15:0);
   if(!header.company_name&&!header.job_title&&!dates.start_date)return null;
   return {...(header.company_name?{company_name:header.company_name.slice(0,200)}:{}),

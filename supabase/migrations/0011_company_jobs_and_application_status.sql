@@ -145,9 +145,9 @@ begin
   select * into c from public.companies where id = p_company_id for share;
   if not found then raise exception 'COMPANY_NOT_FOUND' using errcode = 'PT404'; end if;
   if length(btrim(coalesce(p_title,''))) < 3 or length(btrim(coalesce(p_description,''))) < 10
-     or p_attendance_mode not in ('ONSITE','ONLINE','HYBRID')
-     or p_employment_type not in ('FULL_TIME','PART_TIME','CONTRACT','INTERNSHIP')
-     or p_experience_level not in ('FRESH_GRADUATE','JUNIOR','MID','SENIOR')
+     or p_attendance_mode is null or p_attendance_mode not in ('ONSITE','ONLINE','HYBRID')
+     or p_employment_type is null or p_employment_type not in ('FULL_TIME','PART_TIME','CONTRACT','INTERNSHIP')
+     or p_experience_level is null or p_experience_level not in ('FRESH_GRADUATE','JUNIOR','MID','SENIOR')
      or (p_deadline is not null and p_deadline <= now()) then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -188,7 +188,7 @@ begin
     raise exception 'OPPORTUNITY_NOT_EDITABLE' using errcode = 'PT422';
   end if;
   if length(btrim(coalesce(p_title,''))) < 3 or length(btrim(coalesce(p_description,''))) < 10
-     or p_attendance_mode not in ('ONSITE','ONLINE','HYBRID')
+     or p_attendance_mode is null or p_attendance_mode not in ('ONSITE','ONLINE','HYBRID')
      or (p_deadline is not null and p_deadline <= now()) then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -256,7 +256,7 @@ begin
   if not private.is_platform_admin() then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
-  if p_decision not in ('VERIFIED','REJECTED','SUSPENDED') then
+  if p_decision is null or p_decision not in ('VERIFIED','REJECTED','SUSPENDED') then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
   select * into c from public.companies where id = p_company_id for update;
@@ -278,8 +278,9 @@ declare
   v_uid uuid := public._require_uid();
   a public.applications;
   o public.opportunities;
+  v_old_status text;
 begin
-  if p_status not in ('UNDER_REVIEW','SHORTLISTED','INTERVIEW','ACCEPTED','REJECTED') then
+  if p_status is null or p_status not in ('UNDER_REVIEW','SHORTLISTED','INTERVIEW','ACCEPTED','REJECTED') then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
   select * into a from public.applications where id = p_application_id for update;
@@ -292,10 +293,11 @@ begin
      or a.status in ('ACCEPTED','REJECTED') then
     raise exception 'APPLICATION_NOT_UPDATABLE' using errcode = 'PT422';
   end if;
+  v_old_status := a.status;
   update public.applications set status = p_status, status_source = 'COMPANY_ACTION'
    where id = a.id returning * into a;
   insert into public.application_status_history(application_id, old_status, new_status, source_type, actor_user_id, note)
-  values (a.id, a.status, p_status, 'COMPANY_ACTION', v_uid, nullif(btrim(coalesce(p_note,'')), ''));
+  values (a.id, v_old_status, p_status, 'COMPANY_ACTION', v_uid, nullif(btrim(coalesce(p_note,'')), ''));
   insert into public.notifications(profile_id, title, body, type, related_entity_id)
   values (a.graduate_id, 'تحديث حالة طلب التوظيف',
           'تم تحديث حالة طلبك على «' || o.title || '» إلى: ' || p_status || '.',
@@ -348,3 +350,44 @@ comment on table public.company_memberships is 'Company-scoped roles. Membership
 comment on table public.company_verification_history is 'Append-only audit trail of platform-admin company verification decisions.';
 comment on column public.opportunities.company_id is 'Non-null for company-owned posts; seeded opportunities remain null.';
 comment on column public.application_status_history.actor_user_id is 'Authenticated user who changed the status; null for older/system-seeded history.';
+
+-- Company-managed applications are real; retain the explicit demo disclaimer only for seeded catalogue rows.
+create or replace function public.apply_for_job(
+  p_opportunity_id uuid, p_cv_document_id uuid default null, p_note text default null)
+returns public.applications language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := public._require_uid();
+  o public.opportunities; f text[]; app public.applications;
+begin
+  select * into o from public.opportunities where id = p_opportunity_id;
+  if not found then raise exception 'OPPORTUNITY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if o.type <> 'JOB' then raise exception 'NOT_A_JOB' using errcode = 'PT422'; end if;
+  if o.status <> 'ACTIVE' or (o.deadline is not null and o.deadline < now()) then
+    raise exception 'OPPORTUNITY_CLOSED' using errcode = 'PT422';
+  end if;
+  f := public.eligibility_failures(v_uid, o.id);
+  if cardinality(f) > 0 then
+    raise exception 'NOT_ELIGIBLE' using errcode = 'PT422', detail = array_to_string(f, ',');
+  end if;
+  if p_cv_document_id is not null and not exists (
+       select 1 from public.cv_documents where id = p_cv_document_id and graduate_id = v_uid) then
+    raise exception 'CV_NOT_FOUND' using errcode = 'PT404';
+  end if;
+  begin
+    insert into public.applications (opportunity_id, graduate_id, cv_document_id, note)
+    values (o.id, v_uid, p_cv_document_id, p_note) returning * into app;
+  exception when unique_violation then
+    raise exception 'ALREADY_APPLIED' using errcode = 'PT409';
+  end;
+  insert into public.application_status_history (application_id, old_status, new_status, source_type, actor_user_id)
+  values (app.id, null, 'SUBMITTED', 'APP_ACTION', v_uid);
+  insert into public.notifications (profile_id, title, body, type, related_entity_id)
+  values (v_uid, 'تم تقديم طلبك',
+          case when o.company_id is not null
+               then 'تم إرسال طلبك إلى ' || coalesce(o.company_name, 'الشركة') || ' على «' || o.title || '».'
+               else 'تم إنشاء طلب التقديم على «' || o.title || '» (بيانات تجريبية، لا يوجد قرار توظيف حقيقي).'
+          end,
+          'APPLICATION_SUBMITTED', app.id);
+  return app;
+end $$;
+

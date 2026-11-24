@@ -83,6 +83,31 @@ test("supports multiple independent paths for one graduate and ranks all of them
   }));
 });
 
+test("does not infer Backend from general-purpose languages without backend architecture evidence", () => {
+  const result = deriveCareerProfile(skills("JAVA", "C_SHARP", "PYTHON"));
+  assert.equal(result.paths.some((item) => item.id === "BACKEND"), false);
+  const javaApi = deriveCareerProfile(skills("JAVA", "REST_API"));
+  const backend = javaApi.paths.find((item) => item.id === "BACKEND");
+  assert.ok(backend);
+  assert.deepEqual(backend.specialization_signal_skill_ids, ["REST_API"]);
+});
+
+test("does not infer Data Science from generic analytics skills without a science signal", () => {
+  const analyticsOnly = deriveCareerProfile(skills("STATISTICS", "DATA_CLEANING", "SQL"));
+  assert.equal(analyticsOnly.paths.some((item) => item.id === "DATA_SCIENCE"), false);
+  const science = deriveCareerProfile(skills("PYTHON", "STATISTICS"));
+  assert.ok(science.paths.some((item) => item.id === "DATA_SCIENCE"));
+});
+
+test("does not infer Cybersecurity from networking alone without security-specific evidence", () => {
+  const result = deriveCareerProfile(skills("NETWORKING", "LINUX", "DOCKER"));
+  assert.equal(result.paths.some((item) => item.id === "CYBERSECURITY"), false);
+  const cyber = deriveCareerProfile(skills("NETWORKING", "SIEM"));
+  const match = cyber.paths.find((item) => item.id === "CYBERSECURITY");
+  assert.ok(match);
+  assert.deepEqual(match.specialization_signal_skill_ids, ["SIEM"]);
+});
+
 test("does not force a path from one isolated core skill or shared prerequisites", () => {
   for (const profile of [
     [{ skill_id: "HTML_CSS", level: 5 }],

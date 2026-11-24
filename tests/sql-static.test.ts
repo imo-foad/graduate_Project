@@ -95,3 +95,14 @@ test("REGRESSION: scalar text values are appended safely to text arrays", () => 
   assert.match(insights.body, /array_append\(missing,\s*'college'\)/);
   assert.doesNotMatch(insights.body, /\bmissing\s*:=\s*missing\s*\|\|/);
 });
+
+
+test("saved-opportunity INSERT policy avoids recursive catalogue RLS evaluation", () => {
+  const sql = allMigrationsSql();
+  const helper = finalFunctions(sql).get("_opportunity_exists_for_saved_item")!;
+  assert.match(helper.header, /security definer/i);
+  assert.match(helper.header, /set search_path\s*=\s*''/i);
+  const migration = readMigration("0009_fix_saved_opportunity_rls_recursion.sql");
+  assert.match(migration, /create policy saved_insert[\s\S]*?_opportunity_exists_for_saved_item\(opportunity_id\)/i);
+  assert.doesNotMatch(migration, /create policy saved_insert[\s\S]*?exists\s*\(\s*select[\s\S]*?public\.opportunities/i);
+});

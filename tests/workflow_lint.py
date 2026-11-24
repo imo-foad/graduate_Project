@@ -48,6 +48,8 @@ class Workflow(unittest.TestCase):
         for s in steps("database"):
             if "supabase stop" in s.get("run", "") or str(s.get("uses", "")).startswith("actions/upload-artifact"):
                 self.assertEqual(s.get("if"), "always()")
+        stop = next(s for s in steps("database") if "supabase stop" in s.get("run", ""))
+        self.assertIn("timeout 120s", stop["run"])
 
     def test_no_cloud_access_anywhere(self):
         forbidden = ["supabase link", "db push", "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "qikqbvohqjblbcysbvel", "secrets.", "functions deploy"]

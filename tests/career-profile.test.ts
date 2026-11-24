@@ -32,7 +32,7 @@ test("identifies Backend from API and database evidence, not generic languages a
   const backend = result.paths.find((item) => item.id === "BACKEND");
   assert.ok(backend);
   assert.deepEqual(backend.matched_core_skill_ids, ["NODE_JS", "REST_API", "POSTGRESQL", "PYTHON"]);
-  assert.ok(backend.matched_supporting_skill_ids.includes("DOCKER") === false);
+  assert.deepEqual(backend.matched_supporting_skill_ids, []);
 
   const generic = deriveCareerProfile(skills("JAVA", "PYTHON"));
   assert.equal(generic.paths.some((item) => item.id === "BACKEND"), false);

@@ -33,6 +33,14 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
    **New in v0.2:** it can answer `409 {"error":"STALE_SNAPSHOT","retryable":true}` when the profile kept changing during
    the calculation; the previous cache is intact, so show it (or a spinner) and call again later. `ai_mode` is
    `deterministic`; if the call fails, keep manual search/filter working (BR-021).
+   The same response includes `career_profile`: `primary_path` is the highest-ranked inferred path and
+   `paths` contains every path supported by at least two core skills. Each path includes a 0–100 weighted
+   skill-coverage score, matched core/supporting skills, missing core skills, up to three next skills, and
+   Arabic explanation. Core skills count three times as much as supporting skills; proficiency levels are
+   normalized against the catalogue's 1–5 scale. Frontend, Backend, Data Analytics, Data Science and
+   Cybersecurity are explicitly mapped; other existing paths (Mobile, DevOps/Cloud, QA and UI/UX) remain
+   available. One graduate may match several paths. The score is an explainable skills-coverage indicator,
+   not a hiring probability. Only rows in `graduate_skills` are considered; pending CV suggestions are excluded.
 9. **CV upload and parsing**: upload to private bucket `cv-documents` at `<uid>/<file>.pdf|docx` (max 5 MB),
    then insert `cv_documents` metadata (`graduate_id`, `storage_path`, `file_type`, `size_bytes`). Call
    `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<id>" }`; the verified JWT determines ownership.

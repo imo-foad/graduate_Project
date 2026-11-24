@@ -37,7 +37,7 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
    `paths` contains every path supported by at least two core skills. Each path includes a 0–100 weighted
    skill-coverage score, matched core/supporting skills, missing core skills, up to three next skills, and
    Arabic explanation. Core skills count three times as much as supporting skills; proficiency levels are
-   normalized against the catalogue's 1–5 scale. Frontend, Backend, Data Analytics, Data Science and
+   normalized against the catalogue's 1–5 scale. Backend, Data Science and Cybersecurity also require at least one path-specific signal, so general-purpose languages, analytics fundamentals or networking alone do not falsely imply a specialization. Frontend, Backend, Data Analytics, Data Science and
    Cybersecurity are explicitly mapped; other existing paths (Mobile, DevOps/Cloud, QA and UI/UX) remain
    available. One graduate may match several paths. The score is an explainable skills-coverage indicator,
    not a hiring probability. Only rows in `graduate_skills` are considered; pending CV suggestions are excluded.

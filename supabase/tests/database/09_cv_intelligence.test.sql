@@ -1,5 +1,5 @@
 begin;
-select plan(9);
+select plan(11);
 select has_table('public','courses','courses table exists');
 select has_table('public','recommendation_interactions','recommendation interactions table exists');
 select has_column('public','job_details','minimum_experience_years','job minimum experience is stored');
@@ -9,5 +9,7 @@ select ok((select relrowsecurity from pg_class where oid='public.recommendation_
 select has_function('public','review_cv_suggestions',array['jsonb'],'graduate CV review RPC exists');
 select has_function('public','get_career_market_insights',array[]::text[],'career market insight RPC exists');
 select has_function('public','record_recommendation_interaction',array['uuid','text'],'interaction feedback RPC exists');
+select has_function('private','total_experience_years',array['uuid'],'overlapping experience periods are merged');
+select has_function('public','mark_all_recommendations_dirty',array[]::text[],'opportunity changes invalidate recommendation caches');
 select * from finish();
 rollback;

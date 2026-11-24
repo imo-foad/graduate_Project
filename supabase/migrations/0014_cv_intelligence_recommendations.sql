@@ -283,6 +283,53 @@ $set_job_experience_requirement$;
 revoke all on function public.set_job_experience_requirement(uuid,numeric,boolean) from public,anon;
 grant execute on function public.set_job_experience_requirement(uuid,numeric,boolean) to authenticated;
 
+-- Merge overlapping career-history intervals so concurrent jobs never inflate experience years.
+create or replace function private.total_experience_years(p_graduate_id uuid)
+returns numeric language sql stable security definer set search_path = ''
+as $total_experience_years$
+  with periods as (
+    select daterange(c.start_date,
+      least(coalesce(c.end_date,current_date),current_date) + 1, '[)') as span
+    from public.career_history c
+    where c.graduate_id = p_graduate_id and c.start_date <= current_date
+  ), merged as (
+    select unnest(range_agg(span)) as span from periods
+  )
+  select coalesce(round(sum(upper(span)-lower(span))::numeric / 365.25,2),0)
+  from merged;
+$total_experience_years$;
+revoke all on function private.total_experience_years(uuid) from public,anon,authenticated;
+
+-- New or changed opportunities invalidate all cached graduate rankings.
+create or replace function public.mark_all_recommendations_dirty()
+returns trigger language plpgsql security definer set search_path = '' as $mark_all_recommendations_dirty$
+begin
+  update public.graduate_profiles
+     set recommendations_dirty = true,
+         profile_version = profile_version + 1,
+         profile_updated_at = now();
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end
+$mark_all_recommendations_dirty$;
+revoke all on function public.mark_all_recommendations_dirty() from public,anon,authenticated;
+
+create trigger opportunities_match_dirty
+  after insert or delete or update of title,description,location,attendance_mode,status,deadline,end_at,target_fields
+  on public.opportunities for each row execute function public.mark_all_recommendations_dirty();
+create trigger opportunity_skills_match_dirty
+  after insert or update or delete on public.opportunity_skills
+  for each row execute function public.mark_all_recommendations_dirty();
+create trigger job_details_match_dirty
+  after insert or update or delete on public.job_details
+  for each row execute function public.mark_all_recommendations_dirty();
+create trigger event_details_match_dirty
+  after insert or update or delete on public.event_details
+  for each row execute function public.mark_all_recommendations_dirty();
+create trigger opportunity_eligibility_match_dirty
+  after insert or update or delete on public.opportunity_eligibility
+  for each row execute function public.mark_all_recommendations_dirty();
+
 create or replace function public.get_recommendation_candidates(p_graduate_id uuid) returns jsonb
 language sql stable security definer set search_path = '' as $recommendation_candidates_v2$
  select jsonb_build_object(
@@ -290,8 +337,7 @@ language sql stable security definer set search_path = '' as $recommendation_can
   'profile',(select jsonb_build_object('major',gp.major,'department',gp.department,'degree',gp.degree,
     'graduation_year',gp.graduation_year,'location',gp.location,'career_interests',to_jsonb(gp.career_interests),
     'work_preferences',gp.work_preferences,
-    'experience_years',coalesce((select round(sum((coalesce(c.end_date,current_date)-c.start_date)::numeric/365.25),2)
-      from public.career_history c where c.graduate_id=gp.profile_id),0))
+    'experience_years',private.total_experience_years(gp.profile_id))
     from public.graduate_profiles gp where gp.profile_id=p_graduate_id),
   'skills',coalesce((select jsonb_agg(jsonb_build_object('skill_id',gs.skill_id,'level',gs.level))
     from public.graduate_skills gs where gs.graduate_id=p_graduate_id),'[]'::jsonb),
@@ -351,8 +397,7 @@ begin
    'priority_skill_gaps',coalesce((select jsonb_agg(to_jsonb(g)) from priority_gaps g),'[]'::jsonb),
    'your_skills',coalesce((select jsonb_agg(jsonb_build_object('skill_id',gs.skill_id,'level',gs.level))
      from public.graduate_skills gs where gs.graduate_id=v_uid),'[]'::jsonb),
-   'your_experience_years',coalesce((select round(sum((coalesce(c.end_date,current_date)-c.start_date)::numeric/365.25),2)
-     from public.career_history c where c.graduate_id=v_uid),0))
+   'your_experience_years',private.total_experience_years(v_uid))
  );
 end
 $career_market_insights$;

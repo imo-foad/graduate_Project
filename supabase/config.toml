@@ -1,0 +1,16 @@
+project_id = "alumni-connect-backend"
+
+[db]
+major_version = 17   # matches the Cloud project (PostgreSQL 17.x)
+
+[api]
+schemas = ["public"]
+
+[auth]
+enable_signup = false   # demo accounts are provisioned by scripts/provision-demo-users.mjs
+
+[functions.recommend]
+verify_jwt = true
+
+[functions.parse-cv]
+verify_jwt = true

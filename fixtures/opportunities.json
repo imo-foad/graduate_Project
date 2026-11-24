@@ -1,0 +1,1107 @@
+[
+ {
+  "seed_key": "job-android-junior",
+  "type": "JOB",
+  "title": "Junior Android Developer",
+  "company_name": "Nile Apps (sample)",
+  "description": "Build Android features with Kotlin and Jetpack Compose for a fresh-graduate team.",
+  "location": "Cairo",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "target_fields": [
+   "Computer Science",
+   "Android",
+   "Mobile"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "KOTLIN",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "ANDROID",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "JETPACK_COMPOSE",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "REST_API",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "GIT",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-android-senior",
+  "type": "JOB",
+  "title": "Senior Android Engineer",
+  "company_name": "Delta Mobile (sample)",
+  "description": "Lead architecture of a large Android codebase.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 25,
+  "target_fields": [
+   "Computer Science",
+   "Android"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "SENIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "KOTLIN",
+    "importance": 5,
+    "min_level": 4,
+    "is_required": true
+   },
+   {
+    "skill_id": "ANDROID",
+    "importance": 5,
+    "min_level": 4,
+    "is_required": true
+   },
+   {
+    "skill_id": "API_DESIGN",
+    "importance": 3,
+    "min_level": 4,
+    "is_required": false
+   },
+   {
+    "skill_id": "DEVOPS_CI_CD",
+    "importance": 3,
+    "min_level": 3,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-data-analyst",
+  "type": "JOB",
+  "title": "Data Analyst",
+  "company_name": "Sunrise Analytics (sample)",
+  "description": "Analyse business data with SQL and Power BI and build dashboards.",
+  "location": "Mansoura",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 21,
+  "target_fields": [
+   "Information Systems",
+   "Data Analysis",
+   "Statistics"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "SQL",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "POWER_BI",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "EXCEL",
+    "importance": 3,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "PYTHON",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "STATISTICS",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-backend-java",
+  "type": "JOB",
+  "title": "Junior Java Backend Developer",
+  "company_name": "Pyramid Systems (sample)",
+  "description": "Develop REST services in Java with PostgreSQL.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 35,
+  "target_fields": [
+   "Computer Science",
+   "Backend"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "JUNIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "JAVA",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "REST_API",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "POSTGRESQL",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "GIT",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "OOP",
+    "importance": 3,
+    "min_level": 3,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-frontend",
+  "type": "JOB",
+  "title": "Frontend Developer",
+  "company_name": "Pixel Delta (sample)",
+  "description": "Create responsive web UIs with React and TypeScript.",
+  "location": "Alexandria",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 28,
+  "target_fields": [
+   "Computer Science",
+   "Web"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "JUNIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "JAVASCRIPT",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "REACT",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "HTML_CSS",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "TYPESCRIPT",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "GIT",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-soc-analyst",
+  "type": "JOB",
+  "title": "SOC Analyst (Tier 1)",
+  "company_name": "Shield Labs (sample)",
+  "description": "Monitor alerts and triage incidents using SIEM tools.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "target_fields": [
+   "Cybersecurity",
+   "Information Security"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "CYBERSECURITY",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "NETWORKING",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "LINUX",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "SIEM",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-cert-gated",
+  "type": "JOB",
+  "title": "Security Engineer (certification required)",
+  "company_name": "Vault Corp (sample)",
+  "description": "Position that mandates a security certification.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "target_fields": [
+   "Cybersecurity"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "JUNIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "CYBERSECURITY",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "PENETRATION_TESTING",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "CRYPTOGRAPHY",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ],
+  "eligibility": {
+   "required_certifications": [
+    "Security+"
+   ]
+  }
+ },
+ {
+  "seed_key": "job-ml-junior",
+  "type": "JOB",
+  "title": "Junior Machine Learning Engineer",
+  "company_name": "Neuron Works (sample)",
+  "description": "Prototype ML models in Python.",
+  "location": "Cairo",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 40,
+  "target_fields": [
+   "Computer Science",
+   "Data Science",
+   "Statistics"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "JUNIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "PYTHON",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "MACHINE_LEARNING",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "STATISTICS",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   },
+   {
+    "skill_id": "SQL",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-qa-engineer",
+  "type": "JOB",
+  "title": "QA Engineer",
+  "company_name": "Check Mate (sample)",
+  "description": "Design and automate software tests.",
+  "location": "Mansoura",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 20,
+  "target_fields": [
+   "Computer Science",
+   "Information Systems"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "TESTING",
+    "importance": 5,
+    "min_level": 3,
+    "is_required": true
+   },
+   {
+    "skill_id": "SQL",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "AGILE",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 3,
+    "min_level": 3,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-grad-2024-only",
+  "type": "JOB",
+  "title": "Graduate Program (class of 2024-2025 only)",
+  "company_name": "Orbit Group (sample)",
+  "description": "Program restricted to recent graduating classes.",
+  "location": "Cairo",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 25,
+  "target_fields": [
+   "Computer Science",
+   "Information Systems"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "COMMUNICATION",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ],
+  "eligibility": {
+   "min_graduation_year": 2024,
+   "max_graduation_year": 2025
+  }
+ },
+ {
+  "seed_key": "job-expired",
+  "type": "JOB",
+  "title": "Data Entry Analyst (deadline passed)",
+  "company_name": "Old Posting (sample)",
+  "description": "Posting whose deadline already passed.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": -10,
+  "target_fields": [
+   "Information Systems"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "EXCEL",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "job-closed",
+  "type": "JOB",
+  "title": "Mobile Developer (closed)",
+  "company_name": "Closed Co (sample)",
+  "description": "Closed by the catalogue.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "CLOSED",
+  "deadline_days": 30,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "job": {
+   "employment_type": "FULL_TIME",
+   "experience_level": "JUNIOR",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "FLUTTER",
+    "importance": 4,
+    "min_level": 3,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "int-data",
+  "type": "INTERNSHIP",
+  "title": "Data Analytics Intern",
+  "company_name": "Sunrise Analytics (sample)",
+  "description": "Three-month paid internship.",
+  "location": "Mansoura",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "target_fields": [
+   "Information Systems",
+   "Data Analysis"
+  ],
+  "job": {
+   "employment_type": "INTERNSHIP",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "SQL",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "EXCEL",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "int-android",
+  "type": "INTERNSHIP",
+  "title": "Android Intern",
+  "company_name": "Nile Apps (sample)",
+  "description": "Mentored internship on the Android team.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "target_fields": [
+   "Computer Science",
+   "Android"
+  ],
+  "job": {
+   "employment_type": "INTERNSHIP",
+   "experience_level": "FRESH_GRADUATE",
+   "minimum_qualification": null
+  },
+  "skills": [
+   {
+    "skill_id": "KOTLIN",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   },
+   {
+    "skill_id": "ANDROID",
+    "importance": 4,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-tech-conf",
+  "type": "CONFERENCE",
+  "title": "Tech Horizons Conference",
+  "organizer_name": "Tech Society (sample)",
+  "description": "One-day conference on software and data careers.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 19,
+  "start_days": 20,
+  "end_days": 21,
+  "capacity": 200,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science",
+   "Information Systems"
+  ],
+  "event": {
+   "venue": "Cairo Expo Hall (sample)",
+   "target_audience": "All graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 2,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-data-meetup",
+  "type": "EVENT",
+  "title": "Data Analysts Meetup",
+  "organizer_name": "Data Circle (sample)",
+  "description": "Networking and lightning talks on analytics.",
+  "location": "Mansoura",
+  "attendance_mode": "HYBRID",
+  "status": "ACTIVE",
+  "deadline_days": 13,
+  "start_days": 14,
+  "end_days": 14.2,
+  "capacity": 40,
+  "waitlist_enabled": true,
+  "target_fields": [
+   "Data Analysis",
+   "Information Systems"
+  ],
+  "event": {
+   "venue": "Mansoura Innovation Hub (sample)",
+   "target_audience": "Graduates in data fields",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "SQL",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "DATA_VISUALIZATION",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-security-webinar",
+  "type": "EVENT",
+  "title": "Intro to Blue-Team Operations (Webinar)",
+  "organizer_name": "SecOps Guild (sample)",
+  "description": "Online session on SOC workflows.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 9,
+  "start_days": 10,
+  "end_days": 10.1,
+  "capacity": 500,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Cybersecurity"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates and students",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "CYBERSECURITY",
+    "importance": 4,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "SIEM",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-android-meetup",
+  "type": "EVENT",
+  "title": "Android Developers Night",
+  "organizer_name": "Android Cairo (sample)",
+  "description": "Talks on Compose and architecture.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 11,
+  "start_days": 12,
+  "end_days": 12.1,
+  "capacity": 60,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Android",
+   "Mobile",
+   "Computer Science"
+  ],
+  "event": {
+   "venue": "Cairo Co-working (sample)",
+   "target_audience": "Android graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "ANDROID",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "JETPACK_COMPOSE",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-full-event",
+  "type": "EVENT",
+  "title": "Hands-on Security Lab (limited seats)",
+  "organizer_name": "SecOps Guild (sample)",
+  "description": "Lab with a single seat, used to test capacity and waitlist.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 10,
+  "start_days": 11,
+  "end_days": 11.2,
+  "capacity": 1,
+  "waitlist_enabled": true,
+  "target_fields": [
+   "Cybersecurity"
+  ],
+  "event": {
+   "venue": "Cairo Lab (sample)",
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PENETRATION_TESTING",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-full-nowait",
+  "type": "EVENT",
+  "title": "Workshop: Leadership for Graduates (full, no waitlist)",
+  "organizer_name": "Career Hub (sample)",
+  "description": "Single seat, waitlist disabled: registration must fail with EVENT_FULL.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 10,
+  "start_days": 11,
+  "end_days": 11.2,
+  "capacity": 1,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Management"
+  ],
+  "event": {
+   "venue": "Cairo Hub (sample)",
+   "target_audience": "All graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "COMMUNICATION",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "evt-past",
+  "type": "EVENT",
+  "title": "Career Fair (already ended)",
+  "organizer_name": "Career Hub (sample)",
+  "description": "Ended event used for expiry tests.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": -6,
+  "start_days": -5,
+  "end_days": -4.7,
+  "capacity": 100,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "All graduates",
+   "registration_required": true
+  },
+  "skills": []
+ },
+ {
+  "seed_key": "evt-opens-later",
+  "type": "EVENT",
+  "title": "Cloud Day (registration opens later)",
+  "organizer_name": "Cloud Club (sample)",
+  "description": "Registration window has not opened yet.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 35,
+  "end_days": 35.3,
+  "capacity": 100,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Cloud"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "All graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "CLOUD_BASICS",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ],
+  "registration_opens_days": 5
+ },
+ {
+  "seed_key": "comp-hackathon",
+  "type": "COMPETITION",
+  "title": "University Hackathon",
+  "organizer_name": "Dev Club (sample)",
+  "description": "48-hour team hackathon.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 22,
+  "start_days": 28,
+  "end_days": 30,
+  "capacity": 80,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": "Cairo Campus (sample)",
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "TEAMWORK",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "vol-code-mentor",
+  "type": "VOLUNTEER",
+  "title": "Volunteer Coding Mentor",
+  "organizer_name": "Code For All (sample)",
+  "description": "Mentor school students in programming basics.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 25,
+  "start_days": 30,
+  "end_days": 35,
+  "capacity": 30,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science",
+   "Education"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "COMMUNICATION",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-rest-api",
+  "type": "TRAINING",
+  "title": "REST APIs Workshop",
+  "organizer_name": "Skill Up (sample)",
+  "description": "Practical workshop on designing and consuming REST APIs.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 40,
+  "end_days": 47,
+  "capacity": 40,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science",
+   "Backend",
+   "Mobile"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "REST_API",
+    "importance": 5,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "API_DESIGN",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-git",
+  "type": "TRAINING",
+  "title": "Practical Git and GitHub",
+  "organizer_name": "Skill Up (sample)",
+  "description": "Hands-on version control for teams.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 40,
+  "end_days": 47,
+  "capacity": 40,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "GIT",
+    "importance": 5,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-python-data",
+  "type": "TRAINING",
+  "title": "Python for Data Analysis",
+  "organizer_name": "Data Circle (sample)",
+  "description": "Python, pandas and visualisation basics.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 40,
+  "end_days": 47,
+  "capacity": 40,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Data Analysis",
+   "Information Systems"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PYTHON",
+    "importance": 5,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "DATA_CLEANING",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   },
+   {
+    "skill_id": "DATA_VISUALIZATION",
+    "importance": 3,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-statistics",
+  "type": "TRAINING",
+  "title": "Statistics Fundamentals",
+  "organizer_name": "Data Circle (sample)",
+  "description": "Descriptive and inferential statistics for analysts.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 40,
+  "end_days": 47,
+  "capacity": 40,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Data Analysis",
+   "Statistics"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "STATISTICS",
+    "importance": 5,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "schol-masters-cs",
+  "type": "SCHOLARSHIP",
+  "title": "Master's Scholarship in Computing",
+  "organizer_name": "Future Fund (sample)",
+  "description": "Funded postgraduate scholarship.",
+  "location": "Cairo",
+  "attendance_mode": "ONSITE",
+  "status": "ACTIVE",
+  "deadline_days": 60,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "skills": [
+   {
+    "skill_id": "ALGORITHMS",
+    "importance": 3,
+    "min_level": 2,
+    "is_required": false
+   }
+  ],
+  "eligibility": {
+   "allowed_degrees": [
+    "Bachelor"
+   ]
+  }
+ }
+]

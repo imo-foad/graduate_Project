@@ -1,0 +1,72 @@
+name: backend-tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read            # nothing else is needed: no secrets, no deployments, no Cloud access
+
+concurrency:
+  group: backend-tests-full-http-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: "static + OpenAPI contract + workflow lint"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --version && npm test
+      - run: pip install pyyaml && python3 -m unittest tests/contract_openapi.py -v
+      - run: bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs
+      - run: python3 -m unittest tests/workflow_lint.py -v
+
+  database:
+    name: "database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Verify Docker on the runner
+        run: |
+          sed -n '1,3p' /etc/os-release
+          docker --version
+          docker info --format 'docker server {{.ServerVersion}}'
+          docker compose version
+      - name: Install and verify the PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          psql --version
+          pg_isready --version
+      - uses: supabase/setup-cli@v1
+        with: { version: "3.3.0" }   # pinned to the version verified by CI run #52
+      - name: Verify Supabase CLI
+        run: supabase --version
+      - name: "Database tests (local stack only, fails on any error)"
+        run: bash scripts/run-db-tests.sh
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p .ci-logs
+          supabase status > .ci-logs/supabase-status.txt 2>&1 || true
+          docker ps -a > .ci-logs/docker-ps.txt 2>&1 || true
+          docker logs supabase_db_alumni-connect-backend > .ci-logs/db-container.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-test-logs
+          path: .ci-logs/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop local Supabase
+        if: always()
+        run: timeout 120s supabase stop --no-backup || true

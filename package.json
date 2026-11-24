@@ -1,0 +1,15 @@
+{
+  "name": "alumni-connect-backend",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "build:seed": "node scripts/build-seed.mjs",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test \"tests/*.test.ts\"",
+    "test:contract": "python3 -m unittest tests/contract_openapi.py -v",
+    "test:db": "bash scripts/run-db-tests.sh",
+    "test:workflow": "python3 -m unittest tests/workflow_lint.py -v"
+  }
+}

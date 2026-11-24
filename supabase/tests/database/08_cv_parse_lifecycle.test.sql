@@ -38,6 +38,7 @@ select ok(not has_function_privilege('authenticated',
 reset role;
 select set_config('request.jwt.claims', '{"role":"service_role"}', true);
 select set_config('role', 'service_role', true);
+-- Edge contract: send each suggestion as {kind, payload}; SQL stores the inner payload object.
 select is(public.complete_cv_parse(
   tests.id('cv'), tests.id('graduate'),
   '[

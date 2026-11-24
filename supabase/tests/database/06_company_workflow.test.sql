@@ -72,8 +72,13 @@ reset role;
 select tests.login('owner');
 select is((public.update_application_status(tests.id('application'), 'UNDER_REVIEW', 'CV reviewed')).status,
   'UNDER_REVIEW', 'company recruiter can update its own application');
-select is((select source_type from public.application_status_history where application_id = tests.id('application') order by changed_at desc limit 1),
-  'COMPANY_ACTION', 'company action is added to status history');
+select ok(exists (
+  select 1 from public.application_status_history
+  where application_id = tests.id('application')
+    and old_status = 'SUBMITTED'
+    and new_status = 'UNDER_REVIEW'
+    and source_type = 'COMPANY_ACTION'
+), 'company action is added to status history with the correct transition');
 reset role;
 select tests.login('graduate');
 select ok(exists (select 1 from public.notifications where profile_id = tests.id('graduate')

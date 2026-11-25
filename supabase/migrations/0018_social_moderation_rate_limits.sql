@@ -39,6 +39,8 @@ create table private.user_rate_limits (
   primary key (user_id, action)
 );
 create index user_rate_limits_refill_idx on private.user_rate_limits(last_refill_at);
+alter table private.rate_limit_policies enable row level security;
+alter table private.user_rate_limits enable row level security;
 
 insert into private.rate_limit_policies(action, capacity, refill_per_second) values
   ('SOCIAL_POST_CREATE', 5, 5::numeric / 60),
@@ -207,9 +209,11 @@ create table private.social_content_reports (
   reviewed_at timestamptz,
   reviewed_by uuid references auth.users(id) on delete set null,
   resolution_note text,
-  unique (reporter_id, target_type, target_id),
   check (details is null or length(details) <= 1000)
 );
+create unique index social_content_reports_one_open_per_reporter_target
+  on private.social_content_reports(reporter_id, target_type, target_id)
+  where status = 'OPEN';
 create index social_content_reports_queue_idx
   on private.social_content_reports(status, created_at desc);
 create index social_content_reports_target_idx
@@ -722,6 +726,10 @@ begin
   perform public._require_active_social_user(v_uid);
   select * into v_comment from public.social_post_comments
    where id = p_comment_id and author_id = v_uid and moderation_status = 'VISIBLE'
+     and exists (
+       select 1 from public.social_posts p
+        where p.id = public.social_post_comments.post_id and p.moderation_status = 'VISIBLE'
+     )
    for update;
   if not found then raise exception 'SOCIAL_COMMENT_NOT_FOUND' using errcode = 'PT404'; end if;
   v_content := btrim(coalesce(p_content, ''));

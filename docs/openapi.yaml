@@ -429,7 +429,8 @@ components:
         ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED,
         CANNOT_REPORT_OWN_CONTENT, ALREADY_REPORTED, SOCIAL_CONTENT_NOT_FOUND, SOCIAL_REPORT_NOT_FOUND,
         SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE, SOCIAL_CONTENT_NOT_FOUND,
-        RATE_LIMIT_EXCEEDED. HTTP 429 includes Retry-After seconds.
+        RATE_LIMIT_EXCEEDED is HTTP 429. Social RPC rate-limit details contain retry_after_seconds;
+        Edge Function 429 responses include the Retry-After header.
       content:
         application/json:
           schema:

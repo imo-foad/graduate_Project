@@ -897,6 +897,7 @@ $process_scholarship_provider_event$;
 alter table public.scholarship_applications
   validate constraint scholarship_applications_status_check;
 
+-- No provider mapping preserves the internal Alumni Connect review path; a mapping opts in to delivery.
 create or replace function public.apply_for_scholarship(
   p_opportunity_id uuid,p_cv_document_id uuid default null,
   p_personal_statement text default null,p_application_data jsonb default '{}'::jsonb

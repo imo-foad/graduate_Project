@@ -41,6 +41,10 @@ select ok(not has_table_privilege('authenticated','private.user_rate_limits','SE
   'authenticated cannot read rate-limit buckets');
 select ok(not has_table_privilege('authenticated','private.rate_limit_policies','UPDATE'),
   'authenticated cannot change rate-limit policy');
+select ok((select relrowsecurity from pg_class where oid='private.rate_limit_policies'::regclass),
+  'rate-limit policy table has RLS enabled');
+select ok((select relrowsecurity from pg_class where oid='private.user_rate_limits'::regclass),
+  'per-user rate-limit bucket table has RLS enabled');
 select ok(not has_function_privilege('authenticated','private.consume_user_rate_limit(uuid,text)','EXECUTE'),
   'authenticated cannot call internal rate limiter');
 select ok(not has_function_privilege('authenticated','public.consume_edge_rate_limit(uuid,text)','EXECUTE'),
@@ -148,6 +152,12 @@ select is((select status from public.moderate_social_report(
 select ok(exists(select 1 from public.get_social_feed(null,null,50)
  where content='A second post for dismissal test'),
  'dismissed report does not hide its target');
+reset role;
+select tests.login('author');
+select is((select status from public.create_social_content_report(
+ 'POST',(select id from public.get_social_feed(null,null,50) where content='A second post for dismissal test'),
+ 'SPAM','A new report after the earlier report was dismissed')),
+ 'OPEN','a previously dismissed report does not block a new report');
 reset role;
 
 -- Database triggers enforce per-user post limits even if a client bypasses Edge Functions.

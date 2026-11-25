@@ -12,7 +12,7 @@ import {
 
 const secret = "provider-webhook-test-secret-" + "x".repeat(32);
 const config = {
-  endpoint: "https://provider.example.test/api/scholarship-applications",
+  endpoint: "https://provider.example.com/api/scholarship-applications",
   bearer_token: "provider-token-" + "x".repeat(24),
   webhook_secret: secret,
 };

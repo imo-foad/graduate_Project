@@ -35,6 +35,27 @@ test("write RPCs run in one transaction scope and lock before check-then-write",
     assert.match(fns.get(n)!.body, /is_opportunity_open\(/, `${n} must use the shared open-predicate`);
 });
 
+test("Competition delivery preserves entry checks and requires organizer acknowledgement", () => {
+  const migration = readMigration("0022_competition_delivery_review.sql");
+  const fns = finalFunctions(allMigrationsSql());
+  for (const name of [
+    "apply_for_competition",
+    "configure_competition_provider_mapping",
+    "claim_competition_delivery",
+    "complete_competition_delivery",
+    "fail_competition_delivery",
+    "process_competition_provider_event",
+    "review_competition_application",
+    "get_competition_review_queue",
+  ]) assert.ok(fns.has(name), name);
+  assert.match(fns.get("apply_for_competition")!.body, /registration_opens_at/);
+  assert.match(fns.get("apply_for_competition")!.body, /submission_data/);
+  assert.match(fns.get("claim_competition_delivery")!.body, /competition\.application\.submitted/);
+  assert.match(fns.get("complete_competition_delivery")!.body, /SUBMITTED_EXTERNALLY/);
+  assert.match(migration, /revoke all on private\.competition_provider_mappings,[\s\S]*?private\.competition_delivery_outbox[\s\S]*?from public, anon, authenticated/i);
+  assert.match(migration, /COMPETITION_PROVIDERS_JSON/);
+});
+
 test("open-predicate is defined once in SQL and reused by policies and RPCs", () => {
   const sql = allMigrationsSql();
   assert.match(sql, /create or replace function public\.is_opportunity_open\(/);

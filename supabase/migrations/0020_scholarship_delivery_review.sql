@@ -237,7 +237,7 @@ begin
     update private.scholarship_delivery_outbox o
        set provider_key = p_provider_key,
            external_opportunity_id = btrim(p_external_opportunity_id),
-           status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, delivery_generation = delivery_generation + 1,
+           status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1,
            next_attempt_at = now(), lease_expires_at = null,
            last_error_code = null, updated_at = now()
       from public.scholarship_applications a

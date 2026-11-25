@@ -78,11 +78,13 @@ select tests.login('admin');
 select is(public.assert_platform_admin(),true,'confirmed first administrator passes active admin guard');
 select is(private.is_platform_admin(),true,
   'bootstrap writes active admin membership verified through the guarded helper');
+reset role;
 select ok(exists(select 1 from private.platform_admin_audit
   where action='BOOTSTRAP_FIRST_ADMIN' and target_user_id=tests.id('admin')),
-  'bootstrap writes an immutable audit event');
+  'bootstrap writes an immutable audit event as the database owner');
 
 -- Grant/revoke requires a current active administrator and preserves at least one active administrator.
+select tests.login('admin');
 select is(public.set_platform_admin_access(tests.id('admin2'),true,'Secondary administrator approved'),
   true,'active admin can promote a verified account');
 select throws_ok($q$select public.set_platform_admin_access(tests.id('invitee'),true,'Unconfirmed admin attempt')$q$,

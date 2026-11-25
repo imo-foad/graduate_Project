@@ -1,6 +1,6 @@
 // POST /functions/v1/recommend  { "force"?: boolean }
 // Verifies the caller's JWT, then computes/caches recommendations for THAT user only.
-// The service-role client is used ONLY for the two server-side RPCs; every user-facing read goes through the user client (RLS).
+// The service-role client is used only for the per-user quota and the two trusted recommendation RPCs; every user-facing read uses the user client (RLS).
 // NOTE: not executed in the authoring workspace (no Deno/Supabase runtime); orchestration is unit-tested in tests/.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { runRecommend } from "../_shared/recommend-flow.ts";

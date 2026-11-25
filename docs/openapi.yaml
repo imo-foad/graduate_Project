@@ -170,7 +170,9 @@ components:
         category: { type: string }
         details: { type: string, nullable: true }
         report_status: { type: string, enum: [OPEN, RESOLVED, DISMISSED] }
+        reporter_id: { type: string, format: uuid }
         reporter_name: { type: string }
+        target_author_id: { type: string, format: uuid, nullable: true }
         target_author_name: { type: string, nullable: true }
         content: { type: string }
         content_moderation_status: { type: string, enum: [VISIBLE, HIDDEN, REMOVED, MISSING] }
@@ -427,7 +429,7 @@ components:
         ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED,
         CANNOT_REPORT_OWN_CONTENT, ALREADY_REPORTED, SOCIAL_CONTENT_NOT_FOUND, SOCIAL_REPORT_NOT_FOUND,
         SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE, SOCIAL_CONTENT_NOT_FOUND,
-        RATE_LIMIT_EXCEEDED, RATE_LIMIT_UNAVAILABLE. HTTP 429 includes Retry-After seconds.
+        RATE_LIMIT_EXCEEDED. HTTP 429 includes Retry-After seconds.
       content:
         application/json:
           schema:

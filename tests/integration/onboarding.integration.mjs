@@ -252,6 +252,15 @@ try {
   graduateToken = graduate.token;
   pass("invited graduate can sign in after confirmation", graduate.id === graduateId);
 
+  const recoveryRequest = await request("/auth/v1/recover", {
+    method: "POST",
+    headers: headers(null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ email: graduateEmail }),
+  });
+  pass("invited graduate can start password recovery through Supabase Auth",
+    recoveryRequest.status === 200);
+
+
   // A forged role in user_metadata never grants admin capability.
   const forgedAdmin = await callRpc(graduateToken, "assert_platform_admin");
   pass("forged user_metadata role does not confer platform-admin privilege",
@@ -375,9 +384,13 @@ try {
     headers: headers(graduateToken, { "Content-Type": "application/json" }),
     body: JSON.stringify({}),
   });
+  // JWT verification may reject the banned token at the gateway (401) before the
+  // Edge Function runs; otherwise the handler rejects it after Auth lookup (403).
+  const suspendedFunctionError = suspendedFunction.json?.error ?? suspendedFunction.json?.message ?? "";
   pass("existing JWT cannot call user Edge Functions after suspension",
-    suspendedFunction.status === 403 && suspendedFunction.json?.error === "UNAUTHENTICATED" ||
-    suspendedFunction.status === 403 && suspendedFunction.json?.error === "ACCOUNT_UNAVAILABLE");
+    suspendedFunction.status === 401 ||
+    (suspendedFunction.status === 403 &&
+      ["UNAUTHENTICATED", "ACCOUNT_UNAVAILABLE"].includes(suspendedFunctionError)));
 
   const reactivate = await request("/functions/v1/manage-graduate", {
     method: "POST",

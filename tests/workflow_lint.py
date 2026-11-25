@@ -51,8 +51,12 @@ class Workflow(unittest.TestCase):
         stop = next(s for s in steps("database") if "supabase stop" in s.get("run", ""))
         self.assertIn("timeout 120s", stop["run"])
 
-    def test_social_feed_like_race_is_in_concurrency_suite(self):
+    def test_social_feed_rate_limit_and_like_races_are_in_concurrency_suite(self):
         concurrency = SCRIPTS["tests/db/concurrency.sh"]
+        self.assertIn("public.create_social_post", concurrency)
+        self.assertIn("RATE_LIMIT_EXCEEDED", concurrency)
+        self.assertIn("five posts are accepted", concurrency)
+        self.assertIn("refill_per_second=0.000001", concurrency)
         self.assertIn("public.like_social_post", concurrency)
         self.assertIn("social_post_likes", concurrency)
         self.assertIn("ALREADY_LIKED", concurrency)

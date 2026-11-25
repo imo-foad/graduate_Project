@@ -105,6 +105,10 @@ select throws_ok($q$select public.update_social_post(tests.id('hidden_target'),'
  'PT404','SOCIAL_POST_NOT_FOUND','author cannot edit content while it is under moderation');
 reset role;
 select tests.login('admin');
+select throws_ok($q$select * from public.moderate_social_report(
+ (select report_id from public.get_social_moderation_queue('ALL',20)),
+ 'REMOVE','Attempt a second moderation decision')$q$,
+ 'PT409','SOCIAL_REPORT_ALREADY_REVIEWED','a reviewed report cannot be acted on twice');
 select is((select count(*)::int from public.get_social_moderation_history(
  'POST',(select target_id from public.get_social_moderation_queue('ALL',20)),20)),1,
  'moderation action is recorded in audit history');
@@ -124,6 +128,38 @@ select ok(exists(select 1 from public.get_social_feed(null,null,50)
 select is((select count(*)::int from public.get_social_moderation_history(
  'POST',(select target_id from public.get_social_moderation_queue('ALL',20)),20)),2,
  'restoration is separately audited');
+reset role;
+
+-- A hidden comment is removed from the thread and cannot be edited until restored.
+insert into tests.ids(k,v)
+select 'restored_post', id from public.social_posts where content='A post that will be reported';
+select tests.login('reporter');
+select is((public.add_social_comment(tests.id('restored_post'),'Comment submitted for moderation')).content,
+ 'Comment submitted for moderation','graduate can comment on a visible post');
+reset role;
+insert into tests.ids(k,v)
+select 'target_comment', id from public.social_post_comments
+ where content='Comment submitted for moderation';
+select tests.login('author');
+select is((select status from public.create_social_content_report(
+ 'COMMENT',tests.id('target_comment'),'HARASSMENT','Harassing comment')),
+ 'OPEN','graduate can report another user comment');
+reset role;
+select tests.login('admin');
+select is((select content_moderation_status from public.moderate_social_report(
+ (select report_id from public.get_social_moderation_queue('OPEN',20) where target_type='COMMENT'),
+ 'HIDE','Comment violates community rules')),
+ 'HIDDEN','admin can hide a reported comment');
+reset role;
+select tests.login('reporter');
+select throws_ok($q$select public.update_social_comment(tests.id('target_comment'),'replace hidden comment')$q$,
+ 'PT404','SOCIAL_COMMENT_NOT_FOUND','author cannot edit a hidden comment');
+select is((select count(*)::int from public.get_social_post_comments(
+ tests.id('restored_post'),null,null,50)),0,'hidden comment is absent from the thread');
+reset role;
+select tests.login('admin');
+select is(public.restore_social_content('COMMENT',tests.id('target_comment'),'Appeal accepted'),
+ true,'admin can restore a reviewed comment');
 reset role;
 
 -- The immutable audit trigger rejects tampering even when an operator attempts direct SQL.

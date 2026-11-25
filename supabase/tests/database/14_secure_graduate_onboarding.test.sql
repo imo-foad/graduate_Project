@@ -76,8 +76,8 @@ reset role;
 
 select tests.login('admin');
 select is(public.assert_platform_admin(),true,'confirmed first administrator passes active admin guard');
-select is((select count(*)::int from private.platform_admins where user_id=tests.id('admin') and is_active),1,
-  'bootstrap writes the private admin membership');
+select is(private.is_platform_admin(),true,
+  'bootstrap writes active admin membership verified through the guarded helper');
 select ok(exists(select 1 from private.platform_admin_audit
   where action='BOOTSTRAP_FIRST_ADMIN' and target_user_id=tests.id('admin')),
   'bootstrap writes an immutable audit event');

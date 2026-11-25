@@ -453,6 +453,12 @@ components:
         PROVIDER_EVENT_ID_CONFLICT, NOT_A_COMPETITION,
         COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
+        409 ALREADY_REPORTED, SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE.
+        422 CANNOT_REPORT_OWN_CONTENT, INVALID_RATE_LIMIT_SUBJECT.
+        403 MODERATION_AUDIT_IMMUTABLE, SERVICE_ROLE_REQUIRED, SOCIAL_AUTHOR_MISMATCH.
+        404 SOCIAL_CONTENT_NOT_FOUND, SOCIAL_REPORT_NOT_FOUND.
+        429 RATE_LIMIT_EXCEEDED.
+        500 RATE_LIMIT_POLICY_NOT_FOUND, UNSUPPORTED_SOCIAL_RATE_LIMIT_TARGET.
       content:
         application/json:
           schema:
@@ -933,6 +939,174 @@ paths:
                 p_post_id: { type: string, format: uuid }
       responses:
         '200': { description: true when unliked }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_social_content_report:
+    post:
+      summary: Report another graduate's visible post or comment; one open report per reporter and target
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_target_type, p_target_id, p_category]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_category: { type: string, enum: [SPAM, HARASSMENT, HATE_OR_VIOLENCE, THREATS, SCAM, PRIVACY, INAPPROPRIATE, OTHER] }
+                p_details: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200':
+          description: Report opened
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    report_id: { type: string, format: uuid }
+                    status: { type: string, enum: [OPEN] }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_my_social_reports:
+    post:
+      summary: List only the authenticated graduate's own abuse reports
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Report history for the authenticated graduate
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    report_id: { type: string, format: uuid }
+                    target_type: { type: string, enum: [POST, COMMENT] }
+                    status: { type: string, enum: [OPEN, RESOLVED, DISMISSED] }
+                    category: { type: string, enum: [SPAM, HARASSMENT, HATE_OR_VIOLENCE, THREATS, SCAM, PRIVACY, INAPPROPRIATE, OTHER] }
+                    created_at: { type: string, format: date-time }
+                    reviewed_at: { type: string, format: date-time, nullable: true }
+                    resolution_note: { type: string, nullable: true }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_moderation_queue:
+    post:
+      summary: Platform-admin-only moderation queue with target content and reporter/author display information
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, enum: [OPEN, RESOLVED, DISMISSED, ALL], default: OPEN }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Moderation reports visible to an active platform administrator
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    report_id: { type: string, format: uuid }
+                    target_type: { type: string, enum: [POST, COMMENT] }
+                    target_id: { type: string, format: uuid }
+                    category: { type: string }
+                    details: { type: string, nullable: true }
+                    report_status: { type: string, enum: [OPEN, RESOLVED, DISMISSED] }
+                    created_at: { type: string, format: date-time }
+                    reporter_id: { type: string, format: uuid }
+                    reporter_name: { type: string, nullable: true }
+                    target_author_id: { type: string, format: uuid, nullable: true }
+                    target_author_name: { type: string, nullable: true }
+                    content: { type: string }
+                    content_moderation_status: { type: string, enum: [VISIBLE, HIDDEN, REMOVED, MISSING] }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/moderate_social_report:
+    post:
+      summary: Active platform admin hides/removes reported content or dismisses a report; action is audited
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_report_id, p_action, p_reason]
+              properties:
+                p_report_id: { type: string, format: uuid }
+                p_action: { type: string, enum: [HIDE, REMOVE, DISMISS] }
+                p_reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        '200':
+          description: Moderation decision and resulting state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    report_id: { type: string, format: uuid }
+                    status: { type: string, enum: [RESOLVED, DISMISSED] }
+                    content_moderation_status: { type: string, enum: [HIDDEN, REMOVED, MISSING, UNCHANGED] }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/restore_social_content:
+    post:
+      summary: Active platform admin restores previously hidden or removed social content and writes an audit event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_target_type, p_target_id, p_reason]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        '200': { description: true when content is restored }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_moderation_history:
+    post:
+      summary: Active platform-admin-only append-only moderation audit history for one content item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_target_type, p_target_id]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Moderation events for the selected content item
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    event_id: { type: string, format: uuid }
+                    action: { type: string, enum: [HIDE, REMOVE, RESTORE, DISMISS_REPORT, RESOLVE_MISSING_TARGET] }
+                    actor_user_id: { type: string, format: uuid }
+                    reason: { type: string }
+                    occurred_at: { type: string, format: date-time }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/withdraw_application:
     post:

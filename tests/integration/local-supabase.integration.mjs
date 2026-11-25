@@ -54,10 +54,16 @@ const encodePath = (p) => p.split("/").map(encodeURIComponent).join("/");
 const bucket = "cv-documents";
 const objectPath = `${a.id}/ci-${randomUUID()}.pdf`;
 const foreignPath = `${a.id}/ci-foreign-${randomUUID()}.pdf`;
+const unattachedScholarshipCvPath = `${a.id}/ci-unattached-${randomUUID()}.pdf`;
 const pdf = Buffer.from("%PDF-1.4\n% local Supabase integration test\n1 0 obj<<>>endobj\n%%EOF\n");
 let cvId = null;
+let unattachedScholarshipCvId = null;
 let scholarshipApplicationId = null;
 let scholarshipOpportunityId = null;
+let adminId = null;
+let adminToken = null;
+let adminScholarshipOpportunityId = null;
+let adminScholarshipApplicationId = null;
 let competitionApplicationId = null;
 let competitionOpportunityId = null;
 let socialPostId = null;
@@ -316,6 +322,296 @@ try {
     scholarshipNotifications.status === 200 &&
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_INTERNAL_ONLY" && n.related_entity_id === scholarshipApplicationId) &&
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_WITHDRAWN" && n.related_entity_id === scholarshipApplicationId));
+
+  // Internal Alumni Connect Scholarship lifecycle: the platform admin is created only for this
+  // disposable integration run and is removed in finally, so repeated local runs remain safe.
+  const adminEmail = "scholarship-admin-" + randomUUID() + "@tests.local";
+  const adminPassword = "Scholarship-Admin-" + randomUUID() + "!x9";
+  const adminCreate = await request("/auth/v1/admin/users", {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      email: adminEmail,
+      password: adminPassword,
+      email_confirm: true,
+      user_metadata: { full_name: "Scholarship Review Admin" },
+    }),
+  });
+  adminId = adminCreate.json?.user?.id ?? adminCreate.json?.id ?? null;
+  pass("local integration creates a temporary confirmed Scholarship admin",
+    (adminCreate.status === 200 || adminCreate.status === 201) && Boolean(adminId));
+  assert.ok(adminId, "temporary Scholarship admin id is required");
+
+  const adminLogin = await request("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: headers(null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+  });
+  pass("temporary Scholarship admin can authenticate",
+    adminLogin.status === 200 && Boolean(adminLogin.json?.access_token));
+  adminToken = adminLogin.json?.access_token ?? null;
+  assert.ok(adminToken, "temporary Scholarship admin JWT is required");
+
+  const bootstrapAdmin = await request("/rest/v1/rpc/bootstrap_first_platform_admin", {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_user_id: adminId,
+      p_operator_reference: "Local Scholarship integration " + randomUUID(),
+    }),
+  });
+  pass("service-only bootstrap grants the temporary admin role",
+    bootstrapAdmin.status === 200 && bootstrapAdmin.json === true);
+
+  const adminGuard = await request("/rest/v1/rpc/assert_platform_admin", {
+    method: "POST", headers: headers(adminToken, { "Content-Type": "application/json" }), body: "{}",
+  });
+  pass("database confirms the temporary account is a platform admin",
+    adminGuard.status === 200 && adminGuard.json === true);
+
+  const createInternalScholarship = await request("/rest/v1/rpc/create_admin_scholarship", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_title: "CI Internal Graduate Research Award",
+      p_organizer_name: "Alumni Connect",
+      p_description: "An internally managed scholarship used for the local end-to-end workflow.",
+      p_location: "Online",
+      p_attendance_mode: "ONLINE",
+      p_deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      p_target_fields: ["Computer Science"],
+      p_allowed_degrees: [],
+      p_required_certifications: [],
+    }),
+  });
+  const internalScholarshipCreated = createInternalScholarship.status === 200 &&
+    createInternalScholarship.json?.type === "SCHOLARSHIP" &&
+    createInternalScholarship.json?.status === "DRAFT" &&
+    createInternalScholarship.json?.is_sample === false;
+  if (!internalScholarshipCreated) {
+    console.error("Scholarship create RPC diagnostic:", JSON.stringify({
+      http_status: createInternalScholarship.status,
+      response: createInternalScholarship.json,
+    }));
+  }
+  pass("platform admin creates an internal Scholarship DRAFT", internalScholarshipCreated);
+  adminScholarshipOpportunityId = createInternalScholarship.json?.id ?? null;
+  assert.ok(adminScholarshipOpportunityId, "internal Scholarship id is required");
+
+  const updateInternalScholarship = await request("/rest/v1/rpc/update_admin_scholarship", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: adminScholarshipOpportunityId,
+      p_title: "CI Internal Graduate Research Award Updated",
+      p_organizer_name: "Alumni Connect",
+      p_description: "Updated internal Scholarship description used by HTTP integration tests.",
+      p_location: "Online",
+      p_attendance_mode: "ONLINE",
+      p_deadline: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+      p_target_fields: ["Computer Science", "AI"],
+      p_allowed_degrees: [],
+      p_required_certifications: [],
+    }),
+  });
+  pass("platform admin updates the Scholarship DRAFT",
+    updateInternalScholarship.status === 200 &&
+    updateInternalScholarship.json?.title === "CI Internal Graduate Research Award Updated");
+
+  const publishInternalScholarship = await request("/rest/v1/rpc/publish_admin_scholarship", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: adminScholarshipOpportunityId }),
+  });
+  pass("platform admin publishes the internal Scholarship",
+    publishInternalScholarship.status === 200 && publishInternalScholarship.json?.status === "ACTIVE");
+
+  const applyInternalScholarship = await request("/rest/v1/rpc/apply_for_scholarship", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: adminScholarshipOpportunityId,
+      p_cv_document_id: cvId,
+      p_personal_statement: "I am applying to the internal Alumni Connect research award.",
+      p_application_data: { study_area: "Computer Science", motivation: "Research" },
+    }),
+  });
+  pass("graduate submits to an admin-created internal Scholarship over HTTP",
+    applyInternalScholarship.status === 200 &&
+    applyInternalScholarship.json?.status === "SUBMITTED" &&
+    applyInternalScholarship.json?.graduate_id === a.id);
+  adminScholarshipApplicationId = applyInternalScholarship.json?.id ?? null;
+  assert.ok(adminScholarshipApplicationId, "internal Scholarship application id is required");
+
+  const adminQueue = await request("/rest/v1/rpc/list_admin_scholarship_applications", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: adminScholarshipOpportunityId,
+      p_status: "SUBMITTED",
+      p_limit: 25,
+    }),
+  });
+  pass("central admin sees the application in the filtered review queue",
+    adminQueue.status === 200 && adminQueue.json?.length === 1 &&
+    adminQueue.json[0]?.application_id === adminScholarshipApplicationId &&
+    adminQueue.json[0]?.is_sample === false);
+
+  const nonAdminQueue = await request("/rest/v1/rpc/list_admin_scholarship_applications", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_status: "ALL" }),
+  });
+  pass("ordinary graduate cannot access the organizer review queue",
+    nonAdminQueue.status === 403 && nonAdminQueue.json?.message === "ADMIN_REQUIRED");
+
+  const adminDetails = await request("/rest/v1/rpc/get_admin_scholarship_application", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: adminScholarshipApplicationId }),
+  });
+  pass("admin opens application details and original flexible JSON answers",
+    adminDetails.status === 200 && adminDetails.json?.length === 1 &&
+    adminDetails.json[0]?.applicant_name === demoA.full_name &&
+    adminDetails.json[0]?.application_data?.study_area === "Computer Science" &&
+    adminDetails.json[0]?.cv_storage_path === objectPath);
+
+  const adminReadAttachedCv = await request(
+    "/storage/v1/object/" + bucket + "/" + encodePath(adminDetails.json?.[0]?.cv_storage_path ?? ""),
+    { headers: headers(adminToken) },
+  );
+  pass("platform admin can read the CV attached to a Scholarship application",
+    adminReadAttachedCv.status === 200);
+
+  const unattachedCvUpload = await request(
+    "/storage/v1/object/" + bucket + "/" + encodePath(unattachedScholarshipCvPath),
+    {
+      method: "POST",
+      headers: headers(a.token, { "Content-Type": "application/pdf", "x-upsert": "false" }),
+      body: pdf,
+    },
+  );
+  pass("graduate can upload a separate CV that is not attached to a Scholarship",
+    unattachedCvUpload.status === 200 || unattachedCvUpload.status === 201);
+
+  const unattachedCvMetadata = await request("/rest/v1/cv_documents", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json", Prefer: "return=representation" }),
+    body: JSON.stringify({
+      graduate_id: a.id,
+      storage_path: unattachedScholarshipCvPath,
+      file_type: "pdf",
+      size_bytes: pdf.length,
+    }),
+  });
+  pass("graduate stores metadata for the unrelated CV",
+    unattachedCvMetadata.status === 201 && unattachedCvMetadata.json?.length === 1);
+  unattachedScholarshipCvId = unattachedCvMetadata.json?.[0]?.id ?? null;
+
+  const adminReadUnattachedCv = await request(
+    "/storage/v1/object/" + bucket + "/" + encodePath(unattachedScholarshipCvPath),
+    { headers: headers(adminToken) },
+  );
+  pass("platform admin cannot read a CV not attached to any Scholarship application",
+    !adminReadUnattachedCv.ok);
+
+  const adminUnattachedMetadata = await request(
+    "/rest/v1/cv_documents?select=id&id=eq." + unattachedScholarshipCvId,
+    { headers: headers(adminToken) },
+  );
+  pass("platform admin cannot list metadata for an unrelated CV",
+    adminUnattachedMetadata.status === 200 && adminUnattachedMetadata.json?.length === 0);
+
+  const invalidSkipReview = await request("/rest/v1/rpc/review_scholarship_application", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_application_id: adminScholarshipApplicationId,
+      p_status: "ACCEPTED",
+      p_note: "This direct decision must be rejected.",
+    }),
+  });
+  pass("review API rejects skipping UNDER_REVIEW",
+    invalidSkipReview.status === 422 && invalidSkipReview.json?.message === "INVALID_STATUS_TRANSITION");
+
+  const beginReview = await request("/rest/v1/rpc/review_scholarship_application", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_application_id: adminScholarshipApplicationId,
+      p_status: "UNDER_REVIEW",
+      p_note: "CI reviewer checked the application and CV.",
+    }),
+  });
+  pass("platform admin advances SUBMITTED to UNDER_REVIEW",
+    beginReview.status === 200 && beginReview.json?.status === "UNDER_REVIEW");
+
+  const applicantStatusDuringReview = await request(
+    "/rest/v1/scholarship_applications?select=id,status&id=eq." + adminScholarshipApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("applicant can track UNDER_REVIEW status",
+    applicantStatusDuringReview.status === 200 &&
+    applicantStatusDuringReview.json?.[0]?.status === "UNDER_REVIEW");
+
+  const withdrawAfterReview = await request("/rest/v1/rpc/withdraw_scholarship_application", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: adminScholarshipApplicationId }),
+  });
+  pass("applicant cannot withdraw after admin review has started",
+    withdrawAfterReview.status === 422 &&
+    withdrawAfterReview.json?.message === "CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION");
+
+  const finishReview = await request("/rest/v1/rpc/review_scholarship_application", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_application_id: adminScholarshipApplicationId,
+      p_status: "ACCEPTED",
+      p_note: "CI application accepted after review.",
+    }),
+  });
+  pass("platform admin records the final ACCEPTED decision",
+    finishReview.status === 200 && finishReview.json?.status === "ACCEPTED");
+
+  const adminReviewHistory = await request(
+    "/rest/v1/scholarship_application_status_history?select=old_status,new_status,source_type,note&scholarship_application_id=eq." +
+      adminScholarshipApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("applicant reads the complete graduate and admin review history",
+    adminReviewHistory.status === 200 && adminReviewHistory.json?.length === 3 &&
+    adminReviewHistory.json.some((h) => h.source_type === "ADMIN_ACTION" && h.new_status === "UNDER_REVIEW") &&
+    adminReviewHistory.json.some((h) => h.source_type === "ADMIN_ACTION" && h.new_status === "ACCEPTED"));
+
+  const adminReviewNotifications = await request(
+    "/rest/v1/notifications?select=type,related_entity_id&type=eq.SCHOLARSHIP_APPLICATION_STATUS_UPDATED&related_entity_id=eq." +
+      adminScholarshipApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("applicant receives a notification for each admin review transition",
+    adminReviewNotifications.status === 200 && adminReviewNotifications.json?.length === 2);
+
+  const sampleReview = await request("/rest/v1/rpc/review_scholarship_application", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_application_id: scholarshipApplicationId,
+      p_status: "UNDER_REVIEW",
+      p_note: "Sample listing must never enter the real review lifecycle.",
+    }),
+  });
+  pass("admin cannot review a seeded sample Scholarship application",
+    sampleReview.status === 422 && sampleReview.json?.message === "SAMPLE_DATA_NOT_REVIEWABLE");
+
+  const closeInternalScholarship = await request("/rest/v1/rpc/close_admin_scholarship", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: adminScholarshipOpportunityId }),
+  });
+  pass("platform admin can close the internal Scholarship",
+    closeInternalScholarship.status === 200 && closeInternalScholarship.json?.status === "CLOSED");
 
   // Competition entry is intentionally separate from event registration.
   const competitionCatalog = await request(
@@ -656,12 +952,42 @@ try {
   }
   if (scholarshipApplicationId) pass("scholarship test rows cleaned up", scholarshipCleanup.length === 3 && scholarshipCleanup.every((r) => r.ok));
 
+  // Remove the internal Scholarship workflow before deleting its temporary admin identity.
+  if (adminScholarshipApplicationId) {
+    await request("/rest/v1/scholarship_applications?id=eq." + adminScholarshipApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+    await request("/rest/v1/notifications?related_entity_id=eq." + adminScholarshipApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+    if (adminScholarshipOpportunityId) {
+      await request("/rest/v1/recommendation_interactions?graduate_id=eq." + a.id +
+        "&opportunity_id=eq." + adminScholarshipOpportunityId + "&interaction_type=eq.APPLY", {
+        method: "DELETE", headers: headers(service),
+      }).catch(() => {});
+    }
+  }
+  if (adminScholarshipOpportunityId) {
+    await request("/rest/v1/opportunities?id=eq." + adminScholarshipOpportunityId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+  }
+  if (adminId) {
+    await request("/auth/v1/admin/users/" + adminId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+  }
+
   // Cleanup uses the local service role through the Storage/PostgREST APIs, never direct SQL on storage.objects.
   await removeObject(service, objectPath).catch(() => {});
   await removeObject(service, foreignPath).catch(() => {});
   if (cvId) await request(`/rest/v1/cv_documents?id=eq.${cvId}`, {
     method: "DELETE", headers: headers(service),
   }).catch(() => {});
+  if (unattachedScholarshipCvId) await request(`/rest/v1/cv_documents?id=eq.${unattachedScholarshipCvId}`, {
+    method: "DELETE", headers: headers(service),
+  }).catch(() => {});
+  await removeObject(service, unattachedScholarshipCvPath).catch(() => {});
 }
 
 console.log(`LOCAL HTTP INTEGRATION PASSED: ${passed} checks`);

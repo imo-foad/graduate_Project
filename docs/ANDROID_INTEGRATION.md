@@ -67,31 +67,41 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     exclude candidates below the threshold; preferred minimums reduce the experience match score.
 
 14. **Scholarship applications and external delivery**:
-    - List opportunities with GET \`/rest/v1/opportunities?type=eq.SCHOLARSHIP&order=deadline.asc\`. Sample listings must remain labelled as sample.
-    - Submit through \`POST /functions/v1/submit-scholarship\` (not by calling the table directly). The verified JWT determines the graduate:
-      \`\`\`json
+    - List opportunities with GET `/rest/v1/opportunities?type=eq.SCHOLARSHIP&order=deadline.asc`.
+    - Submit with POST `/rest/v1/rpc/apply_for_scholarship`:
+      ```json
       {
         "p_opportunity_id": "<scholarship uuid>",
         "p_cv_document_id": "<own cv uuid or null>",
         "p_personal_statement": "Why I am applying...",
         "p_application_data": { "study_area": "Computer Science", "motivation": "Research" }
       }
-      \`\`\`
-    - \`p_opportunity_id\` is required. The CV must belong to the caller; the statement is limited to 10,000 characters and \`p_application_data\` must be a JSON object no larger than 32 KiB. The provider-specific form schema is configured by the platform; unknown fields are retained as JSON answers.
+      ```
+    - Only `p_opportunity_id` is required. The CV must belong to the caller; the statement is limited to 10,000 characters and `p_application_data` must be a JSON object no larger than 32 KiB. Answers are stored without an imposed form schema because the current catalogue does not provide scholarship-specific questions.
+    - The server checks opportunity type, open/deadline/end state, server-side eligibility and duplicate submissions. One submission per graduate/opportunity remains enforced after withdrawal.
+    - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/scholarship_application_status_history`.
+    - Withdraw with POST `/rest/v1/rpc/withdraw_scholarship_application` and body `{"p_application_id":"<application uuid>"}`.
+    - The current form stays unchanged: CV (optional), personal statement (maximum 10,000 characters) and flexible JSON answers (maximum 32 KiB). No per-Scholarship Form Builder is part of this contract.
+    - Seeded listings have `is_sample=true` and are demonstration-only. They remain visibly sample and cannot be reviewed or accepted/rejected. Real Scholarships are created by Alumni Connect platform admins with `is_sample=false`; their applications enter the internal review queue.
+    - Platform admins create/update/publish/close Scholarships with `create_admin_scholarship`, `update_admin_scholarship`, `publish_admin_scholarship` and `close_admin_scholarship`. Creation starts in DRAFT; publishing moves to ACTIVE; closing moves DRAFT/ACTIVE to CLOSED. The listing is managed inside Alumni Connect; there is no external provider submission.
+    - The central review queue uses `list_admin_scholarship_applications` (optional opportunity/status filters and paired cursor values); use `get_admin_scholarship_application` for applicant profile, CV id and submitted answers. Platform admins can download only CV objects attached to Scholarship applications; they cannot read unrelated graduates' CVs through this policy.
+    - Review through `review_scholarship_application`: SUBMITTED → UNDER_REVIEW → ACCEPTED or REJECTED. Decisions cannot skip or reverse a stage. Each step records ADMIN_ACTION, actor, timestamp and optional note in status history, and creates a notification for the applicant. A student can withdraw only while SUBMITTED.
+    - Applicants read their own status and history through the existing `scholarship_applications` and `scholarship_application_status_history` table paths.
+
     - **Never treat a locally saved application as an externally submitted application.** The lifecycle is:
-      - \`PENDING_DELIVERY\`: saved by this platform; provider has NOT confirmed receipt.
-      - \`SUBMITTED_EXTERNALLY\`: only set after the provider returns a valid acknowledgement and external application reference.
-      - \`IN_REVIEW\`: the organizer/provider or an authorized reviewer has begun reviewing it.
-      - \`ACCEPTED\` / \`REJECTED\`: final decision received from the provider or authorized reviewer.
-      - \`DELIVERY_FAILED\`: delivery exhausted its retry budget; a platform admin can queue a new attempt.
-      - \`INTERNAL_ONLY\`: sample listing only; it is never transmitted to a provider.
-      - \`WITHDRAWN\`: withdrawn before external delivery. Once \`SUBMITTED_EXTERNALLY\`, withdrawal must be handled by the provider; the app will not claim it has been cancelled externally.
-    - \`delivery_status\` is independent from application status: \`NOT_REQUIRED\`, \`BLOCKED\`, \`PENDING\`, \`PROCESSING\`, \`DELIVERED\`, \`FAILED\`, \`CANCELLED\`. A missing provider mapping or missing server-side provider secret leaves the application blocked/pending and does not mean the provider received it.
-    - Read own submissions from \`/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)\` and status history from \`/rest/v1/scholarship_application_status_history\`. History identifies whether a transition came from the graduate, system, provider, reviewer or administrator.
-    - Withdraw an application before delivery with \`POST /rest/v1/rpc/withdraw_scholarship_application\` and \`{"p_application_id":"<application uuid>"}\`. A request already processing or externally delivered cannot be locally withdrawn.
-    - **Provider configuration is server-side only.** A platform admin maps a non-sample scholarship using \`configure_scholarship_provider_mapping\` with \`p_opportunity_id\`, \`p_provider_key\`, \`p_external_opportunity_id\`, and optional \`p_is_enabled\`. Credentials/endpoints are never stored in an opportunity row or shipped in the APK.
-    - Configure the Edge Function secret \`SCHOLARSHIP_PROVIDERS_JSON\` as an object keyed by the same provider key. Example shape (replace all placeholders; never commit actual values):
-      \`\`\`json
+      - `PENDING_DELIVERY`: saved by this platform; provider has NOT confirmed receipt.
+      - `SUBMITTED_EXTERNALLY`: only set after the provider returns a valid acknowledgement and external application reference.
+      - `IN_REVIEW`: the organizer/provider or an authorized reviewer has begun reviewing it.
+      - `ACCEPTED` / `REJECTED`: final decision received from the provider or authorized reviewer.
+      - `DELIVERY_FAILED`: delivery exhausted its retry budget; a platform admin can queue a new attempt.
+      - `INTERNAL_ONLY`: sample listing only; it is never transmitted to a provider.
+      - `WITHDRAWN`: withdrawn before external delivery. Once `SUBMITTED_EXTERNALLY`, withdrawal must be handled by the provider; the app will not claim it has been cancelled externally.
+    - `delivery_status` is independent from application status: `NOT_REQUIRED`, `BLOCKED`, `PENDING`, `PROCESSING`, `DELIVERED`, `FAILED`, `CANCELLED`. A missing provider mapping or missing server-side provider secret leaves the application blocked/pending and does not mean the provider received it.
+    - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and status history from `/rest/v1/scholarship_application_status_history`. History identifies whether a transition came from the graduate, system, provider, reviewer or administrator.
+    - Withdraw an application before delivery with `POST /rest/v1/rpc/withdraw_scholarship_application` and `{"p_application_id":"<application uuid>"}`. A request already processing or externally delivered cannot be locally withdrawn.
+    - **Provider configuration is server-side only.** A platform admin maps a non-sample scholarship using `configure_scholarship_provider_mapping` with `p_opportunity_id`, `p_provider_key`, `p_external_opportunity_id`, and optional `p_is_enabled`. Credentials/endpoints are never stored in an opportunity row or shipped in the APK.
+    - Configure the Edge Function secret `SCHOLARSHIP_PROVIDERS_JSON` as an object keyed by the same provider key. Example shape (replace all placeholders; never commit actual values):
+      ```json
       {
         "PROVIDER_A": {
           "endpoint": "https://provider.example/api/v1/scholarship-applications",
@@ -99,15 +109,15 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
           "webhook_secret": "<random secret of at least 32 characters>"
         }
       }
-      \`\`\`
+      ```
       Endpoints must be HTTPS. Secrets belong in Supabase Edge Function secrets, not SQL, GitHub source, logs or Android configuration.
-    - **Outgoing provider contract:** the backend POSTs JSON with \`schema_version\`, \`event=scholarship.application.submitted\`, \`application_id\`, \`provider_opportunity_id\`, \`submitted_at\`, \`applicant\`, \`personal_statement\`, \`answers\`, \`cv_download_url\`, and \`idempotency_key\`. It sends \`Authorization: Bearer\`, \`Idempotency-Key\`, \`X-Alumni-Timestamp\`, and \`X-Alumni-Signature: sha256=<hex>\`. The HMAC-SHA256 signature is over \`timestamp + "." + raw_request_body\`. The provider must deduplicate by \`Idempotency-Key\` and respond with a 2xx JSON body containing \`{"accepted":true,"application_reference":"<provider id>"}\`; optional \`request_id\` is retained for delivery audit.
+    - **Outgoing provider contract:** the backend POSTs JSON with `schema_version`, `event=scholarship.application.submitted`, `application_id`, `provider_opportunity_id`, `submitted_at`, `applicant`, `personal_statement`, `answers`, `cv_download_url`, and `idempotency_key`. It sends `Authorization: Bearer`, `Idempotency-Key`, `X-Alumni-Timestamp`, and `X-Alumni-Signature: sha256=<hex>`. The HMAC-SHA256 signature is over `timestamp + "." + raw_request_body`. The provider must deduplicate by `Idempotency-Key` and respond with a 2xx JSON body containing `{"accepted":true,"application_reference":"<provider id>"}`; optional `request_id` is retained for delivery audit.
     - If a CV is attached, the provider receives a private signed download URL that expires after 10 minutes. It must download the file during that window; the permanent Storage path and service-role credentials are never sent.
-    - **Provider status callback:** configure the provider to POST to \`/functions/v1/scholarship-provider-callback\` with \`provider_key\`, unique \`event_id\`, \`application_reference\`, \`status\` (\`IN_REVIEW\`, \`ACCEPTED\`, or \`REJECTED\`), and optional \`note\`. Sign the exact raw JSON body with the shared webhook secret using the same timestamp/HMAC headers. Timestamps older than five minutes, invalid signatures, unknown references and invalid transitions are rejected. Repeated event IDs with the same payload are idempotent; reusing an event ID with a different payload is rejected.
-    - **Internal organizer review:** a platform admin assigns a verified account to a provider with \`set_scholarship_reviewer\`. Reviewers use \`get_scholarship_review_queue\` and \`review_scholarship_application\`; authorization is scoped to their assigned provider. Allowed internal transitions are \`SUBMITTED_EXTERNALLY -> IN_REVIEW -> ACCEPTED|REJECTED\`. Every transition writes history and an in-app notification. Platform admins can manage provider mappings and retry terminal delivery failures.
-    - To view an attached CV during review, call \`POST /functions/v1/get-scholarship-review-cv\` with \`{"application_id":"<id>"}\`. The database verifies the reviewer's active provider assignment (or active platform-admin membership) before the Edge Function creates a private 10-minute signed URL. The reviewer URL never grants direct bucket access and cannot be used for another provider's application.
-    - \`deliver-scholarship\` is a server worker: a trusted scheduler may invoke it with service-role authorization to process due retries; an active platform admin may invoke it for one application after the retry RPC. Never call it from a public client using a service-role key. The worker uses capped exponential backoff, a two-minute lease, a maximum of five automatic attempts, and the stable outbox UUID as its idempotency key.
-    - Seeded/sample scholarships are always \`INTERNAL_ONLY\`; they are not sent to the provider even when a provider mapping exists.
+    - **Provider status callback:** configure the provider to POST to `/functions/v1/scholarship-provider-callback` with `provider_key`, unique `event_id`, `application_reference`, `status` (`IN_REVIEW`, `ACCEPTED`, or `REJECTED`), and optional `note`. Sign the exact raw JSON body with the shared webhook secret using the same timestamp/HMAC headers. Timestamps older than five minutes, invalid signatures, unknown references and invalid transitions are rejected. Repeated event IDs with the same payload are idempotent; reusing an event ID with a different payload is rejected.
+    - **Internal organizer review:** a platform admin assigns a verified account to a provider with `set_scholarship_reviewer`. Reviewers use `get_scholarship_review_queue` and `review_scholarship_application`; authorization is scoped to their assigned provider. Allowed internal transitions are `SUBMITTED_EXTERNALLY -> IN_REVIEW -> ACCEPTED|REJECTED`. Every transition writes history and an in-app notification. Platform admins can manage provider mappings and retry terminal delivery failures.
+    - To view an attached CV during review, call `POST /functions/v1/get-scholarship-review-cv` with `{"application_id":"<id>"}`. The database verifies the reviewer's active provider assignment (or active platform-admin membership) before the Edge Function creates a private 10-minute signed URL. The reviewer URL never grants direct bucket access and cannot be used for another provider's application.
+    - `deliver-scholarship` is a server worker: a trusted scheduler may invoke it with service-role authorization to process due retries; an active platform admin may invoke it for one application after the retry RPC. Never call it from a public client using a service-role key. The worker uses capped exponential backoff, a two-minute lease, a maximum of five automatic attempts, and the stable outbox UUID as its idempotency key.
+    - Seeded/sample scholarships are always `INTERNAL_ONLY`; they are not sent to the provider even when a provider mapping exists.
 
 15. **Competition submissions**:
     - List competitions with GET `/rest/v1/opportunities?type=eq.COMPETITION&order=deadline.asc`.

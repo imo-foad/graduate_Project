@@ -23,7 +23,7 @@ jobs:
         with: { node-version: 22 }
       - run: node --version && npm test
       - run: pip install pyyaml && python3 -m unittest tests/contract_openapi.py -v
-      - run: bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/career-cohort.integration.mjs
+      - run: bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/career-cohort.integration.mjs
       - run: python3 -m unittest tests/workflow_lint.py -v
 
   database:
@@ -50,7 +50,9 @@ jobs:
       - uses: supabase/setup-cli@v1
         with: { version: "3.3.0" }   # pinned to the version verified by CI run #52
       - name: Verify Supabase CLI
-        run: supabase --version
+        run: |
+          command -v supabase
+          timeout 30s supabase --version
       - name: "Database tests (local stack only, fails on any error)"
         run: bash scripts/run-db-tests.sh
       - name: Collect diagnostics

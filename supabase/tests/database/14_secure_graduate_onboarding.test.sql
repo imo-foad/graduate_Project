@@ -69,19 +69,22 @@ select is(public.bootstrap_first_platform_admin(tests.id('admin'),'operator tick
   true,'service-role bootstrap creates the first platform admin');
 select throws_ok($q$select public.bootstrap_first_platform_admin(tests.id('admin2'),'second operator ticket')$q$,
   'PT409','ADMIN_ALREADY_BOOTSTRAPPED','first-admin bootstrap cannot add another admin');
-select throws_ok($q$select public.finalize_graduate_invitation(gen_random_uuid(),null,false,'AUTH_INVITE_REJECTED')$q$,
+select throws_ok($q$select public.finalize_graduate_invitation(
+  gen_random_uuid(),null,false,tests.id('admin'),'AUTH_INVITE_REJECTED')$q$,
   'PT404','INVITATION_NOT_FOUND','service role cannot finalize a nonexistent invitation');
 reset role;
 
 select tests.login('admin');
 select is(public.assert_platform_admin(),true,'confirmed first administrator passes active admin guard');
-select is((select count(*)::int from private.platform_admins where user_id=tests.id('admin') and is_active),1,
-  'bootstrap writes the private admin membership');
+select is(private.is_platform_admin(),true,
+  'bootstrap writes active admin membership verified through the guarded helper');
+reset role;
 select ok(exists(select 1 from private.platform_admin_audit
   where action='BOOTSTRAP_FIRST_ADMIN' and target_user_id=tests.id('admin')),
-  'bootstrap writes an immutable audit event');
+  'bootstrap writes an immutable audit event as the database owner');
 
 -- Grant/revoke requires a current active administrator and preserves at least one active administrator.
+select tests.login('admin');
 select is(public.set_platform_admin_access(tests.id('admin2'),true,'Secondary administrator approved'),
   true,'active admin can promote a verified account');
 select throws_ok($q$select public.set_platform_admin_access(tests.id('invitee'),true,'Unconfirmed admin attempt')$q$,
@@ -92,25 +95,32 @@ select throws_ok($q$select public.set_platform_admin_access(tests.id('admin'),fa
   'PT409','LAST_ACTIVE_ADMIN','last active administrator cannot be revoked');
 reset role;
 
--- The invitation process requires a current platform admin and records explicit manual verification.
+-- Invitation creation is a service-role operation, with the active admin recorded as actor.
 select tests.login('outsider');
 select throws_ok($q$select * from public.create_graduate_invitation(
- 'new.grad@tests.local','New Graduate','Registrar record checked and identity verified')$q$,
- 'PT403','ADMIN_REQUIRED','ordinary graduate cannot send invitations');
+ tests.id('admin'),'new.grad@tests.local','New Graduate',
+ 'Registrar record checked and identity verified')$q$,
+ '42501',null,'ordinary graduate cannot execute the service-only invitation function');
+reset role;
+
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub',tests.id('admin'),'role','service_role')::text,true);
+set local role service_role;
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'bad-email','New Graduate','Registrar record checked and identity verified')$q$,
+ 'PT422','INVALID_INPUT','invalid email is rejected by the service-role operation');
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'new.grad@tests.local','N','Registrar record checked and identity verified')$q$,
+ 'PT422','INVALID_INPUT','invalid display name is rejected by the service-role operation');
+select is((select status from public.create_graduate_invitation(
+ tests.id('admin'),'new.grad@tests.local','New Graduate',
+ 'Registrar record checked and identity verified')),
+ 'INVITING','service role creates an audited invitation on behalf of an active admin');
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'NEW.GRAD@TESTS.LOCAL','Duplicate Graduate','Another verified identity')$q$,
+ 'PT409','INVITATION_ALREADY_ACTIVE','normalized email cannot have duplicate active invitations');
 reset role;
 select tests.login('admin');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'bad-email','New Graduate','Registrar record checked and identity verified')$q$,
- 'PT422','INVALID_INPUT','invalid email is rejected');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'new.grad@tests.local','N','Registrar record checked and identity verified')$q$,
- 'PT422','INVALID_INPUT','invalid display name is rejected');
-select is((select status from public.create_graduate_invitation(
- 'new.grad@tests.local','New Graduate','Registrar record checked and identity verified')),
- 'INVITING','admin may create an audited graduate invitation');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'NEW.GRAD@TESTS.LOCAL','Duplicate Graduate','Another verified identity')$q$,
- 'PT409','INVITATION_ALREADY_ACTIVE','normalized email cannot have duplicate active invitations');
 select is((select count(*)::int from public.list_graduate_invitations('INVITING',50)),1,
  'admins can list invitations and their manual verification record');
 reset role;
@@ -153,8 +163,8 @@ select is(public.set_graduate_account_status_for_admin(
  true,'trusted admin service path can suspend a graduate');
 reset role;
 select tests.login('graduate');
-select throws_ok($q$select public._require_uid()$q$,
- 'PT403','ACCOUNT_UNAVAILABLE','suspended graduate cannot use authenticated RPCs');
+select throws_ok($q$select public.request_account_deletion('suspended account must be blocked')$q$,
+ 'PT403','ACCOUNT_UNAVAILABLE','suspended graduate cannot use authenticated RPCs through a granted RPC');
 select is((select count(*)::int from public.profiles where id=tests.id('graduate')),0,
  'restrictive RLS policy hides all public rows from a suspended graduate');
 select is((select count(*)::int from storage.objects
@@ -185,10 +195,10 @@ select is((select count(*)::int from public.profiles where id=tests.id('graduate
  'a pending deletion request immediately blocks profile reads');
 reset role;
 select tests.login('admin');
-select is((select status from public.review_account_deletion_request(
+select is(public.review_account_deletion_request(
  (select request_id from public.get_account_deletion_queue('REQUESTED',50)
   where user_id=tests.id('graduate')),
- 'REJECT','Identity and retention review did not support deletion')),
+ 'REJECT','Identity and retention review did not support deletion'),
  'REJECTED','admin can reject a deletion request and provide a reason');
 reset role;
 select tests.login('graduate');
@@ -198,8 +208,8 @@ reset role;
 
 -- An untransferred company creator/OWNER cannot be deleted.
 select tests.login('admin');
-select is((select status from public.review_account_deletion_request(
- tests.id('deletion_request_2'),'APPROVE','User identity and retention review complete')),
+select is(public.review_account_deletion_request(
+ tests.id('deletion_request_2'),'APPROVE','User identity and retention review complete'),
  'APPROVED','admin can approve deletion after identity review');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
@@ -225,13 +235,13 @@ reset role;
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2'),tests.id('admin')),
  tests.id('graduate'),'service worker claims an approved deletion after ownership transfer');
 select ok(public.release_account_deletion_claim(tests.id('deletion_request_2')),
  'service worker can release a failed deletion claim for retry');
 select is((select status from private.account_deletion_requests where id=tests.id('deletion_request_2')),
  'APPROVED','failed deletion remains approved for controlled retry');
-select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2'),tests.id('admin')),
  tests.id('graduate'),'service worker can safely reclaim deletion on retry');
 reset role;
 

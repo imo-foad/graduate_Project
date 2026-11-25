@@ -1,4 +1,4 @@
--- 0020: real scholarship delivery outbox, provider callbacks and scoped reviewer lifecycle.
+-- 0021: real scholarship delivery outbox, provider callbacks and scoped reviewer lifecycle.
 -- Applications are never represented as externally submitted until a provider acknowledges them.
 
 alter table public.scholarship_applications
@@ -75,6 +75,7 @@ create table private.scholarship_delivery_outbox (
   delivery_generation integer not null default 1 check (delivery_generation between 1 and 1000),
   max_attempts integer not null default 5 check (max_attempts between 1 and 10),
   next_attempt_at timestamptz not null default now(),
+  last_attempt_started_at timestamptz,
   lease_expires_at timestamptz,
   last_error_code text check (last_error_code is null or last_error_code ~ '^[A-Z0-9_]{1,64}$'),
   provider_reference text,
@@ -1418,7 +1419,16 @@ begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
   end if;
-  if p_provider_key is null or p_provider_key !~ '^[A-Z0-9][A-Z0-9_-]{1,63}
+  if p_provider_key is null or p_provider_key !~ '^[A-Z0-9][A-Z0-9_-]{1,63}$'
+     or p_event_id is null or length(btrim(p_event_id)) not between 1 and 200
+     or p_provider_reference is null or length(btrim(p_provider_reference)) not between 1 and 200
+     or p_new_status is null or p_new_status not in ('IN_REVIEW','ACCEPTED','REJECTED')
+     or (p_note is not null and length(p_note) > 2000)
+     or p_payload_digest is null or p_payload_digest !~ '^[a-f0-9]{64}$' then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+
+  select payload_digest into v_existing_digest
     from private.scholarship_provider_events
    where provider_key = p_provider_key and event_id = btrim(p_event_id);
   if found then
@@ -1570,7 +1580,7 @@ comment on column public.scholarship_applications.delivery_status is
 
 -- Keep the provider's correlation/request id in the minimal audit record.
 alter table private.scholarship_delivery_attempts
-  add column provider_request_id text check (
+  add column if not exists provider_request_id text check (
     provider_request_id is null or length(provider_request_id) <= 200
   );
 
@@ -2112,7 +2122,6 @@ grant execute on function private.expire_scholarship_delivery_leases() to servic
   );
   return p_new_status;
 end
-$process_scholarship_provider_event$;
 
 create or replace function public.get_scholarship_review_cv_path(p_application_id uuid)
 returns text
@@ -2196,7 +2205,7 @@ comment on column public.scholarship_applications.delivery_status is
 
 -- Keep the provider's correlation/request id in the minimal audit record.
 alter table private.scholarship_delivery_attempts
-  add column provider_request_id text check (
+  add column if not exists provider_request_id text check (
     provider_request_id is null or length(provider_request_id) <= 200
   );
 
@@ -2743,7 +2752,6 @@ grant execute on function private.expire_scholarship_delivery_leases() to servic
   );
   return p_new_status;
 end
-$process_scholarship_provider_event$;
 
 create or replace function public.get_scholarship_review_cv_path(p_application_id uuid)
 returns text
@@ -2827,7 +2835,7 @@ comment on column public.scholarship_applications.delivery_status is
 
 -- Keep the provider's correlation/request id in the minimal audit record.
 alter table private.scholarship_delivery_attempts
-  add column provider_request_id text check (
+  add column if not exists provider_request_id text check (
     provider_request_id is null or length(provider_request_id) <= 200
   );
 

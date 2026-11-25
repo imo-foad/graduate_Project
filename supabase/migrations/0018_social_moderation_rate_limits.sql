@@ -571,6 +571,13 @@ begin
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
 
+  -- Lock the target before locking the report row. Reports on the same content serialize
+  -- and cannot deadlock while one decision resolves the remaining open reports.
+  select * into v_report from private.social_content_reports where id = p_report_id;
+  if not found then raise exception 'SOCIAL_REPORT_NOT_FOUND' using errcode = 'PT404'; end if;
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(v_report.target_type || ':' || v_report.target_id::text, 0)
+  );
   select * into v_report from private.social_content_reports
    where id = p_report_id for update;
   if not found then raise exception 'SOCIAL_REPORT_NOT_FOUND' using errcode = 'PT404'; end if;
@@ -651,6 +658,10 @@ begin
      or p_reason is null or length(btrim(p_reason)) not between 5 and 1000 then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_target_type || ':' || p_target_id::text, 0)
+  );
 
   if p_target_type = 'POST' then
     update public.social_posts

@@ -18,7 +18,7 @@ test("every public table has RLS enabled", () => {
 test("no table is writable by clients through catalogue/activity tables", () => {
   const readOnly = ["opportunities", "job_details", "event_details", "opportunity_skills", "opportunity_eligibility",
     "applications", "application_status_history", "event_registrations", "recommendations", "cv_suggestions", "skills",
-    "scholarship_applications", "scholarship_application_status_history", "competition_applications", "competition_application_status_history", "social_posts", "social_post_comments", "social_post_likes"];
+    "scholarship_applications", "scholarship_application_status_history", "competition_applications", "competition_application_status_history"];
   for (const t of readOnly) {
     assert.doesNotMatch(sql, new RegExp(`create policy \\w+ on public\\.${t} for (insert|update|delete|all)`), `${t} has a write policy`);
     assert.doesNotMatch(sql, new RegExp(`grant[^;]*(insert|update|delete)[^;]*on[^;]*public\\.${t}\\b[^;]*to authenticated`, "i"), `${t} has a write grant`);

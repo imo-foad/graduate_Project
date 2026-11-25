@@ -48,7 +48,7 @@ select ok(has_function_privilege('authenticated','public.create_social_post(text
 select ok(has_function_privilege('authenticated','public.add_social_comment(uuid,text)','EXECUTE'),'authenticated can comment');
 select ok(has_function_privilege('authenticated','public.like_social_post(uuid)','EXECUTE'),'authenticated can like');
 select ok(not has_function_privilege('anon','public.create_social_post(text)','EXECUTE'),'anon cannot create posts');
-select ok(not has_function_privilege('authenticated','public._require_active_social_user()','EXECUTE'),'internal active-account guard is not client callable');
+select ok(not has_function_privilege('authenticated','public._require_active_social_user(uuid)','EXECUTE'),'internal active-account guard is not client callable');
 select is((select count(*)::int from pg_class c join pg_namespace n on n.oid=c.relnamespace
  where n.nspname='public' and c.relkind='r' and not c.relrowsecurity),0,'RLS remains enabled on every public table');
 select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid=p.pronamespace

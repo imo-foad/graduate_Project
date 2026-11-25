@@ -41,20 +41,22 @@ alter table public.social_post_likes enable row level security;
 -- No direct table grants or policies. All client access is through the narrow RPC projection below.
 revoke all on public.social_posts, public.social_post_comments, public.social_post_likes from public, anon, authenticated;
 
-create or replace function public._require_active_social_user()
+create or replace function public._require_active_social_user(p_uid uuid)
 returns uuid language plpgsql stable security definer set search_path = ''
 as $require_active_social_user$
-declare v_uid uuid := public._require_uid();
 begin
+  if p_uid is null then
+    raise exception 'UNAUTHENTICATED' using errcode = 'PT401';
+  end if;
   if not exists (
-    select 1 from public.profiles p where p.id = v_uid and p.account_status = 'ACTIVE'
+    select 1 from public.profiles p where p.id = p_uid and p.account_status = 'ACTIVE'
   ) then
     raise exception 'ACCOUNT_UNAVAILABLE' using errcode = 'PT403';
   end if;
-  return v_uid;
+  return p_uid;
 end
 $require_active_social_user$;
-revoke all on function public._require_active_social_user() from public, anon, authenticated;
+revoke all on function public._require_active_social_user(uuid) from public, anon, authenticated;
 
 create or replace function public.get_social_feed(
   p_before_created_at timestamptz default null,
@@ -75,9 +77,9 @@ returns table (
 )
 language plpgsql stable security definer set search_path = ''
 as $get_social_feed$
-declare v_uid uuid := public._require_active_social_user();
+declare v_uid uuid := public._require_uid();
 begin
-  if p_limit is null or p_limit < 1 or p_limit > 50
+  perform public._require_active_social_user(v_uid);  if p_limit is null or p_limit < 1 or p_limit > 50
      or ((p_before_created_at is null) is distinct from (p_before_id is null)) then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -108,9 +110,9 @@ create or replace function public.create_social_post(p_content text)
 returns public.social_posts
 language plpgsql security definer set search_path = ''
 as $create_social_post$
-declare v_uid uuid := public._require_active_social_user(); v_content text; v_post public.social_posts;
+declare v_uid uuid := public._require_uid(); v_content text; v_post public.social_posts;
 begin
-  v_content := btrim(coalesce(p_content, ''));
+  perform public._require_active_social_user(v_uid);  v_content := btrim(coalesce(p_content, ''));
   if length(v_content) not between 1 and 5000 then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -123,9 +125,9 @@ create or replace function public.update_social_post(p_post_id uuid, p_content t
 returns public.social_posts
 language plpgsql security definer set search_path = ''
 as $update_social_post$
-declare v_uid uuid := public._require_active_social_user(); v_content text; v_post public.social_posts;
+declare v_uid uuid := public._require_uid(); v_content text; v_post public.social_posts;
 begin
-  select * into v_post from public.social_posts
+  perform public._require_active_social_user(v_uid);  select * into v_post from public.social_posts
    where id = p_post_id and author_id = v_uid for update;
   if not found then raise exception 'SOCIAL_POST_NOT_FOUND' using errcode = 'PT404'; end if;
   v_content := btrim(coalesce(p_content, ''));
@@ -141,9 +143,9 @@ create or replace function public.delete_social_post(p_post_id uuid)
 returns boolean
 language plpgsql security definer set search_path = ''
 as $delete_social_post$
-declare v_uid uuid := public._require_active_social_user(); v_deleted uuid;
+declare v_uid uuid := public._require_uid(); v_deleted uuid;
 begin
-  delete from public.social_posts where id = p_post_id and author_id = v_uid returning id into v_deleted;
+  perform public._require_active_social_user(v_uid);  delete from public.social_posts where id = p_post_id and author_id = v_uid returning id into v_deleted;
   if v_deleted is null then raise exception 'SOCIAL_POST_NOT_FOUND' using errcode = 'PT404'; end if;
   return true;
 end
@@ -167,9 +169,9 @@ returns table (
 )
 language plpgsql stable security definer set search_path = ''
 as $get_social_post_comments$
-declare v_uid uuid := public._require_active_social_user();
+declare v_uid uuid := public._require_uid();
 begin
-  if p_limit is null or p_limit < 1 or p_limit > 50
+  perform public._require_active_social_user(v_uid);  if p_limit is null or p_limit < 1 or p_limit > 50
      or ((p_before_created_at is null) is distinct from (p_before_id is null)) then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -199,9 +201,9 @@ create or replace function public.add_social_comment(p_post_id uuid, p_content t
 returns public.social_post_comments
 language plpgsql security definer set search_path = ''
 as $add_social_comment$
-declare v_uid uuid := public._require_active_social_user(); v_post_id uuid; v_content text; v_comment public.social_post_comments;
+declare v_uid uuid := public._require_uid(); v_post_id uuid; v_content text; v_comment public.social_post_comments;
 begin
-  select sp.id into v_post_id
+  perform public._require_active_social_user(v_uid);  select sp.id into v_post_id
     from public.social_posts sp
     join public.profiles pr on pr.id = sp.author_id and pr.account_status = 'ACTIVE'
    where sp.id = p_post_id for update of sp;
@@ -220,9 +222,9 @@ create or replace function public.update_social_comment(p_comment_id uuid, p_con
 returns public.social_post_comments
 language plpgsql security definer set search_path = ''
 as $update_social_comment$
-declare v_uid uuid := public._require_active_social_user(); v_content text; v_comment public.social_post_comments;
+declare v_uid uuid := public._require_uid(); v_content text; v_comment public.social_post_comments;
 begin
-  select * into v_comment from public.social_post_comments
+  perform public._require_active_social_user(v_uid);  select * into v_comment from public.social_post_comments
    where id = p_comment_id and author_id = v_uid for update;
   if not found then raise exception 'SOCIAL_COMMENT_NOT_FOUND' using errcode = 'PT404'; end if;
   v_content := btrim(coalesce(p_content, ''));
@@ -238,9 +240,9 @@ create or replace function public.delete_social_comment(p_comment_id uuid)
 returns boolean
 language plpgsql security definer set search_path = ''
 as $delete_social_comment$
-declare v_uid uuid := public._require_active_social_user(); v_deleted uuid;
+declare v_uid uuid := public._require_uid(); v_deleted uuid;
 begin
-  delete from public.social_post_comments where id = p_comment_id and author_id = v_uid returning id into v_deleted;
+  perform public._require_active_social_user(v_uid);  delete from public.social_post_comments where id = p_comment_id and author_id = v_uid returning id into v_deleted;
   if v_deleted is null then raise exception 'SOCIAL_COMMENT_NOT_FOUND' using errcode = 'PT404'; end if;
   return true;
 end
@@ -250,9 +252,9 @@ create or replace function public.like_social_post(p_post_id uuid)
 returns boolean
 language plpgsql security definer set search_path = ''
 as $like_social_post$
-declare v_uid uuid := public._require_active_social_user(); v_post_id uuid;
+declare v_uid uuid := public._require_uid(); v_post_id uuid;
 begin
-  select sp.id into v_post_id
+  perform public._require_active_social_user(v_uid);  select sp.id into v_post_id
     from public.social_posts sp
     join public.profiles pr on pr.id = sp.author_id and pr.account_status = 'ACTIVE'
    where sp.id = p_post_id for update of sp;
@@ -270,9 +272,9 @@ create or replace function public.unlike_social_post(p_post_id uuid)
 returns boolean
 language plpgsql security definer set search_path = ''
 as $unlike_social_post$
-declare v_uid uuid := public._require_active_social_user(); v_post_id uuid; v_deleted uuid;
+declare v_uid uuid := public._require_uid(); v_post_id uuid; v_deleted uuid;
 begin
-  select sp.id into v_post_id
+  perform public._require_active_social_user(v_uid);  select sp.id into v_post_id
     from public.social_posts sp
     join public.profiles pr on pr.id = sp.author_id and pr.account_status = 'ACTIVE'
    where sp.id = p_post_id for update of sp;

@@ -327,9 +327,9 @@ try {
       user_metadata: { full_name: "Scholarship Review Admin" },
     }),
   });
+  adminId = adminCreate.json?.user?.id ?? adminCreate.json?.id ?? null;
   pass("local integration creates a temporary confirmed Scholarship admin",
-    (adminCreate.status === 200 || adminCreate.status === 201) && Boolean(adminCreate.json?.user?.id));
-  adminId = adminCreate.json?.user?.id ?? null;
+    (adminCreate.status === 200 || adminCreate.status === 201) && Boolean(adminId));
   assert.ok(adminId, "temporary Scholarship admin id is required");
 
   const adminLogin = await request("/auth/v1/token?grant_type=password", {

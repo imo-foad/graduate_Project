@@ -364,7 +364,8 @@ begin
       select count(*) from private.platform_admins a
       join public.profiles p on p.id = a.user_id
       where a.is_active and p.account_status = 'ACTIVE'
-    ) <= 1 then
+        and a.user_id <> p_user_id
+    ) = 0 then
       raise exception 'LAST_ACTIVE_ADMIN' using errcode = 'PT409';
     end if;
     update private.platform_admins set is_active = false where user_id = p_user_id;
@@ -659,9 +660,6 @@ begin
   end if;
   select * into v_company from public.companies where id = p_company_id for update;
   if not found then raise exception 'COMPANY_NOT_FOUND' using errcode = 'PT404'; end if;
-  if v_company.created_by = p_new_owner_id then
-    raise exception 'INVALID_INPUT' using errcode = 'PT422';
-  end if;
   update public.company_memberships set is_active = false
    where company_id = p_company_id and role = 'OWNER';
   insert into public.company_memberships(company_id, user_id, role, is_active)

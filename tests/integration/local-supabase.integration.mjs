@@ -643,9 +643,9 @@ try {
   pass("graduate submits a sample Competition through the Edge Function without false external-delivery claims",
     competitionSubmit.status === 200 && competitionSubmit.json?.status === "SUBMITTED" &&
     competitionSubmit.json?.delivery_status === "NOT_REQUIRED" &&
-    competitionSubmit.json?.opportunity_id === competitionOpportunityId &&
-    competitionSubmit.json?.graduate_id === a.id);
-  competitionApplicationId = competitionSubmit.json?.id ?? null;
+    competitionSubmit.json?.external_submission === false &&
+    typeof competitionSubmit.json?.application_id === "string");
+  competitionApplicationId = competitionSubmit.json?.application_id ?? null;
   assert.ok(competitionApplicationId, "competition application id is required");
 
   const competitionOwn = await request(

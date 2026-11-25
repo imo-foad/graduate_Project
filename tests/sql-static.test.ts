@@ -52,7 +52,7 @@ test("Competition delivery preserves entry checks and requires organizer acknowl
   assert.match(fns.get("apply_for_competition")!.body, /submission_data/);
   assert.match(fns.get("claim_competition_delivery")!.body, /competition\.application\.submitted/);
   assert.match(fns.get("complete_competition_delivery")!.body, /SUBMITTED_EXTERNALLY/);
-  assert.match(migration, /revoke all on private\.competition_delivery_outbox[\s\S]*?from public, anon, authenticated/i);
+  assert.match(migration, /revoke all on private\.competition_provider_mappings,[\s\S]*?private\.competition_delivery_outbox[\s\S]*?from public, anon, authenticated/i);
   assert.match(migration, /COMPETITION_PROVIDERS_JSON/);
 });
 

@@ -1473,6 +1473,42 @@ begin
 end
 $process_scholarship_provider_event$;
 
+create or replace function public.get_scholarship_review_cv_path(p_application_id uuid)
+returns text
+language plpgsql stable security definer set search_path = ''
+as $get_scholarship_review_cv_path$
+declare
+  v_uid uuid := public._require_uid();
+  v_provider_key text;
+  v_status text;
+  v_path text;
+begin
+  if p_application_id is null then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+
+  select a.provider_key, a.status, cv.storage_path
+    into v_provider_key, v_status, v_path
+    from public.scholarship_applications a
+    left join public.cv_documents cv
+      on cv.id = a.cv_document_id and cv.graduate_id = a.graduate_id
+   where a.id = p_application_id;
+  if not found then
+    raise exception 'SCHOLARSHIP_APPLICATION_NOT_FOUND' using errcode = 'PT404';
+  end if;
+  if v_status not in ('SUBMITTED_EXTERNALLY','IN_REVIEW','ACCEPTED','REJECTED') then
+    raise exception 'SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE' using errcode = 'PT409';
+  end if;
+  if not private.is_platform_admin()
+     and not private.is_active_scholarship_reviewer(v_uid, v_provider_key) then
+    raise exception 'SCHOLARSHIP_REVIEWER_REQUIRED' using errcode = 'PT403';
+  end if;
+  return v_path;
+end
+$get_scholarship_review_cv_path$;
+revoke all on function public.get_scholarship_review_cv_path(uuid) from public, anon, authenticated;
+grant execute on function public.get_scholarship_review_cv_path(uuid) to authenticated;
+
 -- Lock down every new database entry point. Only trusted Edge Functions may claim/complete
 -- deliveries or apply provider callbacks; authenticated users see only scoped reviewer RPCs.
 revoke all on function public.configure_scholarship_provider_mapping(uuid,text,text,boolean) from public, anon, authenticated;
@@ -1480,6 +1516,7 @@ revoke all on function public.set_scholarship_reviewer(uuid,text,boolean) from p
 revoke all on function public.get_scholarship_review_queue(text,text,integer) from public, anon, authenticated;
 revoke all on function public.review_scholarship_application(uuid,text,text) from public, anon, authenticated;
 revoke all on function public.retry_scholarship_delivery(uuid) from public, anon, authenticated;
+revoke all on function public.get_scholarship_review_cv_path(uuid) from public, anon, authenticated;
 revoke all on function public.claim_scholarship_delivery(uuid,integer) from public, anon, authenticated;
 revoke all on function public.block_scholarship_delivery(uuid,text) from public, anon, authenticated;
 revoke all on function public.complete_scholarship_delivery(uuid,text,integer,text) from public, anon, authenticated;
@@ -1490,7 +1527,8 @@ grant execute on function public.configure_scholarship_provider_mapping(uuid,tex
   public.set_scholarship_reviewer(uuid,text,boolean),
   public.get_scholarship_review_queue(text,text,integer),
   public.review_scholarship_application(uuid,text,text),
-  public.retry_scholarship_delivery(uuid) to authenticated;
+  public.retry_scholarship_delivery(uuid),
+  public.get_scholarship_review_cv_path(uuid) to authenticated;
 
 grant execute on function public.claim_scholarship_delivery(uuid,integer),
   public.block_scholarship_delivery(uuid,text),

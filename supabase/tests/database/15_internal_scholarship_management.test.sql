@@ -198,27 +198,38 @@ select throws_ok($q$select public.review_scholarship_application(
 select is((public.review_scholarship_application(
   tests.id('app_a1'),'UNDER_REVIEW','Initial eligibility and documents check')).status,
   'UNDER_REVIEW','admin starts review from SUBMITTED');
+
+-- Applicant-owned history and notifications must be read under the applicant JWT, not by admin SQL.
+reset role;
+select tests.login('a1');
 select is((select count(*)::int from public.scholarship_application_status_history
   where scholarship_application_id=tests.id('app_a1')
     and source_type='ADMIN_ACTION' and actor_user_id=tests.id('admin')
     and new_status='UNDER_REVIEW' and note='Initial eligibility and documents check'),
-  1,'admin review action records actor, new status and note');
+  1,'applicant can read the admin review action, actor, status and note');
 select is((select count(*)::int from public.notifications
   where profile_id=tests.id('a1') and related_entity_id=tests.id('app_a1')
     and type='SCHOLARSHIP_APPLICATION_STATUS_UPDATED'),
-  1,'student is notified when review begins');
+  1,'applicant can read the notification when review begins');
+select throws_ok($q$select public.withdraw_scholarship_application(tests.id('app_a1'))$q$,
+  'PT422','CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION','applicant cannot withdraw after review begins');
+reset role;
+select tests.login('admin');
+
 select is((public.review_scholarship_application(
   tests.id('app_a1'),'ACCEPTED','Approved by central reviewer')).status,
   'ACCEPTED','admin accepts an application after review');
 select throws_ok($q$select public.review_scholarship_application(
   tests.id('app_a1'),'REJECTED','Conflicting final decision')$q$,
   'PT422','INVALID_STATUS_TRANSITION','final accepted decision cannot be reversed');
-select throws_ok($q$select public.withdraw_scholarship_application(tests.id('app_a1'))$q$,
-  'PT422','CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION','applicant cannot withdraw after review begins');
+reset role;
+select tests.login('a1');
 select is((select count(*)::int from public.notifications
   where profile_id=tests.id('a1') and related_entity_id=tests.id('app_a1')
     and type='SCHOLARSHIP_APPLICATION_STATUS_UPDATED'),2,
-  'student receives a second notification when final decision is recorded');
+  'applicant receives a second notification when final decision is recorded');
+reset role;
+select tests.login('admin');
 
 select is((public.review_scholarship_application(
   tests.id('app_a2'),'UNDER_REVIEW',null)).status,
@@ -226,13 +237,16 @@ select is((public.review_scholarship_application(
 select is((public.review_scholarship_application(
   tests.id('app_a2'),'REJECTED','Does not meet final award criteria')).status,
   'REJECTED','admin rejects a reviewed application');
+reset role;
+select tests.login('a2');
 select is((select count(*)::int from public.scholarship_application_status_history
   where scholarship_application_id=tests.id('app_a2') and source_type='ADMIN_ACTION'),
-  2,'both admin transitions are preserved in history');
+  2,'applicant can read both admin transitions in history');
 select is((select count(*)::int from public.notifications
   where profile_id=tests.id('a2') and related_entity_id=tests.id('app_a2')
     and type='SCHOLARSHIP_APPLICATION_STATUS_UPDATED'),2,
-  'rejected applicant receives both review notifications');
+  'rejected applicant can read both review notifications');
+reset role;
 
 -- Sample/demo opportunities remain clearly non-reviewable.
 select tests.login('a1');

@@ -189,6 +189,24 @@ $is_active_scholarship_reviewer$;
 revoke all on function private.is_active_scholarship_reviewer(uuid, text) from public, anon, authenticated;
 grant execute on function private.is_active_scholarship_reviewer(uuid, text) to authenticated, service_role;
 
+create or replace function private.is_active_scholarship_admin(p_user_id uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $is_active_scholarship_admin$
+  select p_user_id is not null and exists (
+    select 1
+      from private.platform_admins a
+      join public.profiles p on p.id = a.user_id
+      join auth.users u on u.id = a.user_id
+     where a.user_id = p_user_id
+       and a.is_active
+       and p.account_status = 'ACTIVE'
+       and u.email_confirmed_at is not null
+  );
+$is_active_scholarship_admin$;
+revoke all on function private.is_active_scholarship_admin(uuid) from public, anon, authenticated;
+grant execute on function private.is_active_scholarship_admin(uuid) to service_role;
+
 create or replace function public.configure_scholarship_provider_mapping(
   p_opportunity_id uuid,
   p_provider_key text,
@@ -277,7 +295,7 @@ language plpgsql security definer set search_path = ''
 as $set_scholarship_reviewer$
 declare v_actor uuid := public._require_uid();
 begin
-  if not private.is_platform_admin() then
+  if not private.is_active_scholarship_admin(v_actor) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if p_user_id is null or p_provider_key is null
@@ -333,7 +351,7 @@ language plpgsql stable security definer set search_path = ''
 as $get_scholarship_review_queue$
 declare
   v_uid uuid := public._require_uid();
-  v_is_admin boolean := private.is_platform_admin();
+  v_is_admin boolean := private.is_active_scholarship_admin(v_uid);
 begin
   if not v_is_admin and (
     p_provider_key is null
@@ -398,7 +416,7 @@ begin
     raise exception 'SCHOLARSHIP_APPLICATION_NOT_FOUND' using errcode = 'PT404';
   end if;
 
-  if not private.is_platform_admin()
+  if not private.is_active_scholarship_admin(v_uid)
      and not private.is_active_scholarship_reviewer(v_uid, v_app.provider_key) then
     raise exception 'SCHOLARSHIP_REVIEWER_REQUIRED' using errcode = 'PT403';
   end if;
@@ -1031,7 +1049,7 @@ declare
   v_outbox private.scholarship_delivery_outbox;
   v_mapping private.scholarship_provider_mappings;
 begin
-  if not private.is_platform_admin() then
+  if not private.is_active_scholarship_admin(v_uid) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if p_application_id is null then raise exception 'INVALID_INPUT' using errcode = 'PT422'; end if;
@@ -1496,7 +1514,7 @@ begin
   if v_status not in ('SUBMITTED_EXTERNALLY','IN_REVIEW','ACCEPTED','REJECTED') then
     raise exception 'SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE' using errcode = 'PT409';
   end if;
-  if not private.is_platform_admin()
+  if not private.is_active_scholarship_admin(v_uid)
      and not private.is_active_scholarship_reviewer(v_uid, v_provider_key) then
     raise exception 'SCHOLARSHIP_REVIEWER_REQUIRED' using errcode = 'PT403';
   end if;
@@ -1562,7 +1580,7 @@ language plpgsql security definer set search_path = ''
 as $assert_scholarship_admin$
 declare v_uid uuid := public._require_uid();
 begin
-  if not private.is_platform_admin() then
+  if not private.is_active_scholarship_admin(v_uid) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   return true;
@@ -1588,7 +1606,7 @@ declare
   v_outbox private.scholarship_delivery_outbox;
   v_old_status text;
 begin
-  if not private.is_platform_admin() then
+  if not private.is_active_scholarship_admin(v_actor) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if p_opportunity_id is null

@@ -163,6 +163,29 @@ class Contract(unittest.TestCase):
         self.assertIn("$ref", profile["properties"]["paths"]["items"])
         self.assertIn("career_profile", EDGE)
 
+    def test_social_feed_read_models_match_privacy_projection(self):
+        schemas = API["components"]["schemas"]
+        self.assertNotIn("author_id", schemas["SocialFeedItem"]["properties"])
+        self.assertNotIn("author_id", schemas["SocialComment"]["properties"])
+        self.assertIn("author_id", schemas["SocialCommentMutation"]["properties"])
+
+        feed_item = API["paths"]["/rest/v1/rpc/get_social_feed"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]
+        comment_item = API["paths"]["/rest/v1/rpc/get_social_post_comments"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]
+        self.assertEqual(feed_item["$ref"], "#/components/schemas/SocialFeedItem")
+        self.assertEqual(comment_item["$ref"], "#/components/schemas/SocialComment")
+
+        for name in ("get_social_feed", "get_social_post_comments"):
+            match = re.search(
+                rf"create or replace function public\\.{name}\\([^)]*\\)\\s*returns table\\s*\\((.*?)\\)\\s*language",
+                SQL, re.S | re.I,
+            )
+            self.assertIsNotNone(match, name)
+            self.assertNotIn("author_id", match.group(1).lower(), name)
+
+        for path in ("/rest/v1/rpc/add_social_comment", "/rest/v1/rpc/update_social_comment"):
+            schema = API["paths"][path]["post"]["responses"]["200"]["content"]["application/json"]["schema"]
+            self.assertEqual(schema["$ref"], "#/components/schemas/SocialCommentMutation")
+
     def test_refs_resolve_and_paths_have_methods(self):
         def walk(node):
             if isinstance(node, dict):

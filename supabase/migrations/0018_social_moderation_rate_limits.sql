@@ -2,6 +2,24 @@
 -- All client content access remains RPC-only. Rate limiting lives in PostgreSQL so direct RPC
 -- calls cannot bypass the limits enforced by the Edge Function handlers.
 
+-- A platform-admin membership is not enough on its own: the Auth account must remain active.
+-- This central guard also protects existing company/admin RPCs that use this helper.
+create or replace function private.is_platform_admin()
+returns boolean
+language sql stable security definer set search_path = ''
+as $is_platform_admin$
+  select auth.uid() is not null and exists (
+    select 1
+      from private.platform_admins a
+      join public.profiles p on p.id = a.user_id
+     where a.user_id = auth.uid()
+       and a.is_active
+       and p.account_status = 'ACTIVE'
+  );
+$is_platform_admin$;
+revoke all on function private.is_platform_admin() from public, anon, authenticated;
+grant execute on function private.is_platform_admin() to authenticated;
+
 alter table public.social_posts
   add column moderation_status text not null default 'VISIBLE'
     check (moderation_status in ('VISIBLE','HIDDEN','REMOVED')),

@@ -557,6 +557,8 @@ begin
              'schema_version', '1.0',
              'event', 'scholarship.application.submitted',
              'application_id', a.id,
+             'graduate_id', a.graduate_id,
+             'cv_document_id', a.cv_document_id,
              'provider_opportunity_id', o.external_opportunity_id,
              'submitted_at', a.applied_at,
              'applicant', jsonb_build_object('full_name', p.full_name, 'email', p.email),

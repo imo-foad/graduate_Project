@@ -31,6 +31,14 @@ grant execute on function private.is_active_account() to authenticated;
 
 -- Restrictive policies are layered on top of existing table-specific RLS policies.
 -- This makes suspension effective for direct PostgREST reads/writes too, not only RPCs.
+-- Supabase Auth bans block new sign-ins but do not retroactively invalidate issued JWTs.
+-- A restrictive Storage policy closes the existing-session window for private CV objects.
+drop policy if exists active_account_guard on storage.objects;
+create policy active_account_guard on storage.objects
+  as restrictive for all to authenticated
+  using (private.is_active_account())
+  with check (private.is_active_account());
+
 do $active_account_policies$
 declare r record;
 begin
@@ -67,7 +75,7 @@ $require_active_uid$;
 
 create table private.platform_admin_audit (
   id uuid primary key default gen_random_uuid(),
-  actor_user_id uuid references auth.users(id) on delete set null,
+  actor_user_id uuid,
   target_user_id uuid,
   action text not null check (action in (
     'BOOTSTRAP_FIRST_ADMIN','ADMIN_GRANTED','ADMIN_REVOKED',

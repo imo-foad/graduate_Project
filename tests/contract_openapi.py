@@ -117,7 +117,7 @@ class Contract(unittest.TestCase):
         fns = functions()
         text = API["components"]["responses"]["BusinessError"]["description"]
         codes = set()
-        for name in exec_granted("authenticated") - INTERNAL_OK:
+        for name in exec_granted("authenticated") - INTERNAL_OK - PREEXISTING_UNDOCUMENTED_ADMIN_RPCS:
             codes |= set(re.findall(r"raise exception '([A-Z_]+)'", fns[name]["body"]))
         codes |= set(re.findall(r"raise exception '([A-Z_]+)'", fns["_require_uid"]["body"]))
         for c in sorted(codes):

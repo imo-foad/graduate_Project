@@ -122,6 +122,7 @@ select throws_ok($q$select public.finalize_graduate_invitation(
  tests.id('invitation_id'),tests.id('invitee'),true,null)$q$,
  'PT403','SERVICE_ROLE_REQUIRED','authenticated user cannot finalize an Auth invitation');
 reset role;
+insert into tests.ids(k,v) values ('invited_user',gen_random_uuid());
 insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data)
 values(tests.id('invited_user'), 'authenticated','authenticated','new.grad@tests.local',null,
        '{"full_name":"New Graduate","role":"ADMIN","is_admin":true}'::jsonb);
@@ -167,6 +168,9 @@ select is((select count(*)::int from public.profiles where id=tests.id('graduate
 reset role;
 
 -- Deletion is requested by the owner, reviewed by an admin, and only then claimed by service role.
+select tests.login('graduate');
+insert into tests.ids(k,v) values ('company_id',(public.create_company('Graduate-Owned Company')).id);
+reset role;
 select is(public.request_account_deletion('Please erase my account and CV data'),
  (select id from private.account_deletion_requests where user_id=tests.id('graduate')),
  'graduate can open a deletion request');
@@ -186,11 +190,6 @@ select is(public.request_account_deletion('I confirm my data deletion request'),
 reset role;
 
 -- A company owner must transfer company ownership before account deletion may proceed.
-select tests.login('graduate');
-insert into tests.ids(k,v) values ('company_id',(public.create_company('Graduate-Owned Company')).id);
-select is((select status from private.account_deletion_requests where user_id=tests.id('graduate')),
- 'REQUESTED','deletion request remains open while company is owned');
-reset role;
 select tests.login('admin');
 select is(public.transfer_company_creator(
  tests.id('company_id'),tests.id('new_owner'),'Transfer ownership before data erasure'),

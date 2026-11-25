@@ -47,7 +47,12 @@ test("happy path (fake tools): every phase runs and the script reports success",
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
   assert.equal(MIGS.length, 19);
 });
-test("the scholarship delivery migration is mandatory in db reset output", () => {\n  const r = run({ FAKE_MISSING: "0020_scholarship_delivery_review.sql" });\n  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0020_scholarship_delivery_review.sql as applied"));\n});\n\ntest("the Social Feed migration is mandatory in db reset output", () => {
+test("the scholarship delivery migration is mandatory in db reset output", () => {
+  const r = run({ FAKE_MISSING: "0020_scholarship_delivery_review.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0020_scholarship_delivery_review.sql as applied"));
+});
+
+test("the Social Feed migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0017_social_feed.sql" });
   assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0017_social_feed.sql as applied"));
 });

@@ -147,7 +147,14 @@ components:
           type: object
           description: Flexible competition entry payload, maximum 32 KiB; no team or judging contract is defined.
           additionalProperties: true
-        status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
+        status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED, INTERNAL_ONLY, WITHDRAWN] }
+        delivery_status: { type: string, enum: [NOT_REQUIRED, BLOCKED, PENDING, PROCESSING, DELIVERED, FAILED, CANCELLED] }
+        provider_key: { type: string, nullable: true }
+        provider_application_reference: { type: string, nullable: true }
+        externally_submitted_at: { type: string, format: date-time, nullable: true }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+        reviewed_by: { type: string, format: uuid, nullable: true }
+        review_note: { type: string, nullable: true }
         applied_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     CompetitionApplicationHistory:
@@ -156,8 +163,8 @@ components:
         id: { type: string, format: uuid }
         competition_application_id: { type: string, format: uuid }
         old_status: { type: string, nullable: true }
-        new_status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
-        source_type: { type: string, enum: [GRADUATE_ACTION] }
+        new_status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED, INTERNAL_ONLY, WITHDRAWN] }
+        source_type: { type: string, enum: [GRADUATE_ACTION, ADMIN_ACTION, SYSTEM, PROVIDER, REVIEWER, ADMIN] }
         changed_at: { type: string, format: date-time }
     SocialPost:
       type: object
@@ -438,9 +445,9 @@ components:
       description: >-
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
-        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER, SCHOLARSHIP_REVIEWER_REQUIRED.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, SCHOLARSHIP_PROVIDER_REFERENCE_NOT_FOUND, SCHOLARSHIP_DELIVERY_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN.
+        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER, SCHOLARSHIP_REVIEWER_REQUIRED, COMPETITION_REVIEWER_REQUIRED, SERVICE_ROLE_REQUIRED.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, SCHOLARSHIP_PROVIDER_REFERENCE_NOT_FOUND, SCHOLARSHIP_DELIVERY_NOT_FOUND, COMPETITION_APPLICATION_NOT_FOUND, COMPETITION_DELIVERY_NOT_FOUND, COMPETITION_PROVIDER_REFERENCE_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, COMPETITION_DELIVERY_NOT_RETRYABLE, COMPETITION_DELIVERY_IN_PROGRESS, COMPETITION_DELIVERY_NOT_IN_PROGRESS, COMPETITION_APPLICATION_NOT_DELIVERABLE, COMPETITION_PROVIDER_REFERENCE_CONFLICT, INVALID_COMPETITION_STATUS_TRANSITION, COMPETITION_APPLICATION_NOT_REVIEWABLE.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
@@ -448,7 +455,7 @@ components:
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
         SCHOLARSHIP_APPLICATION_NOT_FOUND, SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, SAMPLE_DATA_NOT_REVIEWABLE,
-        SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED,
+        SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED, COMPETITION_PROVIDER_MAPPING_NOT_ALLOWED, COMPETITION_PROVIDER_NOT_CONFIGURED,
         INVALID_SCHOLARSHIP_STATUS_TRANSITION, SCHOLARSHIP_DELIVERY_NOT_RETRYABLE, SCHOLARSHIP_DELIVERY_IN_PROGRESS,
         PROVIDER_EVENT_ID_CONFLICT, NOT_A_COMPETITION,
         COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
@@ -763,6 +770,124 @@ paths:
                 p_application_id: { type: string, format: uuid }
       responses:
         '200': { description: Withdrawn competition application }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/assert_competition_admin:
+    post:
+      summary: Verify that the authenticated account has active platform-admin access
+      responses:
+        '200':
+          description: True when the caller is an active platform administrator
+          content:
+            application/json:
+              schema: { type: boolean }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/configure_competition_provider_mapping:
+    post:
+      summary: Configure or disable the organizer mapping for a Competition listing (active platform admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_provider_key, p_external_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }
+                p_external_opportunity_id: { type: string, minLength: 1, maxLength: 200 }
+                p_is_enabled: { type: boolean, default: true }
+      responses:
+        '200': { description: Provider mapping configured }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/set_competition_reviewer:
+    post:
+      summary: Assign or deactivate a provider-scoped Competition reviewer (active platform admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_user_id, p_provider_key, p_is_active]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }
+                p_is_active: { type: boolean }
+      responses:
+        '200': { description: Reviewer assignment saved }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/get_competition_review_queue:
+    post:
+      summary: Read Competition applications for an assigned provider reviewer or active platform admin
+      description: Reviewers are limited to applications for providers assigned to them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_provider_key: { type: string, nullable: true }
+                p_status: { type: string, enum: [PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED], nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Provider-scoped Competition review queue }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/get_competition_review_cv_path:
+    post:
+      summary: Authorize access to a Competition applicant CV storage path
+      description: Prefer the signed-URL Edge Function; this RPC returns only the path and requires reviewer/admin authorization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Authorized storage path or null when no CV is attached }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/review_competition_application:
+    post:
+      summary: Advance an internal Competition application or submit a provider-scoped review decision
+      description: Internal entries use SUBMITTED to UNDER_REVIEW to ACCEPTED or REJECTED. Externally delivered entries use SUBMITTED_EXTERNALLY to IN_REVIEW to ACCEPTED or REJECTED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id, p_status]
+              properties:
+                p_application_id: { type: string, format: uuid }
+                p_status: { type: string, enum: [UNDER_REVIEW, IN_REVIEW, ACCEPTED, REJECTED] }
+                p_note: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200': { description: Updated and audited Competition review status }
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/retry_competition_delivery:
+    post:
+      summary: Queue a new delivery generation for a failed or pending Competition application (active platform admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Retry queued }
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/get_social_feed:
@@ -1317,6 +1442,115 @@ paths:
         '404': { description: Provider application reference not found }
         '409': { description: Invalid transition or provider event id reused with another payload }
         '503': { description: Provider callback could not be committed; provider may retry the same event id }
+  /functions/v1/submit-competition:
+    post:
+      summary: Submit a Competition entry and attempt configured organizer delivery
+      description: Requires the graduate JWT. Internal/sample listings remain local. HTTP 202 means saved but external delivery is still pending.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_cv_document_id: { type: string, format: uuid, nullable: true }
+                p_personal_statement: { type: string, maxLength: 10000, nullable: true }
+                p_submission_data:
+                  type: object
+                  additionalProperties: true
+                  description: Flexible organizer entry answers; maximum 32 KiB.
+      responses:
+        '200': { description: Entry saved; internal entries remain internal and successful external deliveries have provider acknowledgement }
+        '202': { description: Entry saved; delivery is pending or retryable }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid graduate JWT }
+        '413': { description: Request body exceeds the 64 KiB limit }
+        '404': { description: Opportunity or CV not found }
+        '409': { description: Duplicate entry }
+        '422': { description: Opportunity is not an eligible open Competition }
+        '500': { description: Submission processing failed; inspect persisted status before retrying }
+  /functions/v1/deliver-competition:
+    post:
+      summary: Process pending Competition delivery or retry one application
+      description: Trusted scheduler uses service role; active admins may request a single-application retry with a user JWT. Never ship the service-role key to Android.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                application_id: { type: string, format: uuid }
+                limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200': { description: Processed count and per-application outcomes }
+        '400': { description: Invalid request or application_id required for admin retry }
+        '401': { description: Missing or invalid credential }
+        '413': { description: Request body exceeds the 8 KiB limit }
+        '403': { description: Active platform administrator required for user-token retry }
+        '503': { description: Delivery worker unavailable }
+  /functions/v1/competition-provider-callback:
+    post:
+      summary: Receive a signed Competition organizer status event
+      description: HMAC signature covers the exact raw request body and timestamp. No Supabase JWT or API key is used as a substitute.
+      security: []
+      parameters:
+        - in: header
+          name: X-Alumni-Timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Alumni-Signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider_key, event_id, application_reference, status]
+              properties:
+                provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}$' }
+                event_id: { type: string, minLength: 1, maxLength: 200 }
+                application_reference: { type: string, minLength: 1, maxLength: 200 }
+                status: { type: string, enum: [IN_REVIEW, ACCEPTED, REJECTED] }
+                note: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200': { description: Signed event accepted or recognized as an idempotent duplicate }
+        '400': { description: Invalid callback body }
+        '401': { description: Unknown provider or invalid signature }
+        '409': { description: Provider event conflicts with a prior event or status transition }
+        '413': { description: Callback body exceeds 16 KiB }
+        '503': { description: Provider configuration or event processing unavailable }
+  /functions/v1/get-competition-review-cv:
+    post:
+      summary: Obtain a short-lived signed CV download URL for an assigned Competition reviewer
+      description: Requires an active provider-scoped reviewer or platform-admin JWT. Signed URL expires after 600 seconds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: CV availability and a 10-minute signed download URL when a CV is attached }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Reviewer is not assigned to the application's provider }
+        '413': { description: Request body exceeds the 4 KiB limit }
+        '404': { description: Application not found }
+        '409': { description: Application cannot be reviewed or storage path is invalid }
+        '503': { description: CV authorization or signed URL service unavailable }
   /functions/v1/recommend:
     post:
       summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Deterministic scoring;

@@ -35,3 +35,16 @@ verify_jwt = false
 
 [functions.get-scholarship-review-cv]
 verify_jwt = true
+
+
+[functions.submit-competition]
+verify_jwt = true
+
+[functions.deliver-competition]
+verify_jwt = true
+
+[functions.competition-provider-callback]
+verify_jwt = false
+
+[functions.get-competition-review-cv]
+verify_jwt = true

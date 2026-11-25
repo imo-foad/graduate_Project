@@ -171,11 +171,11 @@ reset role;
 select tests.login('graduate');
 insert into tests.ids(k,v) values ('company_id',(public.create_company('Graduate-Owned Company')).id);
 reset role;
-select is(public.request_account_deletion('Please erase my account and CV data'),
- (select id from private.account_deletion_requests where user_id=tests.id('graduate')),
- 'graduate can open a deletion request');
-select is((select account_status from public.profiles where id=tests.id('graduate')),
- 'SUSPENDED','a pending deletion request immediately suspends account access');
+insert into tests.ids(k,v)
+values ('deletion_request_1',public.request_account_deletion('Please erase my account and CV data'));
+select is((select count(*)::int from public.profiles where id=tests.id('graduate')),0,
+ 'a pending deletion request immediately blocks profile reads');
+reset role;
 select tests.login('admin');
 select is((select status from public.review_account_deletion_request(
  (select request_id from public.get_account_deletion_queue('REQUESTED',50)
@@ -184,12 +184,23 @@ select is((select status from public.review_account_deletion_request(
  'REJECTED','admin can reject a deletion request and provide a reason');
 reset role;
 select tests.login('graduate');
-select is(public.request_account_deletion('I confirm my data deletion request'),
- (select id from private.account_deletion_requests where user_id=tests.id('graduate') and status='REQUESTED'),
- 'a rejected deletion request can be resubmitted');
+insert into tests.ids(k,v)
+values ('deletion_request_2',public.request_account_deletion('I confirm my data deletion request'));
 reset role;
 
--- A company owner must transfer company ownership before account deletion may proceed.
+-- An untransferred company creator/OWNER cannot be deleted.
+select tests.login('admin');
+select is((select status from public.review_account_deletion_request(
+ tests.id('deletion_request_2'),'APPROVE','User identity and retention review complete')),
+ 'APPROVED','admin can approve deletion after identity review');
+reset role;
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+select throws_ok($q$select public.get_approved_account_deletion(tests.id('deletion_request_2'))$q$,
+ 'PT409','COMPANY_OWNERSHIP_TRANSFER_REQUIRED','account deletion refuses to remove an active company owner');
+reset role;
+
+-- Ownership and company creator are transferred before deleting the old owner.
 select tests.login('admin');
 select is(public.transfer_company_creator(
  tests.id('company_id'),tests.id('new_owner'),'Transfer ownership before data erasure'),
@@ -202,23 +213,18 @@ select is((select role from public.company_memberships
 select throws_ok($q$select public.transfer_company_creator(
  tests.id('company_id'),tests.id('invitee'),'Unconfirmed ownership must not transfer')$q$,
  'PT404','USER_NOT_FOUND','unconfirmed invite cannot become company owner');
-select is((select status from public.review_account_deletion_request(
- (select request_id from public.get_account_deletion_queue('REQUESTED',50)
-  where user_id=tests.id('graduate')),
- 'APPROVE','User identity and retention review complete')),
- 'APPROVED','admin can approve deletion after company transfer');
 reset role;
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.get_approved_account_deletion(
- (select id from private.account_deletion_requests where status='APPROVED' and user_id=tests.id('graduate'))),
- tests.id('graduate'),'service worker can claim only an approved, ownership-safe deletion');
-select ok(public.release_account_deletion_claim(
- (select id from private.account_deletion_requests where status='DELETING' and user_id=tests.id('graduate'))),
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+ tests.id('graduate'),'service worker claims an approved deletion after ownership transfer');
+select ok(public.release_account_deletion_claim(tests.id('deletion_request_2')),
  'service worker can release a failed deletion claim for retry');
-select is((select status from private.account_deletion_requests where user_id=tests.id('graduate')),
+select is((select status from private.account_deletion_requests where id=tests.id('deletion_request_2')),
  'APPROVED','failed deletion remains approved for controlled retry');
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+ tests.id('graduate'),'service worker can safely reclaim deletion on retry');
 reset role;
 
 -- The actual Auth delete hook finalizes the request and preserves the immutable audit.

@@ -218,7 +218,7 @@ class Contract(unittest.TestCase):
         self.assertIn('rpc("claim_scholarship_delivery"', (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
         self.assertIn("verifyProviderWebhookSignature", callback_edge)
         self.assertIn('rpc("process_scholarship_provider_event"', callback_edge)
-        self.assertIn('rpc("get_scholarship_review_cv_path"', reviewer_cv_edge)
+        self.assertRegex(reviewer_cv_edge, r'rpc\(\s*"get_scholarship_review_cv_path"')
         self.assertIn("createSignedUrl", reviewer_cv_edge)
         self.assertIn('redirect: "error"', provider)
         self.assertIn("Idempotency-Key", provider)

@@ -72,6 +72,7 @@ select is((select comments_count from public.get_social_feed(null,null,20) where
  0::bigint,'new post starts with zero comments');
 select ok(not (select liked_by_me from public.get_social_feed(null,null,20) where content='Hello from the alumni network'),
  'unliked feed flag is false');
+select is((public.create_social_post('B post')).content,'B post','second graduate creates own post');
 select is((select count(*)::int from public.get_social_feed(null,null,1)),1,'feed page limit is enforced');
 select is((select count(*)::int from public.get_social_feed(
  (select created_at from public.get_social_feed(null,null,1)),
@@ -86,7 +87,6 @@ select ok(position('email' in pg_get_function_result('public.get_social_feed(tim
  'feed RPC result does not expose email or other private profile fields');
 
 -- A hidden-avatar preference is honored; A2 still has a display name.
-select is((public.create_social_post('B post')).content,'B post','second graduate creates own post');
 select is((select author_avatar_url from public.get_social_feed(null,null,20) where content='B post'),null,
  'hidden avatar preference suppresses image in feed');
 
@@ -178,6 +178,7 @@ update public.profiles set account_status='SUSPENDED' where id=tests.id('a3');
 select tests.login('a2');
 select ok(not exists(select 1 from public.get_social_feed(null,null,50)
  where content='Post later hidden by suspension'),'suspended author is hidden from feed');
+select tests.login('a3');
 select throws_ok($q$select * from public.get_social_feed(null,null,20)$q$,
  'PT403','ACCOUNT_UNAVAILABLE','suspended user cannot read feed');
 select throws_ok($q$select public.create_social_post('blocked')$q$,

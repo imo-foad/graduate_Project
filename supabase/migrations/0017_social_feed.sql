@@ -86,7 +86,7 @@ begin
   select sp.id,
          sp.author_id,
          pr.full_name,
-         case when 'avatar_url' = any(gp.hidden_fields) then null else pr.avatar_url end,
+         case when coalesce('avatar_url' = any(gp.hidden_fields), false) then null else pr.avatar_url end,
          sp.content,
          sp.created_at,
          sp.updated_at,
@@ -183,7 +183,7 @@ begin
 
   return query
   select c.id, c.post_id, c.author_id, pr.full_name,
-         case when 'avatar_url' = any(gp.hidden_fields) then null else pr.avatar_url end,
+         case when coalesce('avatar_url' = any(gp.hidden_fields), false) then null else pr.avatar_url end,
          c.content, c.created_at, c.updated_at
     from public.social_post_comments c
     join public.profiles pr on pr.id = c.author_id and pr.account_status = 'ACTIVE'

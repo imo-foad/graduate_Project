@@ -198,6 +198,12 @@ select is((select idempotency_key from (
 select is((public.complete_scholarship_delivery(
  tests.id('outbox2'),'provider-ref-2',202,'provider-request-2')).status,
  'SUBMITTED_EXTERNALLY','provider acknowledgement moves application to externally submitted');
+select is((public.complete_scholarship_delivery(
+ tests.id('outbox2'),'provider-ref-2',202,'provider-request-2')).status,
+ 'SUBMITTED_EXTERNALLY','same provider acknowledgement is idempotent');
+select throws_ok($q$select public.complete_scholarship_delivery(
+ tests.id('outbox2'),'different-provider-ref',202,'provider-request-2')$q$,
+ 'PT409','SCHOLARSHIP_PROVIDER_REFERENCE_CONFLICT','conflicting provider acknowledgement cannot overwrite the reference');
 reset role;
 
 select is((select delivery_status from public.scholarship_applications where id=tests.id('application2')),

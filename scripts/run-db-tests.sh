@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> migrations 0001..0021 -> seeds -> pgTAP (15 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> migrations 0001..0022 -> seeds -> pgTAP (16 files) -> concurrency. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail

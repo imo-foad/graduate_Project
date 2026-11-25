@@ -111,6 +111,38 @@ components:
         new_status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
         source_type: { type: string, enum: [GRADUATE_ACTION] }
         changed_at: { type: string, format: date-time }
+    SocialPost:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        content: { type: string, minLength: 1, maxLength: 5000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SocialFeedItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        author_name: { type: string }
+        author_avatar_url: { type: string, nullable: true }
+        content: { type: string, minLength: 1, maxLength: 5000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        likes_count: { type: integer, format: int64 }
+        comments_count: { type: integer, format: int64 }
+        liked_by_me: { type: boolean }
+    SocialComment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        author_name: { type: string }
+        author_avatar_url: { type: string, nullable: true }
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     EventRegistration:
       type: object
       properties:
@@ -360,7 +392,8 @@ components:
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
         SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, NOT_A_COMPETITION,
-        COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION.
+        COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
+        ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
       content:
         application/json:
           schema:
@@ -673,6 +706,175 @@ paths:
         '200': { description: Withdrawn competition application }
         4XX:
           $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/get_social_feed:
+    post:
+      summary: Keyset-paginated feed for authenticated active graduates; exposes display name and non-hidden avatar only
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_before_created_at: { type: string, format: date-time, nullable: true }
+                p_before_id: { type: string, format: uuid, nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Feed page
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialFeedItem' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_social_post:
+    post:
+      summary: Create a post as the authenticated graduate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_content]
+              properties:
+                p_content: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        '200': { description: Created post, content: { application/json: { schema: { $ref: '#/components/schemas/SocialPost' } } } }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_social_post:
+    post:
+      summary: Edit only the authenticated author's post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id, p_content]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_content: { type: string, minLength: 1, maxLength: 5000 }
+      responses:
+        '200': { description: Updated post, content: { application/json: { schema: { $ref: '#/components/schemas/SocialPost' } } } }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/delete_social_post:
+    post:
+      summary: Delete only the authenticated author's post and cascade its comments and likes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+      responses:
+        '200': { description: true when deleted }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_post_comments:
+    post:
+      summary: List comments for an active feed post with keyset pagination and display-only author identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_before_created_at: { type: string, format: date-time, nullable: true }
+                p_before_id: { type: string, format: uuid, nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialComment' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/add_social_comment:
+    post:
+      summary: Add a comment as the authenticated graduate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id, p_content]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Created comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialComment' } } } }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_social_comment:
+    post:
+      summary: Edit only the authenticated author's comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_comment_id, p_content]
+              properties:
+                p_comment_id: { type: string, format: uuid }
+                p_content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Updated comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialComment' } } } }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/delete_social_comment:
+    post:
+      summary: Delete only the authenticated author's comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_comment_id]
+              properties:
+                p_comment_id: { type: string, format: uuid }
+      responses:
+        '200': { description: true when deleted }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/like_social_post:
+    post:
+      summary: Like a feed post once per graduate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+      responses:
+        '200': { description: true when liked }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/unlike_social_post:
+    post:
+      summary: Remove the authenticated graduate's like
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+      responses:
+        '200': { description: true when unliked }
+        4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/withdraw_application:
     post:
       requestBody:

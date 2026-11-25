@@ -88,7 +88,11 @@ class Scripts(unittest.TestCase):
                        "auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY", "DEMO_PASSWORD", "assert-local-db.mjs"):
             self.assertIn(needle, runner)
         for needle in ("/auth/v1/token", "/storage/v1/object/", "/rest/v1/cv_documents",
-                       "/functions/v1/recommend", "force: true", "cv-documents", "/rest/v1/rpc/apply_for_competition", "/rest/v1/rpc/withdraw_competition_application", "COMPETITION_APPLICATION_SUBMITTED"):
+                       "/functions/v1/recommend", "force: true", "cv-documents", "/rest/v1/rpc/apply_for_competition", "/rest/v1/rpc/withdraw_competition_application", "COMPETITION_APPLICATION_SUBMITTED",
+                        "/rest/v1/rpc/get_social_feed", "/rest/v1/rpc/create_social_post", "/rest/v1/rpc/update_social_post",
+                        "/rest/v1/rpc/delete_social_post", "/rest/v1/rpc/get_social_post_comments", "/rest/v1/rpc/add_social_comment",
+                        "/rest/v1/rpc/update_social_comment", "/rest/v1/rpc/delete_social_comment", "/rest/v1/rpc/like_social_post",
+                        "/rest/v1/rpc/unlike_social_post", "SOCIAL_POST_NOT_FOUND", "ALREADY_LIKED"):
             self.assertIn(needle, http)
         for needle in ("/functions/v1/parse-cv", "/functions/v1/recommend", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):

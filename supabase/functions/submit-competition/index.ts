@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { hasActiveAccount, isBannedAuthError } from "../_shared/account-status.ts";
 import { deliverCompetitionApplications } from "../_shared/competition-delivery.ts";
 import { readBoundedTextStream } from "../_shared/competition-provider.ts";
 
@@ -27,7 +28,13 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json({ error: "UNAUTHENTICATED" }, 401);
+  if (authError || !authData.user) {
+    if (isBannedAuthError(authError)) return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+    return json({ error: "UNAUTHENTICATED" }, 401);
+  }
+  if (!(await hasActiveAccount(userClient, authData.user.id))) {
+    return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+  }
 
   let rawBody: string;
   try {

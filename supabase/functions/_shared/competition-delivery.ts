@@ -29,7 +29,12 @@ const safeErrorCode = (value: string) =>
 
 export async function deliverCompetitionApplications(
   admin: any,
-  options: { applicationId?: string | null; limit?: number } = {},
+  options: {
+    applicationId?: string | null;
+    limit?: number;
+    providerConfigJson?: string;
+    fetcher?: typeof fetch;
+  } = {},
 ): Promise<DeliveryResult[]> {
   const applicationId = options.applicationId ?? null;
   const limit = options.limit ?? 10;
@@ -43,7 +48,9 @@ export async function deliverCompetitionApplications(
   let configs: ReturnType<typeof parseCompetitionProviderConfigs> = {};
   let configurationInvalid = false;
   try {
-    configs = parseCompetitionProviderConfigs(Deno.env.get("COMPETITION_PROVIDERS_JSON"));
+    configs = parseCompetitionProviderConfigs(
+      options.providerConfigJson ?? Deno.env.get("COMPETITION_PROVIDERS_JSON"),
+    );
   } catch {
     configurationInvalid = true;
   }
@@ -114,6 +121,7 @@ export async function deliverCompetitionApplications(
         configs[providerKey],
         item.idempotency_key,
         payload,
+        options.fetcher ?? fetch,
       );
       const { data: completed, error: completeError } = await admin.rpc(
         "complete_competition_delivery",

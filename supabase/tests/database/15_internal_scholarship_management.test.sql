@@ -50,7 +50,7 @@ begin
   perform tests.mk_user('a2');
   insert into private.platform_admins(user_id, is_active)
   values (tests.id('admin'), true);
-  update public.graduate_profiles set degree = 'Bachelor'
+  update public.graduate_profiles set degree = 'Bachelor', graduation_year = 2025
    where profile_id in (tests.id('a1'), tests.id('a2'));
   perform tests.mk_opp('sample_sch', 'SCHOLARSHIP', '{"deadline_days":10}');
   insert into public.cv_documents(id,graduate_id,storage_path,file_type,size_bytes)
@@ -125,7 +125,7 @@ select is((public.update_admin_scholarship(
   2021,
   2036,
   array['Bachelor','Master'],
-  array['Research Methods']
+  '{}'::text[]
 )).title,'Graduate Research Award Updated','admin can update a Scholarship DRAFT and its criteria');
 select is(public.publish_admin_scholarship(tests.id('internal_sch')).status,
   'ACTIVE','admin publishes Scholarship DRAFT');

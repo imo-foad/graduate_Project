@@ -193,6 +193,7 @@ revoke all on function public.assert_platform_admin() from public, anon, authent
 grant execute on function public.assert_platform_admin() to authenticated;
 
 create or replace function public.create_graduate_invitation(
+  p_actor_id uuid,
   p_email text,
   p_full_name text,
   p_verification_note text
@@ -201,13 +202,16 @@ returns table (invitation_id uuid, status text)
 language plpgsql security definer set search_path = ''
 as $create_graduate_invitation$
 declare
-  v_actor uuid := public._require_uid();
+  v_actor uuid := p_actor_id;
   v_email text := lower(btrim(coalesce(p_email,'')));
   v_name text := btrim(coalesce(p_full_name,''));
   v_note text := btrim(coalesce(p_verification_note,''));
   v_id uuid;
 begin
-  if not private.is_platform_admin() then
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if not private.is_active_platform_admin(v_actor) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if length(v_name) not between 2 and 200
@@ -256,9 +260,9 @@ begin
   end if;
   if p_invitation_id is null or p_success is null
      or (p_success and p_auth_user_id is null)
-     or (not p_success and p_failure_code not in (
+     or (not p_success and (p_failure_code is null or p_failure_code not in (
        'AUTH_INVITE_REJECTED','AUTH_INVITE_UNAVAILABLE','INVITATION_FINALIZATION_FAILED'
-     )) then
+     ))) then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
 
@@ -704,15 +708,15 @@ begin
 end
 $transfer_company_creator$;
 
-revoke all on function public.create_graduate_invitation(text, text, text) from public, anon, authenticated;
+revoke all on function public.create_graduate_invitation(uuid, text, text, text) from public, anon, authenticated;
+grant execute on function public.create_graduate_invitation(uuid, text, text, text) to service_role;
 revoke all on function public.list_graduate_invitations(text, integer) from public, anon, authenticated;
 revoke all on function public.set_platform_admin_access(uuid, boolean, text) from public, anon, authenticated;
 revoke all on function public.request_account_deletion(text) from public, anon, authenticated;
 revoke all on function public.get_account_deletion_queue(text, integer) from public, anon, authenticated;
 revoke all on function public.review_account_deletion_request(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.transfer_company_creator(uuid, uuid, text) from public, anon, authenticated;
-grant execute on function public.create_graduate_invitation(text, text, text),
-  public.list_graduate_invitations(text, integer),
+grant execute on function public.list_graduate_invitations(text, integer),
   public.set_platform_admin_access(uuid, boolean, text),
   public.request_account_deletion(text),
   public.get_account_deletion_queue(text, integer),

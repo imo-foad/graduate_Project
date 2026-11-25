@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     });
     if (rateLimitError) {
       await admin.from("cv_documents")
-        .update({ parse_status: document.parse_status, error_message: null, parsed_at: document.parsed_at })
+        .update({ parse_status: document.parse_status, error_message: null, parsed_at: null })
         .eq("id", cvDocumentId).eq("graduate_id", user.id).eq("parse_status", "PROCESSING");
       processingStarted = false;
       return json({ error: "RATE_LIMIT_UNAVAILABLE" }, 503);

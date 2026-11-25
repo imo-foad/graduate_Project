@@ -91,6 +91,8 @@ select ok(not has_function_privilege('authenticated','public.complete_scholarshi
   'authenticated clients cannot mark a delivery as externally submitted');
 select ok(not has_function_privilege('authenticated','public.process_scholarship_provider_event(text,text,text,text,text,text)','EXECUTE'),
   'authenticated clients cannot forge provider status updates');
+select ok(not has_function_privilege('authenticated','private.is_active_scholarship_reviewer(uuid,text)','EXECUTE'),
+  'authenticated clients cannot call the private reviewer authorization helper');
 
 -- A non-sample application without a provider mapping is saved, but explicitly not sent.
 select tests.login('graduate1');

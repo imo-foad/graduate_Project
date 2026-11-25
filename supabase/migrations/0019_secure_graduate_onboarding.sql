@@ -595,6 +595,7 @@ create or replace function public.release_account_deletion_claim(p_request_id uu
 returns boolean
 language plpgsql security definer set search_path = ''
 as $release_account_deletion_claim$
+declare v_rows integer;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
@@ -602,7 +603,8 @@ begin
   update private.account_deletion_requests
      set status = 'APPROVED'
    where id = p_request_id and status = 'DELETING';
-  return found;
+  get diagnostics v_rows = row_count;
+  return v_rows > 0;
 end
 $release_account_deletion_claim$;
 revoke all on function public.release_account_deletion_claim(uuid) from public, anon, authenticated;

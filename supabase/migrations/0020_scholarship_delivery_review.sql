@@ -237,7 +237,7 @@ begin
     update private.scholarship_delivery_outbox o
        set provider_key = p_provider_key,
            external_opportunity_id = btrim(p_external_opportunity_id),
-           status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1,
+           status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, delivery_generation = delivery_generation + 1,
            next_attempt_at = now(), lease_expires_at = null,
            last_error_code = null, updated_at = now()
       from public.scholarship_applications a
@@ -477,7 +477,7 @@ begin
   update private.scholarship_delivery_outbox
      set provider_key = v_mapping.provider_key,
          external_opportunity_id = v_mapping.external_opportunity_id,
-         status = 'PENDING', attempts = 0, next_attempt_at = now(),
+         status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, next_attempt_at = now(),
          lease_expires_at = null, last_error_code = null, updated_at = now()
    where id = v_outbox.id;
   update public.scholarship_applications
@@ -1058,7 +1058,7 @@ begin
   update private.scholarship_delivery_outbox
      set provider_key = v_mapping.provider_key,
          external_opportunity_id = v_mapping.external_opportunity_id,
-         status = 'PENDING', attempts = 0, next_attempt_at = now(),
+         status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, next_attempt_at = now(),
          lease_expires_at = null, last_error_code = null, updated_at = now()
    where id = v_outbox.id;
   update public.scholarship_applications
@@ -1283,7 +1283,7 @@ begin
     'Provider acknowledged delivery with reference ' || btrim(p_provider_reference) || '.'
   );
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, http_status, provider_reference
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, http_status, provider_reference
   ) values (
     p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     'DELIVERED', p_http_status, btrim(p_provider_reference)
@@ -1602,7 +1602,7 @@ begin
       update private.scholarship_delivery_outbox
          set provider_key = p_provider_key,
              external_opportunity_id = btrim(p_external_opportunity_id),
-             status = 'PENDING', attempts = 0, next_attempt_at = now(),
+             status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, next_attempt_at = now(),
              lease_expires_at = null, last_error_code = null, updated_at = now()
        where id = v_outbox.id;
       select status into v_old_status
@@ -1880,7 +1880,7 @@ begin
     'Provider acknowledged delivery with reference ' || btrim(p_provider_reference) || '.'
   );
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, http_status,
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, http_status,
     provider_reference, provider_request_id
   ) values (
     p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),

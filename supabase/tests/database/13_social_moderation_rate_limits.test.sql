@@ -93,6 +93,14 @@ select is((select content_moderation_status from public.moderate_social_report(
  (select report_id from public.get_social_moderation_queue('OPEN',20)),
  'HIDE','Confirmed spam after manual review')),
  'HIDDEN','admin can hide reported content');
+reset role;
+insert into tests.ids(k,v)
+select 'hidden_target', target_id from private.social_content_reports where category='SPAM';
+select tests.login('author');
+select throws_ok($q$select public.update_social_post(tests.id('hidden_target'),'replace hidden content')$q$,
+ 'PT404','SOCIAL_POST_NOT_FOUND','author cannot edit content while it is under moderation');
+reset role;
+select tests.login('admin');
 select is((select count(*)::int from public.get_social_moderation_history(
  'POST',(select target_id from public.get_social_moderation_queue('ALL',20)),20)),1,
  'moderation action is recorded in audit history');

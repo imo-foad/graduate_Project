@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { hasActiveAccount } from "../_shared/account-status.ts";
+import { hasActiveAccount, isBannedAuthError } from "../_shared/account-status.ts";
 import { deliverScholarshipApplications } from "../_shared/scholarship-delivery.ts";
 
 const json = (body: unknown, status = 200) =>
@@ -27,7 +27,10 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return json({ error: "UNAUTHENTICATED" }, 401);
+  if (authError || !authData.user) {
+    if (isBannedAuthError(authError)) return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+    return json({ error: "UNAUTHENTICATED" }, 401);
+  }
   if (!(await hasActiveAccount(userClient, authData.user.id))) {
     return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
   }

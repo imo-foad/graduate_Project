@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasActiveAccount } from "../supabase/functions/_shared/account-status.ts";
+import { hasActiveAccount, isBannedAuthError } from "../supabase/functions/_shared/account-status.ts";
 
 function fakeClient(result: { data: unknown; error: unknown }) {
   return {
@@ -35,4 +35,14 @@ test("a hidden or missing profile is rejected", async () => {
 
 test("a read error fails closed", async () => {
   assert.equal(await hasActiveAccount(fakeClient({ data: null, error: { message: "denied" } }), "u1"), false);
+});
+
+test("a banned Auth error is classified as an unavailable account", () => {
+  assert.equal(isBannedAuthError({ status: 403, code: "user_banned", message: "User is banned" }), true);
+  assert.equal(isBannedAuthError({ message: "User is banned" }), true);
+});
+
+test("missing credentials stay unauthenticated rather than banned", () => {
+  assert.equal(isBannedAuthError(null), false);
+  assert.equal(isBannedAuthError({ status: 401, code: "bad_jwt", message: "invalid JWT" }), false);
 });

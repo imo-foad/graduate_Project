@@ -122,9 +122,11 @@ select tests.login('admin');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar1'),'PROVIDER_A','remote-scholarship-1',true)$q$,
  'active platform admin configures provider mapping');
+reset role;
 select is((select status from private.scholarship_delivery_outbox
   where application_id=(select id from public.scholarship_applications where graduate_id=tests.id('graduate1'))),
   'PENDING','configuring provider moves blocked application into queue');
+select tests.login('admin');
 select is((select delivery_status from public.scholarship_applications where graduate_id=tests.id('graduate1')),
   'PENDING','configuring provider updates delivery state without claiming external submission');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(

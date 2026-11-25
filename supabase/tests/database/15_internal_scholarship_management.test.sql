@@ -14,8 +14,8 @@ $f$;
 create function tests.mk_user(p_key text) returns uuid language plpgsql as $f$
 declare v uuid := gen_random_uuid();
 begin
-  insert into auth.users (id, aud, role, email, raw_user_meta_data)
-  values (v, 'authenticated', 'authenticated', p_key || '@tests.local',
+  insert into auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data)
+  values (v, 'authenticated', 'authenticated', p_key || '@tests.local', now(),
           jsonb_build_object('full_name', p_key));
   insert into tests.ids values (p_key, v);
   return v;

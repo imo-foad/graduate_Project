@@ -71,6 +71,9 @@ select is((public.apply_for_scholarship(
   '{"study_area":"Computer Science","motivation":"Research"}'::jsonb
 )).status, 'SUBMITTED', 'eligible graduate submits scholarship application');
 reset role;
+insert into tests.ids(k,v)
+select 'app_s_ok', id from public.scholarship_applications
+ where graduate_id=tests.id('a1') and opportunity_id=tests.id('s_ok');
 select is((select count(*)::int from public.scholarship_applications where graduate_id=tests.id('a1') and opportunity_id=tests.id('s_ok')), 1, 'one row persisted');
 select is((select cv_document_id from public.scholarship_applications where opportunity_id=tests.id('s_ok')), tests.id('cv_a'), 'owned CV attached');
 select is((select application_data from public.scholarship_applications where opportunity_id=tests.id('s_ok')),
@@ -116,7 +119,7 @@ select throws_ok($q$delete from public.scholarship_applications where opportunit
 select tests.login('a2');
 select is((select count(*)::int from public.scholarship_applications where opportunity_id=tests.id('s_ok')), 0, 'peer cannot read application');
 select is((select count(*)::int from public.scholarship_application_status_history h join public.scholarship_applications a on a.id=h.scholarship_application_id where a.opportunity_id=tests.id('s_ok')), 0, 'peer cannot read status history');
-select throws_ok($q$select public.withdraw_scholarship_application((select id from public.scholarship_applications where opportunity_id=tests.id('s_ok')))$q$,
+select throws_ok($q$select public.withdraw_scholarship_application(tests.id('app_s_ok'))$q$,
   'PT404', 'SCHOLARSHIP_APPLICATION_NOT_FOUND', 'peer cannot withdraw application');
 select set_config('request.jwt.claims', '', true);
 select throws_ok($q$select public.apply_for_scholarship(tests.id('s_validation'))$q$, 'PT401', 'UNAUTHENTICATED', 'missing JWT rejected');

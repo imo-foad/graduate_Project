@@ -47,9 +47,9 @@ insert into private.rate_limit_policies(action, capacity, refill_per_second) val
   ('SOCIAL_COMMENT_EDIT', 20, 20::numeric / 60),
   ('SOCIAL_LIKE', 30, 30::numeric / 60),
   ('SOCIAL_REPORT', 5, 5::numeric / 3600),
-  ('CV_PARSE', 2, 2::numeric / 3600),
+  ('CV_PARSE', 5, 5::numeric / 3600),
   ('RECOMMEND', 30, 30::numeric / 60),
-  ('RECOMMEND_FORCE', 3, 3::numeric / 3600)
+  ('RECOMMEND_FORCE', 10, 10::numeric / 3600)
 on conflict (action) do update set
   capacity = excluded.capacity,
   refill_per_second = excluded.refill_per_second,

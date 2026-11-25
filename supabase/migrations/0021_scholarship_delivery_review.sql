@@ -1586,96 +1586,100 @@ grant execute on function public.assert_scholarship_admin() to authenticated;
 -- Mapping administration follows the same application -> outbox lock order as submit,
 -- withdraw, claim and retry. A disabled mapping never cancels an in-flight HTTP request.
 create or replace function public.configure_scholarship_provider_mapping(
-  p_opportunity_id uuid,
-  p_provider_key text,
-  p_external_opportunity_id text,
+  p_opportunity_id uuid, p_provider_key text, p_external_opportunity_id text,
   p_is_enabled boolean default true
 )
-returns boolean
-language plpgsql security definer set search_path = ''
+returns boolean language plpgsql security definer set search_path = ''
 as $configure_scholarship_provider_mapping_v2$
 declare
   v_actor uuid := public._require_uid();
-  v_item record;
-  v_outbox private.scholarship_delivery_outbox;
-  v_old_status text;
 begin
   if not private.is_active_scholarship_admin(v_actor) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
-  if p_opportunity_id is null
-     or p_provider_key is null or p_provider_key !~ '^[A-Z0-9][A-Z0-9_-]{1,63}$'
+  if p_opportunity_id is null or p_provider_key is null
+     or p_provider_key !~ '^[A-Z0-9][A-Z0-9_-]{1,63}$'
      or p_external_opportunity_id is null
      or length(btrim(p_external_opportunity_id)) not between 1 and 200
      or p_is_enabled is null then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
-  if not exists (
-    select 1 from public.opportunities
-     where id = p_opportunity_id and type = 'SCHOLARSHIP' and not is_sample
-  ) then
+  if not exists(select 1 from public.opportunities
+    where id=p_opportunity_id and type='SCHOLARSHIP' and not is_sample) then
     raise exception 'SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED' using errcode = 'PT422';
   end if;
 
   insert into private.scholarship_provider_mappings(
-    opportunity_id, provider_key, external_opportunity_id,
-    is_enabled, configured_by, configured_at, updated_at
-  ) values (
-    p_opportunity_id, p_provider_key, btrim(p_external_opportunity_id),
-    p_is_enabled, v_actor, now(), now()
+    opportunity_id,provider_key,external_opportunity_id,is_enabled,configured_by,configured_at,updated_at
+  ) values(p_opportunity_id,p_provider_key,btrim(p_external_opportunity_id),p_is_enabled,v_actor,now(),now())
+  on conflict(opportunity_id) do update
+    set provider_key=excluded.provider_key,
+        external_opportunity_id=excluded.external_opportunity_id,
+        is_enabled=excluded.is_enabled,
+        configured_by=excluded.configured_by,
+        updated_at=now();
+
+  insert into public.scholarship_application_status_history(
+    scholarship_application_id,old_status,new_status,source_type,actor_user_id,note
   )
-  on conflict (opportunity_id) do update
-    set provider_key = excluded.provider_key,
-        external_opportunity_id = excluded.external_opportunity_id,
-        is_enabled = excluded.is_enabled,
-        configured_by = excluded.configured_by,
-        updated_at = now();
+  select a.id,'SUBMITTED','PENDING_DELIVERY','SYSTEM',v_actor,
+         'A platform administrator configured an external provider for this Scholarship.'
+    from public.scholarship_applications a
+   where a.opportunity_id=p_opportunity_id and a.status='SUBMITTED';
 
-  for v_item in
-    select a.id
+  update public.scholarship_applications
+     set status='PENDING_DELIVERY',provider_key=p_provider_key,
+         delivery_status=case when p_is_enabled then 'PENDING' else 'BLOCKED' end
+   where opportunity_id=p_opportunity_id and status='SUBMITTED';
+
+  insert into private.scholarship_delivery_outbox(
+    application_id,provider_key,external_opportunity_id,status,last_error_code
+  )
+  select a.id,p_provider_key,btrim(p_external_opportunity_id),
+         case when p_is_enabled then 'PENDING' else 'BLOCKED' end,
+         case when p_is_enabled then null else 'PROVIDER_MAPPING_DISABLED' end
+    from public.scholarship_applications a
+   where a.opportunity_id=p_opportunity_id
+     and a.status in ('PENDING_DELIVERY','DELIVERY_FAILED')
+     and not exists(select 1 from private.scholarship_delivery_outbox o where o.application_id=a.id)
+  on conflict(application_id) do nothing;
+
+  if p_is_enabled then
+    update private.scholarship_delivery_outbox o
+       set provider_key=p_provider_key,
+           external_opportunity_id=btrim(p_external_opportunity_id),
+           status='PENDING',
+           attempts=case when o.status in ('BLOCKED','FAILED') then 0 else o.attempts end,
+           delivery_generation=o.delivery_generation+case
+             when o.status in ('BLOCKED','FAILED')
+               or o.provider_key is distinct from p_provider_key
+               or o.external_opportunity_id is distinct from btrim(p_external_opportunity_id)
+             then 1 else 0 end,
+           next_attempt_at=now(),lease_expires_at=null,last_error_code=null,updated_at=now()
       from public.scholarship_applications a
-     where a.opportunity_id = p_opportunity_id
+     where o.application_id=a.id and a.opportunity_id=p_opportunity_id
        and a.status in ('PENDING_DELIVERY','DELIVERY_FAILED')
-     order by a.applied_at, a.id
-     for update skip locked
-  loop
-    select * into v_outbox from private.scholarship_delivery_outbox
-     where application_id = v_item.id for update;
-    if not found then
-      continue;
-    end if;
+       and o.status in ('PENDING','BLOCKED','FAILED');
 
-    if p_is_enabled and v_outbox.status in ('BLOCKED','FAILED') then
-      update private.scholarship_delivery_outbox
-         set provider_key = p_provider_key,
-             external_opportunity_id = btrim(p_external_opportunity_id),
-             status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1, next_attempt_at = now(),
-             lease_expires_at = null, last_error_code = null, updated_at = now()
-       where id = v_outbox.id;
-      select status into v_old_status
-        from public.scholarship_applications where id = v_item.id;
-      update public.scholarship_applications
-         set status = 'PENDING_DELIVERY', delivery_status = 'PENDING',
-             provider_key = p_provider_key
-       where id = v_item.id;
-      if v_old_status = 'DELIVERY_FAILED' then
-        insert into public.scholarship_application_status_history(
-          scholarship_application_id, old_status, new_status, source_type, actor_user_id, note
-        ) values (
-          v_item.id, 'DELIVERY_FAILED', 'PENDING_DELIVERY', 'ADMIN', v_actor,
-          'Provider mapping was configured and delivery was queued again.'
-        );
-      end if;
-    elsif not p_is_enabled and v_outbox.status in ('PENDING','BLOCKED','FAILED') then
-      update private.scholarship_delivery_outbox
-         set status = 'BLOCKED', lease_expires_at = null,
-             last_error_code = 'PROVIDER_MAPPING_DISABLED', updated_at = now()
-       where id = v_outbox.id;
-      update public.scholarship_applications
-         set delivery_status = 'BLOCKED'
-       where id = v_item.id and status = 'PENDING_DELIVERY';
-    end if;
-  end loop;
+    update public.scholarship_applications a
+       set status='PENDING_DELIVERY',provider_key=p_provider_key,delivery_status='PENDING'
+     where a.opportunity_id=p_opportunity_id
+       and a.status in ('PENDING_DELIVERY','DELIVERY_FAILED')
+       and exists(select 1 from private.scholarship_delivery_outbox o
+                   where o.application_id=a.id and o.status='PENDING');
+  else
+    update private.scholarship_delivery_outbox o
+       set status='BLOCKED',lease_expires_at=null,
+           last_error_code='PROVIDER_MAPPING_DISABLED',updated_at=now()
+      from public.scholarship_applications a
+     where o.application_id=a.id and a.opportunity_id=p_opportunity_id
+       and o.status in ('PENDING','BLOCKED','FAILED');
+
+    update public.scholarship_applications a set delivery_status='BLOCKED'
+     where a.opportunity_id=p_opportunity_id and a.status='PENDING_DELIVERY'
+       and exists(select 1 from private.scholarship_delivery_outbox o
+                   where o.application_id=a.id and o.status='BLOCKED');
+  end if;
   return true;
 end
 $configure_scholarship_provider_mapping_v2$;

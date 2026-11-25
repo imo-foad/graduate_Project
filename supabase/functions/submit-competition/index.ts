@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { deliverCompetitionApplications } from "../_shared/competition-delivery.ts";
+import { readBoundedTextStream } from "../_shared/competition-provider.ts";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -28,7 +29,18 @@ Deno.serve(async (req) => {
   const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) return json({ error: "UNAUTHENTICATED" }, 401);
 
-  const body = await req.json().catch(() => null);
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedTextStream(req.body, 64 * 1024);
+  } catch {
+    return json({ error: "REQUEST_BODY_TOO_LARGE" }, 413);
+  }
+  let body: unknown = null;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : null;
+  } catch {
+    return json({ error: "INVALID_REQUEST" }, 400);
+  }
   const allowed = ["p_opportunity_id", "p_cv_document_id", "p_personal_statement", "p_submission_data"];
   if (
     !body || typeof body !== "object" || Array.isArray(body) ||

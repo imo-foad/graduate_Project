@@ -269,6 +269,18 @@ components:
             type: string
         explanation_ar:
           type: string
+        availability_status:
+          type: string
+          nullable: true
+          enum:
+          - OPEN
+          - UPCOMING
+          - WAITLIST_ONLY
+          description: |
+            Registration availability at read time. null when the opportunity carries no registration data.
+            Items with no registration window yet are still returned with UPCOMING (score 0).
+            Closed opportunities and full events without a waitlist are omitted from `items` entirely, so
+            `FULL`/`CLOSED` never appear here. Clients should render WAITLIST_ONLY as "join waitlist".
         model_version:
           type: string
         generated_at:
@@ -276,7 +288,7 @@ components:
           format: date-time
         opportunity:
           type: object
-          description: Embedded opportunity (id,type,title,company_name,location,attendance_mode,status,deadline,start_at,end_at)
+          description: Embedded opportunity (id,type,title,company_name,location,attendance_mode,status,deadline,start_at,end_at,registration_opens_at,capacity,registered_count,waitlist_enabled)
     CareerSkillEvidence:
       type: object
       required: [skill_id, level, role, weight, contribution]

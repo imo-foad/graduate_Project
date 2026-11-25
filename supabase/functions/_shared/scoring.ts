@@ -1,6 +1,9 @@
 // Deterministic match scoring (BR-016/017/022). Pure TypeScript: no Deno/Node APIs, so it is unit-testable.
 // The LLM never produces the score. Weights come from the business doc (6.5) except where marked ASSUMPTION.
-export const MODEL_VERSION = "deterministic-v3-career-intelligence";
+import { registrationAvailability } from "./opportunity-state.ts";
+import type { AvailabilityStatus } from "./opportunity-state.ts";
+
+export const MODEL_VERSION = "deterministic-v4-availability";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }
@@ -20,11 +23,14 @@ export interface OpportunityInput {
   location?: string | null; attendance_mode?: string | null;
   target_fields?: string[]; experience_level?: string | null; target_audience?: string | null;
   minimum_experience_years?: number | null; minimum_experience_required?: boolean;
+  registration_opens_at?: string | null; capacity?: number | null;
+  registered_count?: number | null; waitlist_enabled?: boolean | null;
   skills: OppSkill[]; eligibility_failures: string[];
 }
 export interface Gap { skill_id: string; reason: "MISSING" | "LEVEL_TOO_LOW"; required_level: number; current_level: number }
 export interface ScoredItem {
   opportunity_id: string; score: number; band: Band;
+  availability_status: AvailabilityStatus | null;
   score_breakdown: Record<string, number | null>;
   reasons: string[]; explanation_ar: string;
   matched_skill_ids: string[]; missing_skill_ids: string[]; gaps: Gap[];
@@ -141,21 +147,36 @@ function audienceScore(g: GraduateInput, o: OpportunityInput): number | null {
 function gapFill(sa: ReturnType<typeof skillAnalysis>, o: OpportunityInput): number | null {
   return o.skills.length === 0 ? null : sa.gaps.length / o.skills.length;
 }
+// Registration availability (issue #16). The candidate projection is the source of truth; this maps the
+// resulting state to a score. FULL/CLOSED items are dropped before scoring (scoreOpportunity returns null).
+const AVAILABILITY_SCORE: Record<AvailabilityStatus, number> = {
+  OPEN: 1, WAITLIST_ONLY: 0.5, UPCOMING: 0, FULL: 0, CLOSED: 0,
+};
+function availabilityScore(o: OpportunityInput, now: Date): number | null {
+  const status = registrationAvailability(o, now);
+  return status === null ? null : AVAILABILITY_SCORE[status];
+}
 
 const BAND_AR: Record<Band, string> = {
   HIGH: "توافق مرتفع", GOOD: "توافق جيد", MEDIUM: "توافق متوسط", LOW: "توافق منخفض",
 };
 
 /** Returns null when a hard eligibility requirement fails (BR-017): such items are never recommended. */
-export function scoreOpportunity(g: GraduateInput, o: OpportunityInput): ScoredItem | null {
+export function scoreOpportunity(g: GraduateInput, o: OpportunityInput, now: Date = new Date()): ScoredItem | null {
   if (o.eligibility_failures.length > 0) return null;
+  // Availability is a hard gate, not just a weight: recommending a full event without a waitlist would
+  // always end in EVENT_FULL. Closed opportunities are already excluded by the SQL predicate and by the
+  // cached-read filter, so scoring keeps them scoreable and only drops capacity failures here.
+  const availability = registrationAvailability(o, now);
+  if (availability === "FULL") return null;
   if (o.minimum_experience_required && o.minimum_experience_years !== null
       && o.minimum_experience_years !== undefined && g.experience_years < o.minimum_experience_years) return null;
   const sa = skillAnalysis(g, o);
   const values: Partial<Record<Criterion, number | null>> = {
     semantic: semanticProxy(g, o), skills: sa.coverage, major: majorScore(g, o),
     experience: experienceScore(g, o), interests: interestScore(g, o), location: locationScore(g, o),
-    audience: audienceScore(g, o), availability: null, gap_fill: gapFill(sa, o), interaction: interactionScore(g, o),
+    audience: audienceScore(g, o), availability: availabilityScore(o, now),
+    gap_fill: gapFill(sa, o), interaction: interactionScore(g, o),
   };
   const rel = [sa.coverage, majorScore(g, o)].filter((x): x is number => x !== null);
   values.relevance = rel.length ? rel.reduce((a, b) => a + b, 0) / rel.length : null;
@@ -178,14 +199,14 @@ export function scoreOpportunity(g: GraduateInput, o: OpportunityInput): ScoredI
   if (breakdown.major === 100) reasons.push("تتوافق مع تخصصك.");
   reasons.push("درجة التوافق ترتيب مساعد وليست احتمال قبول أو ضمان توظيف.");
   return {
-    opportunity_id: o.id, score, band, score_breakdown: breakdown, reasons,
+    opportunity_id: o.id, score, band, availability_status: availability, score_breakdown: breakdown, reasons,
     explanation_ar: `${BAND_AR[band]} (${score}/100). ${reasons.join(" ")}`,
     matched_skill_ids: sa.matched, missing_skill_ids: sa.missing, gaps: sa.gaps,
   };
 }
 
 /** Ranked list, highest first; ties broken by opportunity id for determinism. */
-export function rankOpportunities(g: GraduateInput, opps: OpportunityInput[]): ScoredItem[] {
-  return opps.map((o) => scoreOpportunity(g, o)).filter((x): x is ScoredItem => x !== null)
+export function rankOpportunities(g: GraduateInput, opps: OpportunityInput[], now: Date = new Date()): ScoredItem[] {
+  return opps.map((o) => scoreOpportunity(g, o, now)).filter((x): x is ScoredItem => x !== null)
     .sort((a, b) => b.score - a.score || a.opportunity_id.localeCompare(b.opportunity_id));
 }

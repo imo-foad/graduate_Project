@@ -3,7 +3,8 @@
 // touches the cache (the SQL function is atomic); retries are bounded.
 import { MODEL_VERSION, rankOpportunities } from "./scoring.ts";
 import type { GraduateInput, OpportunityInput, ScoredItem } from "./scoring.ts";
-import { filterOpenRecommendations } from "./opportunity-state.ts";
+import { filterAvailableRecommendations, registrationAvailability } from "./opportunity-state.ts";
+import type { AvailabilityCheckable } from "./opportunity-state.ts";
 import { deriveCareerProfile } from "./career-profile.ts";
 
 export const MAX_ATTEMPTS = 3;
@@ -16,11 +17,15 @@ export interface Candidates {
   interaction_signals?: { target_field: string; weight: number }[];
   opportunities: OpportunityInput[];
 }
+export interface CachedRecommendation {
+  opportunity?: (AvailabilityCheckable & { [key: string]: unknown }) | null;
+  [key: string]: unknown;
+}
 export interface FlowDeps {
   cacheState(): Promise<{ dirty: boolean | null; count: number }>;
   candidates(): Promise<{ data?: Candidates; error?: { message: string } }>;
   save(items: ScoredItem[], profileVersion: number): Promise<{ error?: { message: string } | null }>;
-  readCached(): Promise<{ data?: { opportunity?: { status?: string | null; deadline?: string | null; end_at?: string | null } | null }[]; error?: unknown }>;
+  readCached(): Promise<{ data?: CachedRecommendation[]; error?: unknown }>;
 }
 export interface FlowResult { status: number; body: Record<string, unknown> }
 
@@ -51,13 +56,19 @@ export async function runRecommend(deps: FlowDeps, opts: { force?: boolean; maxA
   }
   const { data, error } = await deps.readCached();
   if (error) return { status: 500, body: { error: "READ_FAILED" } };
+  // Cached rows are filtered exactly like fresh ones: closed opportunities and full events without a
+  // waitlist are dropped, and every item reports its current registration availability.
+  const items = filterAvailableRecommendations(data ?? []).map((item) => ({
+    ...item,
+    availability_status: registrationAvailability(item.opportunity),
+  }));
   return {
     status: 200,
     body: {
       source, model_version: MODEL_VERSION, ai_mode: "deterministic",
       career_profile: careerProfile,
       disclaimer: "Match Score is not a hiring probability.",
-      items: filterOpenRecommendations(data ?? []),
+      items,
     },
   };
 }

@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -87,12 +87,12 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_scholarship_application", "11_competition_application", "12_social_feed", "14_secure_graduate_onboarding", "15_internal_scholarship_management", "16_scholarship_delivery_review", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_scholarship_application", "11_competition_application", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_internal_scholarship_management", "16_scholarship_delivery_review", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
-        self.assertEqual(len(migs), 20)
-        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0019", "0020", "0021"])
+        self.assertEqual(len(migs), 21)
+        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021"])
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]
@@ -118,6 +118,14 @@ class Scripts(unittest.TestCase):
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
+        self.assertIn("onboarding.integration.mjs", runner)
+        self.assertIn("rate-limits.integration.mjs", runner)
+        onboarding_http = code(open(os.path.join(ROOT, "tests/integration/onboarding.integration.mjs")).read())
+        rate_http = code(open(os.path.join(ROOT, "tests/integration/rate-limits.integration.mjs")).read())
+        self.assertIn("ONBOARDING HTTP INTEGRATION PASSED", onboarding_http)
+        self.assertIn("RATE-LIMIT HTTP INTEGRATION PASSED", rate_http)
+        self.assertIn("/functions/v1/invite-graduate", onboarding_http)
+        self.assertIn("/functions/v1/parse-cv", rate_http)
         self.assertIn("career-cohort.integration.mjs round1", runner)
         self.assertIn("career-cohort.integration.mjs round2", runner)
         self.assertIn('[ "$CODE" = "405" ]', runner)

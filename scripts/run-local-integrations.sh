@@ -102,7 +102,11 @@ done
 
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+# The prior local integration removes its temporary admin, leaving a clean one-time bootstrap slot.
+timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
 
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round2 | tee "$LOG_DIR/career-cohort-round2.log"
+# Run after the other demo-account journeys because this deliberately exhausts rate-limit buckets.
+timeout 300s node tests/integration/rate-limits.integration.mjs | tee "$LOG_DIR/rate-limits-integration.log"

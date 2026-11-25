@@ -1458,7 +1458,16 @@ begin
       p_provider_key, btrim(p_event_id), v_app.id, p_new_status, p_payload_digest
     );
   exception when unique_violation then
-    return 'DUPLICATE';
+    -- Another concurrent callback may have inserted this provider event after our first
+    -- lookup. Re-read its digest after the unique-index wait instead of blindly accepting
+    -- a changed payload as an idempotent retry.
+    select payload_digest into v_existing_digest
+      from private.scholarship_provider_events
+     where provider_key = p_provider_key and event_id = btrim(p_event_id);
+    if v_existing_digest = p_payload_digest then
+      return 'DUPLICATE';
+    end if;
+    raise exception 'PROVIDER_EVENT_ID_CONFLICT' using errcode = 'PT409';
   end;
 
   update public.scholarship_applications

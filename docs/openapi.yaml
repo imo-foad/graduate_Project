@@ -407,7 +407,7 @@ components:
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
-        SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION,
+        SCHOLARSHIP_APPLICATION_NOT_FOUND, SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION,
         SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED,
         INVALID_SCHOLARSHIP_STATUS_TRANSITION, SCHOLARSHIP_DELIVERY_NOT_RETRYABLE,
         SCHOLARSHIP_DELIVERY_IN_PROGRESS, SCHOLARSHIP_DELIVERY_NOT_FOUND, SCHOLARSHIP_REVIEWER_REQUIRED,
@@ -2547,6 +2547,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScholarshipApplication'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_scholarship_review_cv_path:
+    post:
+      summary: Return the private Storage path only to a platform admin or reviewer assigned to the application's provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Private Storage path (null when no CV was attached); use the reviewer Edge Function for a signed URL
+          content:
+            application/json:
+              schema:
+                type: string
+                nullable: true
+        '403': { description: SCHOLARSHIP_REVIEWER_REQUIRED }
+        '404': { description: SCHOLARSHIP_APPLICATION_NOT_FOUND }
+        '409': { description: SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/retry_scholarship_delivery:
     post:

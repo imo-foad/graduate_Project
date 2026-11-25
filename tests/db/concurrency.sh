@@ -131,20 +131,20 @@ SCH_APP=""
 cleanup_scholarship() {
   P -c "delete from private.scholarship_provider_mappings where opportunity_id='$SCH_OPP';
         delete from auth.users where id in ('$SCH_ADMIN','$SCH_GRAD');
-        delete from public.opportunities where seed_key='\${TAG}-scholarship-race';" >/dev/null 2>&1 || true
+        delete from public.opportunities where seed_key='${TAG}-scholarship-race';" >/dev/null 2>&1 || true
 }
 trap 'cleanup_scholarship; cleanup' EXIT
 P <<SQL
 insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data)
 values
- ('$SCH_ADMIN','authenticated','authenticated','\${TAG}-scholar-admin@tests.local',now(),'{"full_name":"Scholarship Admin"}'),
- ('$SCH_GRAD','authenticated','authenticated','\${TAG}-scholar-grad@tests.local',now(),'{"full_name":"Scholarship Graduate"}');
+ ('$SCH_ADMIN','authenticated','authenticated','${TAG}-scholar-admin@tests.local',now(),'{"full_name":"Scholarship Admin"}'),
+ ('$SCH_GRAD','authenticated','authenticated','${TAG}-scholar-grad@tests.local',now(),'{"full_name":"Scholarship Graduate"}');
 insert into private.platform_admins(user_id,is_active) values ('$SCH_ADMIN',true);
 insert into public.opportunities(seed_key,type,title,status,deadline,attendance_mode,is_sample)
-values ('\${TAG}-scholarship-race','SCHOLARSHIP','Provider callback race','ACTIVE',
+values ('${TAG}-scholarship-race','SCHOLARSHIP','Provider callback race','ACTIVE',
         now() + interval '5 days','ONLINE',false);
 SQL
-SCH_OPP=$(P -c "select id from public.opportunities where seed_key='\${TAG}-scholarship-race'")
+SCH_OPP=$(P -c "select id from public.opportunities where seed_key='${TAG}-scholarship-race'")
 as_user "$SCH_ADMIN" "select public.configure_scholarship_provider_mapping('$SCH_OPP','PROVIDER_RACE','remote-race',true)" >/dev/null
 SCH_APP=$(as_user "$SCH_GRAD" "select (public.apply_for_scholarship('$SCH_OPP')).id" | grep -Eio '[0-9a-f-]{36}' | tail -n1)
 [ -n "$SCH_APP" ] || { echo "PREREQUISITE FAILED: scholarship race application was not created" >&2; exit 2; }
@@ -153,8 +153,7 @@ svc_scholar() {
     select set_config('request.jwt.claims','{\"role\":\"service_role\"}',true);
     set local role service_role;
     $1;
-    commit;" 2>&1 | grep -v '^ && echo "ALL CONCURRENCY CHECKS PASSED" || { echo "$FAILS CHECK(S) FAILED"; exit 1; }
- || true
+    commit;" 2>&1 | sed '/^$/d' || true
 }
 svc_scholar "select (public.claim_scholarship_delivery('$SCH_APP',1)).application_id" >/dev/null
 SCH_OUTBOX=$(P -c "select id from private.scholarship_delivery_outbox where application_id='$SCH_APP'")
@@ -170,7 +169,7 @@ OUT=$(mktemp); PIDS=()
   svc_scholar "select public.process_scholarship_provider_event(
     'PROVIDER_RACE','same-event-id','race-provider-ref','REJECTED','event B','$SCH_DIGEST_B')"
 ) >>"$OUT" & PIDS+=($!)
-wait "\${PIDS[@]}"
+wait "${PIDS[@]}"
 check "provider callback race: only one event ledger row" "1" "$(P -c "select count(*) from private.scholarship_provider_events where provider_key='PROVIDER_RACE' and event_id='same-event-id'")"
 check "provider callback race: changed concurrent payload is rejected" "1" "$(grep -c 'PROVIDER_EVENT_ID_CONFLICT' "$OUT")"
 check "provider callback race: application ends in the single accepted event state" "1" "$(P -c "select count(*) from public.scholarship_applications where id='$SCH_APP' and status in ('IN_REVIEW','REJECTED')")"

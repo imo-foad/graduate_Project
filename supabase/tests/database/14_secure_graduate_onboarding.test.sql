@@ -235,13 +235,13 @@ reset role;
 
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2'),tests.id('admin')),
  tests.id('graduate'),'service worker claims an approved deletion after ownership transfer');
 select ok(public.release_account_deletion_claim(tests.id('deletion_request_2')),
  'service worker can release a failed deletion claim for retry');
 select is((select status from private.account_deletion_requests where id=tests.id('deletion_request_2')),
  'APPROVED','failed deletion remains approved for controlled retry');
-select is(public.get_approved_account_deletion(tests.id('deletion_request_2')),
+select is(public.get_approved_account_deletion(tests.id('deletion_request_2'),tests.id('admin')),
  tests.id('graduate'),'service worker can safely reclaim deletion on retry');
 reset role;
 

@@ -94,16 +94,16 @@ select ok(not has_function_privilege('authenticated','public.process_scholarship
 select ok(not has_function_privilege('authenticated','private.is_active_scholarship_reviewer(uuid,text)','EXECUTE'),
   'authenticated clients cannot call the private reviewer authorization helper');
 
--- A non-sample application without a provider mapping is saved, but explicitly not sent.
+-- A non-sample Scholarship without explicit provider mapping remains in the internal workflow.
 select tests.login('graduate1');
 select is((public.apply_for_scholarship(tests.id('scholar1'))).status,
-  'PENDING_DELIVERY','real scholarship starts in pending-delivery, not submitted state');
+  'SUBMITTED','unmapped Scholarship enters the internal admin review queue');
 reset role;
 select is((select delivery_status from public.scholarship_applications where graduate_id=tests.id('graduate1')),
-  'BLOCKED','missing provider mapping blocks delivery explicitly');
-select is((select status from private.scholarship_delivery_outbox
+  'NOT_REQUIRED','internal Scholarship does not require provider delivery');
+select is((select count(*)::int from private.scholarship_delivery_outbox
   where application_id=(select id from public.scholarship_applications where graduate_id=tests.id('graduate1'))),
-  'BLOCKED','missing provider mapping creates a durable blocked outbox row');
+  0,'unmapped internal Scholarship creates no external outbox row');
 select ok(not exists(select 1 from public.scholarship_application_status_history h
   join public.scholarship_applications a on a.id=h.scholarship_application_id
   where a.graduate_id=tests.id('graduate1') and h.new_status='SUBMITTED_EXTERNALLY'),
@@ -134,7 +134,7 @@ select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar3'),'PROVIDER_A','remote-scholarship-3',true)$q$,
  'admin can configure a third listing under the same provider');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
- tests.id('scholar4'),'PROVIDER_B','remote-scholarship-4',true)$q$,
+ tests.id('scholar4'),'PROVIDER_B','remote-scholarship-4',false)$q$,
  'admin can configure another provider');
 select is(public.set_scholarship_reviewer(tests.id('reviewer-a'),'PROVIDER_A',true),
   true,'admin can assign provider-A reviewer');
@@ -151,7 +151,7 @@ update auth.users set email_confirmed_at=now() where id=tests.id('admin');
 -- Sample listings are clearly internal and never create external delivery work.
 select tests.login('graduate4');
 select is((public.apply_for_scholarship(tests.id('sample-scholar'))).status,
-  'INTERNAL_ONLY','sample scholarship is internal-only');
+  'SUBMITTED','sample scholarship remains an internal submission');
 reset role;
 select is((select delivery_status from public.scholarship_applications
   where opportunity_id=tests.id('sample-scholar')),
@@ -161,8 +161,8 @@ select is((select count(*)::int from private.scholarship_delivery_outbox
     where opportunity_id=tests.id('sample-scholar'))),
   0,'sample scholarship has no outbox row');
 select ok(exists(select 1 from public.notifications
-  where profile_id=tests.id('graduate4') and type='SCHOLARSHIP_APPLICATION_INTERNAL_ONLY'),
-  'sample submission notification explicitly labels its internal-only nature');
+  where profile_id=tests.id('graduate4') and type='SCHOLARSHIP_APPLICATION_SUBMITTED'),
+  'sample submission notification confirms it remains in Alumni Connect');
 
 -- A configured application is queued with a stable idempotency key.
 select tests.login('graduate2');
@@ -335,14 +335,27 @@ select is((select count(*)::int from private.scholarship_delivery_attempts
   where outbox_id=tests.id('outbox_retry') and delivery_generation=2 and attempt_number=1),
   1,'a retry may reuse attempt number one in a separate generation');
 
--- Applicants can withdraw before delivery, which cancels their pending outbox.
+-- A disabled provider mapping blocks external delivery; re-enable it before withdrawal.
 select tests.login('graduate4');
 select is((public.apply_for_scholarship(tests.id('scholar4'))).status,
-  'PENDING_DELIVERY','another live application is queued');
+  'PENDING_DELIVERY','disabled provider mapping records a pending application');
 reset role;
 insert into tests.ids(k,v)
 select 'application4',id from public.scholarship_applications
  where graduate_id=tests.id('graduate4') and opportunity_id=tests.id('scholar4');
+select is((select delivery_status from public.scholarship_applications where id=tests.id('application4')),
+  'BLOCKED','disabled provider mapping keeps delivery blocked');
+select is((select status from private.scholarship_delivery_outbox where application_id=tests.id('application4')),
+  'BLOCKED','disabled provider mapping creates blocked outbox row');
+select tests.login('admin');
+select lives_ok($q$select public.configure_scholarship_provider_mapping(
+ tests.id('scholar4'),'PROVIDER_B','remote-scholarship-4',true)$q$,
+ 'admin re-enables external provider delivery');
+reset role;
+select is((select delivery_status from public.scholarship_applications where id=tests.id('application4')),
+  'PENDING','re-enabled provider mapping unblocks the application');
+select is((select status from private.scholarship_delivery_outbox where application_id=tests.id('application4')),
+  'PENDING','re-enabled provider mapping queues the outbox item');
 select tests.login('graduate4');
 select is((public.withdraw_scholarship_application(tests.id('application4'))).status,
   'WITHDRAWN','graduate can withdraw before external delivery starts');

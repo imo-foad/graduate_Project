@@ -252,9 +252,9 @@ try {
       p_application_data: { study_area: "Computer Science", motivation: "Research" },
     }),
   });
-  pass("graduate submits sample scholarship; platform labels it internal-only",
+  pass("graduate submits sample scholarship; platform keeps it in internal flow",
     scholarshipSubmit.status === 200 &&
-    scholarshipSubmit.json?.status === "INTERNAL_ONLY" &&
+    scholarshipSubmit.json?.status === "SUBMITTED" &&
     scholarshipSubmit.json?.delivery_status === "NOT_REQUIRED" &&
     scholarshipSubmit.json?.external_submission === false);
   scholarshipApplicationId = scholarshipSubmit.json?.application_id ?? null;
@@ -266,7 +266,7 @@ try {
   );
   pass("graduate reads own scholarship form and status",
     scholarshipOwn.status === 200 && scholarshipOwn.json?.length === 1 &&
-    scholarshipOwn.json[0]?.status === "INTERNAL_ONLY" &&
+    scholarshipOwn.json[0]?.status === "SUBMITTED" &&
     scholarshipOwn.json[0]?.application_data?.study_area === "Computer Science" &&
     scholarshipOwn.json[0]?.personal_statement?.startsWith("I am applying"));
 
@@ -290,7 +290,7 @@ try {
   );
   pass("scholarship status history is readable by its owner",
     scholarshipHistory.status === 200 && scholarshipHistory.json?.length === 1 &&
-    scholarshipHistory.json[0]?.new_status === "INTERNAL_ONLY" &&
+    scholarshipHistory.json[0]?.new_status === "SUBMITTED" &&
     scholarshipHistory.json[0]?.source_type === "GRADUATE_ACTION");
 
   const scholarshipWithdraw = await request("/rest/v1/rpc/withdraw_scholarship_application", {
@@ -315,12 +315,12 @@ try {
     scholarshipReapply.status === 409 && scholarshipReapply.json?.message === "ALREADY_APPLIED");
 
   const scholarshipNotifications = await request(
-    "/rest/v1/notifications?select=type,related_entity_id&type=in.(SCHOLARSHIP_APPLICATION_INTERNAL_ONLY,SCHOLARSHIP_APPLICATION_WITHDRAWN)",
+    "/rest/v1/notifications?select=type,related_entity_id&type=in.(SCHOLARSHIP_APPLICATION_SUBMITTED,SCHOLARSHIP_APPLICATION_WITHDRAWN)",
     { headers: headers(a.token) },
   );
   pass("scholarship submit and withdraw notifications are created",
     scholarshipNotifications.status === 200 &&
-    scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_INTERNAL_ONLY" && n.related_entity_id === scholarshipApplicationId) &&
+    scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_SUBMITTED" && n.related_entity_id === scholarshipApplicationId) &&
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_WITHDRAWN" && n.related_entity_id === scholarshipApplicationId));
 
   // Internal Alumni Connect Scholarship lifecycle: the platform admin is created only for this

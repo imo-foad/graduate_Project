@@ -76,7 +76,8 @@ Deno.serve(async (req) => {
     return json({ error: "APPLICATION_SUBMISSION_FAILED" }, 500);
   }
 
-  if (application.status === "INTERNAL_ONLY") {
+  if (application.status === "INTERNAL_ONLY" ||
+      (application.status === "SUBMITTED" && application.delivery_status === "NOT_REQUIRED")) {
     return json({
       application_id: application.id,
       status: application.status,

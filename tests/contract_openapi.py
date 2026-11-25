@@ -185,6 +185,8 @@ class Contract(unittest.TestCase):
         self.assertTrue({"200", "202", "400", "401", "409", "422"} <= set(submit["responses"]))
 
         sample_schema = API["components"]["schemas"]["ScholarshipApplication"]["properties"]
+        self.assertIn("SUBMITTED", sample_schema["status"]["enum"])
+        self.assertIn("UNDER_REVIEW", sample_schema["status"]["enum"])
         self.assertIn("PENDING_DELIVERY", sample_schema["status"]["enum"])
         self.assertIn("SUBMITTED_EXTERNALLY", sample_schema["status"]["enum"])
         self.assertIn("INTERNAL_ONLY", sample_schema["status"]["enum"])
@@ -217,6 +219,11 @@ class Contract(unittest.TestCase):
         self.assertIn('auth.getUser()', submit_edge)
         self.assertRegex(submit_edge, r'rpc\(\s*"apply_for_scholarship"')
         self.assertIn("INTERNAL_ONLY", submit_edge)
+        self.assertIn('application.status === "SUBMITTED"', submit_edge)
+        reviewer_rpc = API["paths"]["/rest/v1/rpc/review_scholarship_application"]["post"]
+        reviewer_schema = reviewer_rpc["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(reviewer_schema["required"]), {"p_application_id", "p_status"})
+        self.assertIn("UNDER_REVIEW", reviewer_schema["properties"]["p_status"]["enum"])
         self.assertIn('rpc("assert_scholarship_admin"', delivery_edge)
         self.assertIn('rpc("claim_scholarship_delivery"', (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
         self.assertIn("verifyProviderWebhookSignature", callback_edge)

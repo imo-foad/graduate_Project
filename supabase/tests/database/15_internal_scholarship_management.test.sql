@@ -4,7 +4,8 @@ select * from no_plan();
 create schema tests;
 grant usage on schema tests to anon, authenticated, service_role;
 create table tests.ids (k text primary key, v uuid not null);
-grant select on tests.ids to anon, authenticated, service_role;
+grant select, insert on tests.ids to authenticated, service_role;
+grant select on tests.ids to anon;
 
 create function tests.id(p_k text) returns uuid language sql stable as $f$
   select v from tests.ids where k = p_k
@@ -24,11 +25,11 @@ $f$;
 create function tests.mk_opp(p_key text, p_type text, p_props jsonb default '{}') returns uuid language plpgsql as $f$
 declare v uuid;
 begin
-  insert into public.opportunities (seed_key, type, title, status, deadline, end_at, attendance_mode)
+  insert into public.opportunities (seed_key, type, title, status, deadline, end_at, attendance_mode, is_sample)
   values ('t-' || p_key, p_type, 'Test ' || p_key, coalesce(p_props ->> 'status', 'ACTIVE'),
     case when p_props ? 'deadline_days' then now() + make_interval(days => (p_props ->> 'deadline_days')::int) end,
     case when p_props ? 'end_days' then now() + make_interval(days => (p_props ->> 'end_days')::int) end,
-    'ONLINE')
+    'ONLINE', coalesce((p_props ->> 'is_sample')::boolean, false))
   returning id into v;
   insert into tests.ids values (p_key, v);
   return v;
@@ -52,7 +53,7 @@ begin
   values (tests.id('admin'), true);
   update public.graduate_profiles set degree = 'Bachelor', graduation_year = 2025
    where profile_id in (tests.id('a1'), tests.id('a2'));
-  perform tests.mk_opp('sample_sch', 'SCHOLARSHIP', '{"deadline_days":10}');
+  perform tests.mk_opp('sample_sch', 'SCHOLARSHIP', '{"deadline_days":10,"is_sample":true}');
   insert into public.cv_documents(id,graduate_id,storage_path,file_type,size_bytes)
   values
     ('00000000-0000-0000-0000-0000000000d1',tests.id('a1'),tests.id('a1')::text || '/scholarship.pdf','pdf',100),
@@ -61,7 +62,7 @@ begin
     ('cv_a','00000000-0000-0000-0000-0000000000d1'),
     ('cv_unattached','00000000-0000-0000-0000-0000000000d2');
 end
-$;
+$$;
 
 select ok(has_function_privilege('authenticated',
   'public.create_admin_scholarship(text,text,text,text,text,timestamp with time zone,text[],integer,integer,text[],text[])',

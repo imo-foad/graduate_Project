@@ -53,8 +53,15 @@ begin
   update public.graduate_profiles set degree = 'Bachelor'
    where profile_id in (tests.id('a1'), tests.id('a2'));
   perform tests.mk_opp('sample_sch', 'SCHOLARSHIP', '{"deadline_days":10}');
+  insert into public.cv_documents(id,graduate_id,storage_path,file_type,size_bytes)
+  values
+    ('00000000-0000-0000-0000-0000000000d1',tests.id('a1'),tests.id('a1')::text || '/scholarship.pdf','pdf',100),
+    ('00000000-0000-0000-0000-0000000000d2',tests.id('a2'),tests.id('a2')::text || '/unattached.pdf','pdf',100);
+  insert into tests.ids(k,v) values
+    ('cv_a','00000000-0000-0000-0000-0000000000d1'),
+    ('cv_unattached','00000000-0000-0000-0000-0000000000d2');
 end
-$$;
+$;
 
 select ok(has_function_privilege('authenticated',
   'public.create_admin_scholarship(text,text,text,text,text,timestamp with time zone,text[],integer,integer,text[],text[])',
@@ -133,10 +140,10 @@ reset role;
 -- Graduate submission keeps the existing CV + statement + flexible JSON form.
 select tests.login('a1');
 select is((public.apply_for_scholarship(
-  tests.id('internal_sch'), null,
+  tests.id('internal_sch'), tests.id('cv_a'),
   'I want to continue research in applied computing.',
   '{"study_area":"Computer Science","motivation":"Research"}'::jsonb
-)).status,'SUBMITTED','graduate submits to an admin-created internal Scholarship');
+)).status,'SUBMITTED','graduate submits to an admin-created internal Scholarship with an owned CV');
 insert into tests.ids(k,v)
 select 'app_a1', id from public.scholarship_applications
  where graduate_id=tests.id('a1') and opportunity_id=tests.id('internal_sch');
@@ -168,6 +175,18 @@ select is((select applicant_name from public.get_admin_scholarship_application(t
 select is((select application_data from public.get_admin_scholarship_application(tests.id('app_a1'))),
   '{"study_area":"Computer Science","motivation":"Research"}'::jsonb,
   'admin application details include the original flexible JSON answers');
+select is((select cv_storage_path from public.get_admin_scholarship_application(tests.id('app_a1'))),
+  tests.id('a1')::text || '/scholarship.pdf',
+  'admin application details return the attached Scholarship CV storage path');
+select is((select storage_path from public.cv_documents where id=tests.id('cv_a')),
+  tests.id('a1')::text || '/scholarship.pdf',
+  'admin can read metadata for a CV attached to a Scholarship application');
+select is((select count(*)::int from public.cv_documents where id=tests.id('cv_unattached')),
+  0,'admin cannot read an unrelated CV metadata row');
+select ok(private.can_admin_read_scholarship_cv(tests.id('a1')::text || '/scholarship.pdf'),
+  'admin CV helper allows a Scholarship-attached CV');
+select ok(not private.can_admin_read_scholarship_cv(tests.id('a2')::text || '/unattached.pdf'),
+  'admin CV helper refuses an unrelated graduate CV');
 select throws_ok($q$select * from public.list_admin_scholarship_applications(
   null,'ALL',0,null,null)$q$,'PT422','INVALID_INPUT','invalid admin queue limit is rejected');
 select throws_ok($q$select * from public.list_admin_scholarship_applications(

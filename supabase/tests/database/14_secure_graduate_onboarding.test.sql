@@ -118,9 +118,10 @@ reset role;
 -- Auth invitation completion is service-role-only and email must match the stored claim.
 insert into tests.ids(k,v)
 select 'invitation_id', id from private.graduate_invitations where email='new.grad@tests.local';
+select tests.login('outsider');
 select throws_ok($q$select public.finalize_graduate_invitation(
  tests.id('invitation_id'),tests.id('invitee'),true,null)$q$,
- 'PT403','SERVICE_ROLE_REQUIRED','authenticated user cannot finalize an Auth invitation');
+ '42501',null,'authenticated user has no execute grant for invitation finalization');
 reset role;
 insert into tests.ids(k,v) values ('invited_user',gen_random_uuid());
 insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data)
@@ -170,7 +171,6 @@ reset role;
 -- Deletion is requested by the owner, reviewed by an admin, and only then claimed by service role.
 select tests.login('graduate');
 insert into tests.ids(k,v) values ('company_id',(public.create_company('Graduate-Owned Company')).id);
-reset role;
 insert into tests.ids(k,v)
 values ('deletion_request_1',public.request_account_deletion('Please erase my account and CV data'));
 select is((select count(*)::int from public.profiles where id=tests.id('graduate')),0,

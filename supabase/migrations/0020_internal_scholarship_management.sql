@@ -446,3 +446,21 @@ comment on table public.scholarship_applications is
   'Internal Alumni Connect scholarship applications. Platform admins publish scholarships, review applications and record decisions; no external provider delivery is implied.';
 comment on column public.scholarship_application_status_history.source_type is
   'GRADUATE_ACTION records applicant actions; ADMIN_ACTION records central platform-admin review decisions.';
+
+
+-- The shared recommendation invalidation trigger intentionally marks every
+-- graduate profile dirty when opportunity data changes. Keep an explicit
+-- non-null primary-key predicate so safe-update guards accept this global update.
+create or replace function public.mark_all_recommendations_dirty()
+returns trigger language plpgsql security definer set search_path = '' as $mark_all_recommendations_dirty$
+begin
+  update public.graduate_profiles
+     set recommendations_dirty = true,
+         profile_version = profile_version + 1,
+         profile_updated_at = now()
+   where profile_id is not null;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end
+$mark_all_recommendations_dirty$;
+revoke all on function public.mark_all_recommendations_dirty() from public,anon,authenticated;

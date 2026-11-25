@@ -613,7 +613,7 @@ begin
      returning author_id, moderation_status into v_author, v_content_status;
   end if;
 
-  if not found then v_content_status := 'MISSING'; end if;
+  v_content_status := coalesce(v_content_status, 'MISSING');
 
   insert into private.social_moderation_events(
     report_id, target_type, target_id, target_author_id, action, actor_user_id, reason
@@ -621,10 +621,12 @@ begin
     v_report.id, v_report.target_type, v_report.target_id, v_author, p_action, v_uid, btrim(p_reason)
   );
 
-  update private.social_content_reports
+  update private.social_content_reports as reports
      set status = 'RESOLVED', reviewed_at = now(), reviewed_by = v_uid,
          resolution_note = btrim(p_reason)
-   where target_type = v_report.target_type and target_id = v_report.target_id and status = 'OPEN';
+   where reports.target_type = v_report.target_type
+     and reports.target_id = v_report.target_id
+     and reports.status = 'OPEN';
 
   if v_author is not null then
     insert into public.notifications(profile_id, title, body, type, related_entity_id)

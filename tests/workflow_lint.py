@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")

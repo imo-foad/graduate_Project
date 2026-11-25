@@ -1951,7 +1951,7 @@ paths:
               required: [p_opportunity_id, p_provider_key, p_external_opportunity_id]
               properties:
                 p_opportunity_id: { type: string, format: uuid }
-                p_provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}
+                p_provider_key: { type: string }}
     post:
       summary: Confirms the authenticated caller has active platform-admin access
       responses:
@@ -2122,7 +2122,7 @@ paths:
               required: [p_user_id, p_provider_key, p_is_active]
               properties:
                 p_user_id: { type: string, format: uuid }
-                p_provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}
+                p_provider_key: { type: string }}
     post:
       summary: Confirms the authenticated caller has active platform-admin access
       responses:

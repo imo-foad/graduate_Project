@@ -51,6 +51,13 @@ class Workflow(unittest.TestCase):
         stop = next(s for s in steps("database") if "supabase stop" in s.get("run", ""))
         self.assertIn("timeout 120s", stop["run"])
 
+    def test_social_feed_like_race_is_in_concurrency_suite(self):
+        concurrency = SCRIPTS["tests/db/concurrency.sh"]
+        self.assertIn("public.like_social_post", concurrency)
+        self.assertIn("social_post_likes", concurrency)
+        self.assertIn("ALREADY_LIKED", concurrency)
+        self.assertIn("N-1", concurrency)
+
     def test_no_cloud_access_anywhere(self):
         forbidden = ["supabase link", "db push", "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "qikqbvohqjblbcysbvel", "secrets.", "functions deploy"]
         blob = WF_TEXT + "".join(SCRIPTS.values())

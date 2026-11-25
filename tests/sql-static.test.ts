@@ -27,11 +27,11 @@ test("every migration has balanced quotes, parentheses and dollar-quotes", () =>
 
 test("write RPCs run in one transaction scope and lock before check-then-write", () => {
   const fns = finalFunctions(allMigrationsSql());
-  for (const n of ["register_for_event", "cancel_event_registration"])
+  for (const n of ["register_for_event", "cancel_event_registration", "apply_for_scholarship", "apply_for_competition"])
     assert.match(fns.get(n)!.body, /from public\.opportunities where id = p_opportunity_id for update/, n);
   assert.match(fns.get("set_current_job")!.body, /for no key update/);
   assert.match(fns.get("save_recommendations")!.body, /pg_advisory_xact_lock/);
-  for (const n of ["register_for_event", "apply_for_job"])
+  for (const n of ["register_for_event", "apply_for_job", "apply_for_scholarship", "apply_for_competition"])
     assert.match(fns.get(n)!.body, /is_opportunity_open\(/, `${n} must use the shared open-predicate`);
 });
 
@@ -111,3 +111,5 @@ test("saved-opportunity RLS helper is private from its first migration and clean
   assert.match(migration10, /drop function if exists public\._opportunity_exists_for_saved_item\(uuid\)/i);
   assert.match(migration10, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
 });
+
+

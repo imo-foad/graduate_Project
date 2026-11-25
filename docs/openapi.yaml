@@ -8177,6 +8177,37 @@ paths:
         '404': { description: Provider application reference not found }
         '409': { description: Invalid transition or provider event id reused with another payload }
         '503': { description: Provider callback could not be committed; provider may retry the same event id }
+  /functions/v1/get-scholarship-review-cv:
+    post:
+      summary: Return a 10-minute private CV download URL only to an active reviewer assigned to the application's provider or a platform admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: CV link available or the application has no CV attached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application_id: { type: string, format: uuid }
+                  cv_available: { type: boolean }
+                  download_url: { type: string, format: uri, nullable: true }
+                  expires_in_seconds: { type: integer, nullable: true }
+        '400': { description: Invalid request }
+        '401': { description: UNAUTHENTICATED }
+        '403': { description: SCHOLARSHIP_REVIEWER_REQUIRED }
+        '404': { description: SCHOLARSHIP_APPLICATION_NOT_FOUND }
+        '409': { description: SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE }
+        '503': { description: Signed URL unavailable }
   /functions/v1/submit-scholarship:
     post:
       summary: Submit a scholarship application and trigger the first signed, idempotent provider delivery attempt

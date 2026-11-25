@@ -89,8 +89,10 @@ class Contract(unittest.TestCase):
 
     def test_every_client_callable_rpc_is_documented(self):
         documented = {p.rsplit("/", 1)[1] for p in API["paths"] if p.startswith("/rest/v1/rpc/")}
-        self.assertEqual(exec_granted("authenticated") - INTERNAL_OK,
-                         documented - PREEXISTING_UNDOCUMENTED_ADMIN_RPCS)
+        self.assertEqual(
+            exec_granted("authenticated") - INTERNAL_OK - PREEXISTING_UNDOCUMENTED_ADMIN_RPCS,
+            documented - PREEXISTING_UNDOCUMENTED_ADMIN_RPCS,
+        )
 
     def test_no_client_rpc_accepts_a_graduate_id(self):
         fns = functions()

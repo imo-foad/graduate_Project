@@ -330,10 +330,10 @@ test("delivery worker blocks a mapping with no provider secret and never calls t
 });
 
 test("delivery worker persists retryable provider errors with the Retry-After delay", async () => {
-  let failedArgs: Record<string, unknown> | null = null;
+  const failedArgs: Record<string, unknown>[] = [];
   const { admin, calls } = makeDeliveryAdmin(claimedDelivery, {
     fail_competition_delivery: async (args) => {
-      failedArgs = args;
+      failedArgs.push(args);
       return { data: "PENDING", error: null };
     },
   });
@@ -349,9 +349,9 @@ test("delivery worker persists retryable provider errors with the Retry-After de
   assert.equal(results[0]?.status, "PENDING_DELIVERY");
   assert.equal(results[0]?.delivery_status, "PENDING");
   assert.equal(results[0]?.error_code, "PROVIDER_HTTP_ERROR");
-  assert.equal(failedArgs?.p_retryable, true);
-  assert.equal(failedArgs?.p_http_status, 503);
-  assert.equal(failedArgs?.p_retry_after_seconds, 45);
+  assert.equal(failedArgs[0]?.p_retryable, true);
+  assert.equal(failedArgs[0]?.p_http_status, 503);
+  assert.equal(failedArgs[0]?.p_retry_after_seconds, 45);
   assert.equal(calls.some((call) => call.name === "complete_competition_delivery"), false);
 });
 

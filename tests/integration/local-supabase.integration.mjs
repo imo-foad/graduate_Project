@@ -58,6 +58,8 @@ const pdf = Buffer.from("%PDF-1.4\n% local Supabase integration test\n1 0 obj<<>
 let cvId = null;
 let scholarshipApplicationId = null;
 let scholarshipOpportunityId = null;
+let competitionApplicationId = null;
+let competitionOpportunityId = null;
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
@@ -283,6 +285,93 @@ try {
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_SUBMITTED" && n.related_entity_id === scholarshipApplicationId) &&
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_WITHDRAWN" && n.related_entity_id === scholarshipApplicationId));
 
+  // Competition entry is intentionally separate from event registration.
+  const competitionCatalog = await request(
+    "/rest/v1/opportunities?select=id,type&seed_key=eq.comp-hackathon",
+    { headers: headers(a.token) },
+  );
+  pass("seed competition is visible in the catalogue",
+    competitionCatalog.status === 200 && competitionCatalog.json?.length === 1 &&
+    competitionCatalog.json[0]?.type === "COMPETITION");
+  competitionOpportunityId = competitionCatalog.json?.[0]?.id ?? null;
+  assert.ok(competitionOpportunityId, "seed COMPETITION opportunity is required");
+
+  const competitionSubmit = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: competitionOpportunityId,
+      p_cv_document_id: cvId,
+      p_personal_statement: "I am submitting my software prototype for review.",
+      p_submission_data: { project_title: "Campus Assist", project_url: "https://example.test/project" },
+    }),
+  });
+  pass("graduate submits a competition entry over HTTP",
+    competitionSubmit.status === 200 && competitionSubmit.json?.status === "SUBMITTED" &&
+    competitionSubmit.json?.opportunity_id === competitionOpportunityId && competitionSubmit.json?.graduate_id === a.id);
+  competitionApplicationId = competitionSubmit.json?.id ?? null;
+  assert.ok(competitionApplicationId, "competition application id is required");
+
+  const competitionOwn = await request(
+    "/rest/v1/competition_applications?select=id,status,personal_statement,submission_data&id=eq." + competitionApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("graduate reads own competition entry",
+    competitionOwn.status === 200 && competitionOwn.json?.length === 1 &&
+    competitionOwn.json[0]?.status === "SUBMITTED" &&
+    competitionOwn.json[0]?.submission_data?.project_title === "Campus Assist");
+
+  const competitionDuplicate = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: competitionOpportunityId }),
+  });
+  pass("duplicate competition entry returns ALREADY_APPLIED",
+    competitionDuplicate.status === 409 && competitionDuplicate.json?.message === "ALREADY_APPLIED");
+
+  const peerCompetition = await request(
+    "/rest/v1/competition_applications?select=id&id=eq." + competitionApplicationId,
+    { headers: headers(b.token) },
+  );
+  pass("another graduate cannot read competition entry",
+    peerCompetition.status === 200 && Array.isArray(peerCompetition.json) && peerCompetition.json.length === 0);
+
+  const competitionHistory = await request(
+    "/rest/v1/competition_application_status_history?select=old_status,new_status,source_type&competition_application_id=eq." + competitionApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("competition history is readable by its owner",
+    competitionHistory.status === 200 && competitionHistory.json?.length === 1 &&
+    competitionHistory.json[0]?.new_status === "SUBMITTED");
+
+  const competitionWithdraw = await request("/rest/v1/rpc/withdraw_competition_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: competitionApplicationId }),
+  });
+  pass("graduate withdraws own competition entry",
+    competitionWithdraw.status === 200 && competitionWithdraw.json?.status === "WITHDRAWN");
+
+  const competitionWithdrawAgain = await request("/rest/v1/rpc/withdraw_competition_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: competitionApplicationId }),
+  });
+  pass("repeated competition withdrawal is rejected",
+    competitionWithdrawAgain.status === 422 && competitionWithdrawAgain.json?.message === "CANNOT_WITHDRAW_COMPETITION_APPLICATION");
+
+  const competitionReapply = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: competitionOpportunityId }),
+  });
+  pass("withdrawn competition entry cannot be submitted again",
+    competitionReapply.status === 409 && competitionReapply.json?.message === "ALREADY_APPLIED");
+
+  const competitionNotifications = await request(
+    "/rest/v1/notifications?select=type,related_entity_id&type=in.(COMPETITION_APPLICATION_SUBMITTED,COMPETITION_APPLICATION_WITHDRAWN)",
+    { headers: headers(a.token) },
+  );
+  pass("competition submit and withdraw notifications are created",
+    competitionNotifications.status === 200 &&
+    competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_SUBMITTED" && n.related_entity_id === competitionApplicationId) &&
+    competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_WITHDRAWN" && n.related_entity_id === competitionApplicationId));
+
   const bMetadata = await request(`/rest/v1/cv_documents?select=id,storage_path&storage_path=eq.${encodeURIComponent(objectPath)}`, {
     headers: headers(b.token),
   });
@@ -323,6 +412,24 @@ try {
     );
     pass("temporary career-path skills cleaned up for " + injected.graduate_id, cleanup.ok);
   }
+  // Remove data created by the synthetic competition workflow before reruns.
+  const competitionCleanup = [];
+  if (competitionApplicationId) {
+    competitionCleanup.push(await request("/rest/v1/competition_applications?id=eq." + competitionApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+    competitionCleanup.push(await request("/rest/v1/notifications?related_entity_id=eq." + competitionApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (competitionOpportunityId) {
+    competitionCleanup.push(await request("/rest/v1/recommendation_interactions?graduate_id=eq." + a.id +
+      "&opportunity_id=eq." + competitionOpportunityId + "&interaction_type=eq.APPLY", {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (competitionApplicationId) pass("competition test side effects cleaned up", competitionCleanup.length === 3 && competitionCleanup.every((r) => r.ok));
+
   // Remove data generated by this synthetic scholarship test so that reruns are deterministic.
   const scholarshipCleanup = [];
   if (scholarshipApplicationId) {

@@ -82,3 +82,19 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/scholarship_application_status_history`.
     - Withdraw with POST `/rest/v1/rpc/withdraw_scholarship_application` and body `{"p_application_id":"<application uuid>"}`.
     - Seeded listings are sample data: requests are stored in this backend but are not transmitted to the named external provider. No external scholarship-provider integration is configured.
+
+15. **Competition submissions**:
+    - List competitions with GET `/rest/v1/opportunities?type=eq.COMPETITION&order=deadline.asc`.
+    - Submit with POST `/rest/v1/rpc/apply_for_competition` using `p_opportunity_id`, optional caller-owned `p_cv_document_id`, optional `p_personal_statement` (maximum 10,000 characters), and a JSON object in `p_submission_data` (maximum 32 KiB). Example:
+      ```json
+      {
+        "p_opportunity_id": "<competition uuid>",
+        "p_cv_document_id": "<own cv uuid or null>",
+        "p_personal_statement": "Overview of my entry...",
+        "p_submission_data": { "project_title": "Campus Assist", "project_url": "https://example.test/project" }
+      }
+      ```
+    - The server verifies COMPETITION type, open/deadline/end state, registration opening time, eligibility, CV ownership and duplicate prevention. One entry per graduate/competition remains enforced after withdrawal.
+    - This is a competition-entry workflow, not `register_for_event`; the event-registration RPC continues to reject COMPETITION.
+    - Read own entries from `/rest/v1/competition_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/competition_application_status_history`; withdraw with POST `/rest/v1/rpc/withdraw_competition_application` and body `{"p_application_id":"<application uuid>"}`.
+    - The entry payload is flexible because no authoritative team, judging, or competition-specific form schema exists in the catalogue. It stores the graduate's data in this backend; sample entries are not transmitted to the external organizer.

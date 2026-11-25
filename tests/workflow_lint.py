@@ -88,7 +88,7 @@ class Scripts(unittest.TestCase):
                        "auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY", "DEMO_PASSWORD", "assert-local-db.mjs"):
             self.assertIn(needle, runner)
         for needle in ("/auth/v1/token", "/storage/v1/object/", "/rest/v1/cv_documents",
-                       "/functions/v1/recommend", "force: true", "cv-documents"):
+                       "/functions/v1/recommend", "force: true", "cv-documents", "/rest/v1/rpc/apply_for_competition", "/rest/v1/rpc/withdraw_competition_application", "COMPETITION_APPLICATION_SUBMITTED"):
             self.assertIn(needle, http)
         for needle in ("/functions/v1/parse-cv", "/functions/v1/recommend", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):

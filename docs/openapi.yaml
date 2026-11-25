@@ -1294,6 +1294,7 @@ paths:
         '200': { description: Provider event accepted; duplicate event returns result DUPLICATE }
         '400': { description: Invalid body or signature timestamp format }
         '401': { description: Invalid HMAC signature or unknown provider }
+        '413': { description: Request body exceeds the 16 KiB limit }
         '404': { description: Provider application reference not found }
         '409': { description: Invalid transition or provider event id reused with another payload }
         '503': { description: Provider callback could not be committed; provider may retry the same event id }

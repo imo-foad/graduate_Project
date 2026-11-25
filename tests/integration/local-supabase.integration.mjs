@@ -624,7 +624,14 @@ try {
   competitionOpportunityId = competitionCatalog.json?.[0]?.id ?? null;
   assert.ok(competitionOpportunityId, "seed COMPETITION opportunity is required");
 
-  const competitionSubmit = await request("/rest/v1/rpc/apply_for_competition", {
+  const noAuthCompetition = await request("/functions/v1/submit-competition", {
+    method: "POST",
+    headers: headers(null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: competitionOpportunityId }),
+  });
+  pass("competition submit Edge Function rejects missing JWT", noAuthCompetition.status === 401);
+
+  const competitionSubmit = await request("/functions/v1/submit-competition", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
     body: JSON.stringify({
       p_opportunity_id: competitionOpportunityId,
@@ -633,9 +640,11 @@ try {
       p_submission_data: { project_title: "Campus Assist", project_url: "https://example.test/project" },
     }),
   });
-  pass("graduate submits a competition entry over HTTP",
+  pass("graduate submits a sample Competition through the Edge Function without false external-delivery claims",
     competitionSubmit.status === 200 && competitionSubmit.json?.status === "SUBMITTED" &&
-    competitionSubmit.json?.opportunity_id === competitionOpportunityId && competitionSubmit.json?.graduate_id === a.id);
+    competitionSubmit.json?.delivery_status === "NOT_REQUIRED" &&
+    competitionSubmit.json?.opportunity_id === competitionOpportunityId &&
+    competitionSubmit.json?.graduate_id === a.id);
   competitionApplicationId = competitionSubmit.json?.id ?? null;
   assert.ok(competitionApplicationId, "competition application id is required");
 

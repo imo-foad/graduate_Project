@@ -45,9 +45,6 @@ Deno.serve(async (req) => {
     if (message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED")) {
       return json({ error: "COMPANY_OWNERSHIP_TRANSFER_REQUIRED" }, 409);
     }
-    if (message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED")) {
-      return json({ error: "COMPANY_OWNERSHIP_TRANSFER_REQUIRED" }, 409);
-    }
     if (message.includes("ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER")) {
       return json({ error: "ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER" }, 409);
     }
@@ -75,14 +72,58 @@ Deno.serve(async (req) => {
     return json({ error: "ACCOUNT_DELETION_PRECHECK_FAILED" }, 503);
   }
 
-  const paths = (cvRows ?? []).map((row) => row.storage_path);
-  if (paths.some((path) => typeof path !== "string" || !path.startsWith(targetId + "/"))) {
+  const metadataPaths = (cvRows ?? []).map((row) => row.storage_path);
+  if (metadataPaths.some((path) => typeof path !== "string" || !path.startsWith(targetId + "/"))) {
     console.error("CV storage path ownership mismatch during account deletion");
     await releaseClaim();
     return json({ error: "CV_STORAGE_OWNERSHIP_MISMATCH" }, 409);
   }
-  if (paths.length > 0) {
-    const { error: storageError } = await adminClient.storage.from("cv-documents").remove(paths);
+
+  // Enumerate the entire user-owned prefix as well as metadata paths. This also removes
+  // orphaned private objects left behind by an earlier metadata-only deletion.
+  const storage = adminClient.storage.from("cv-documents");
+  const allPaths = new Set<string>(metadataPaths);
+  let scanned = 0;
+  async function collectUserObjects(prefix: string, depth: number): Promise<boolean> {
+    if (depth > 10) return false;
+    for (let offset = 0; ; offset += 100) {
+      const { data, error } = await storage.list(prefix, {
+        limit: 100,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
+      if (error || !data) {
+        console.error("CV storage listing failed during deletion", { message: error?.message });
+        return false;
+      }
+      for (const item of data) {
+        if (!item.name || item.name === "." || item.name === "..") continue;
+        scanned++;
+        if (scanned > 10000) return false;
+        const objectPath = prefix + "/" + item.name;
+        if (item.id === null) {
+          if (!await collectUserObjects(objectPath, depth + 1)) return false;
+        } else {
+          allPaths.add(objectPath);
+        }
+      }
+      if (data.length < 100) break;
+    }
+    return true;
+  }
+
+  if (!await collectUserObjects(targetId, 0)) {
+    await releaseClaim();
+    return json({ error: "CV_STORAGE_ENUMERATION_FAILED" }, 503);
+  }
+  const paths = [...allPaths];
+  if (paths.some((path) => !path.startsWith(targetId + "/"))) {
+    console.error("CV storage enumeration returned a path outside the user prefix");
+    await releaseClaim();
+    return json({ error: "CV_STORAGE_OWNERSHIP_MISMATCH" }, 409);
+  }
+  for (let offset = 0; offset < paths.length; offset += 100) {
+    const { error: storageError } = await storage.remove(paths.slice(offset, offset + 100));
     if (storageError) {
       console.error("CV storage cleanup failed", { message: storageError.message });
       await releaseClaim();

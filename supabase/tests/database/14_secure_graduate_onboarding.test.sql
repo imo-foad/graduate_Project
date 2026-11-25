@@ -69,7 +69,8 @@ select is(public.bootstrap_first_platform_admin(tests.id('admin'),'operator tick
   true,'service-role bootstrap creates the first platform admin');
 select throws_ok($q$select public.bootstrap_first_platform_admin(tests.id('admin2'),'second operator ticket')$q$,
   'PT409','ADMIN_ALREADY_BOOTSTRAPPED','first-admin bootstrap cannot add another admin');
-select throws_ok($q$select public.finalize_graduate_invitation(gen_random_uuid(),null,false,'AUTH_INVITE_REJECTED')$q$,
+select throws_ok($q$select public.finalize_graduate_invitation(
+  gen_random_uuid(),null,false,tests.id('admin'),'AUTH_INVITE_REJECTED')$q$,
   'PT404','INVITATION_NOT_FOUND','service role cannot finalize a nonexistent invitation');
 reset role;
 

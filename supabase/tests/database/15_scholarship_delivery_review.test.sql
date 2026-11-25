@@ -284,6 +284,22 @@ select is(public.retry_scholarship_delivery(tests.id('application_retry')),
 reset role;
 select is((select status from public.scholarship_applications where id=tests.id('application_retry')),
   'PENDING_DELIVERY','administrator retry returns application to pending, not externally submitted');
+select is((select delivery_generation from private.scholarship_delivery_outbox
+  where id=tests.id('outbox_retry')),2,'manual retry starts a new delivery generation');
+select set_config('request.jwt.claims','{"role":"service_role"}',true);
+set local role service_role;
+select is((select count(*)::int from public.claim_scholarship_delivery(tests.id('application_retry'),1)),
+  1,'worker can claim the new delivery generation');
+select is(public.fail_scholarship_delivery(
+ tests.id('outbox_retry'),'PROVIDER_REJECTED',400,false,null),
+ 'FAILED','permanent failure is recorded in the new generation');
+reset role;
+select is((select count(*)::int from private.scholarship_delivery_attempts
+  where outbox_id=tests.id('outbox_retry') and delivery_generation=1 and attempt_number=1),
+  1,'the first delivery generation audit remains immutable');
+select is((select count(*)::int from private.scholarship_delivery_attempts
+  where outbox_id=tests.id('outbox_retry') and delivery_generation=2 and attempt_number=1),
+  1,'a retry may reuse attempt number one in a separate generation');
 
 -- Applicants can withdraw before delivery, which cancels their pending outbox.
 select tests.login('graduate4');

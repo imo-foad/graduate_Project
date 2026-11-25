@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { hasActiveAccount } from "../_shared/account-status.ts";
 import { deliverScholarshipApplications } from "../_shared/scholarship-delivery.ts";
 
 const json = (body: unknown, status = 200) =>
@@ -27,6 +28,9 @@ Deno.serve(async (req) => {
   });
   const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) return json({ error: "UNAUTHENTICATED" }, 401);
+  if (!(await hasActiveAccount(userClient, authData.user.id))) {
+    return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+  }
 
   const body = await req.json().catch(() => null);
   const allowed = ["p_opportunity_id", "p_cv_document_id", "p_personal_statement", "p_application_data"];

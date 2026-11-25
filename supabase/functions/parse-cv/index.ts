@@ -2,6 +2,7 @@
 // Reads only the authenticated graduate's private CV. Extracted skills remain suggestions
 // until that same graduate explicitly calls confirm_cv_suggestions.
 import { createClient } from "@supabase/supabase-js";
+import { hasActiveAccount } from "../_shared/account-status.ts";
 import { extractSkillsFromText, validateExtraction } from "../_shared/cv-extract.ts";
 import { extractStructuredCvData } from "../_shared/cv-structured-extract.ts";
 import { CvFileError, extractCvText } from "../_shared/cv-file-parser.ts";
@@ -43,6 +44,9 @@ Deno.serve(async (req) => {
   });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "UNAUTHENTICATED" }, 401);
+  if (!(await hasActiveAccount(userClient, user.id))) {
+    return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+  }
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)

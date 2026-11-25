@@ -3,6 +3,7 @@
 // The service-role client is used ONLY for the two server-side RPCs; every user-facing read goes through the user client (RLS).
 // NOTE: not executed in the authoring workspace (no Deno/Supabase runtime); orchestration is unit-tested in tests/.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { hasActiveAccount } from "../_shared/account-status.ts";
 import { runRecommend } from "../_shared/recommend-flow.ts";
 import { MODEL_VERSION } from "../_shared/scoring.ts";
 import { deriveCareerProfile } from "../_shared/career-profile.ts";
@@ -18,6 +19,9 @@ Deno.serve(async (req) => {
   });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "UNAUTHENTICATED" }, 401);
+  if (!(await hasActiveAccount(userClient, user.id))) {
+    return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+  }
 
   const body = await req.json().catch(() => ({}));
   const { data: ownSkills, error: skillsError } = await userClient.from("graduate_skills").select("skill_id,level");

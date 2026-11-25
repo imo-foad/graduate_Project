@@ -142,7 +142,9 @@ select ok(exists(select 1 from private.platform_admin_audit
  where action='GRADUATE_INVITATION_ACCEPTED' and target_user_id=tests.id('invited_user')),
  'invitation acceptance is audited');
  
--- Suspensions are enforced by both the common RPC guard and restrictive RLS policies.
+-- Suspensions are enforced by common RPC guard and restrictive RLS on public tables and Storage.
+insert into storage.objects(bucket_id,name)
+values ('cv-documents',tests.id('graduate')::text || '/onboarding-security-test.pdf');
 select set_config('request.jwt.claims',
  jsonb_build_object('sub',tests.id('admin'),'role','service_role')::text,true);
 set local role service_role;
@@ -155,6 +157,9 @@ select throws_ok($q$select public._require_uid()$q$,
  'PT403','ACCOUNT_UNAVAILABLE','suspended graduate cannot use authenticated RPCs');
 select is((select count(*)::int from public.profiles where id=tests.id('graduate')),0,
  'restrictive RLS policy hides all public rows from a suspended graduate');
+select is((select count(*)::int from storage.objects
+ where bucket_id='cv-documents' and name=tests.id('graduate')::text || '/onboarding-security-test.pdf'),0,
+ 'suspended graduate cannot read their private CV object using an existing JWT');
 reset role;
 select set_config('request.jwt.claims',
  jsonb_build_object('sub',tests.id('admin'),'role','service_role')::text,true);
@@ -166,6 +171,9 @@ reset role;
 select tests.login('graduate');
 select is((select count(*)::int from public.profiles where id=tests.id('graduate')),1,
  'reactivated graduate can read own profile again');
+select is((select count(*)::int from storage.objects
+ where bucket_id='cv-documents' and name=tests.id('graduate')::text || '/onboarding-security-test.pdf'),1,
+ 'reactivated graduate can access their private CV object again');
 reset role;
 
 -- Deletion is requested by the owner, reviewed by an admin, and only then claimed by service role.

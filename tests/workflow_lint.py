@@ -51,6 +51,13 @@ class Workflow(unittest.TestCase):
         stop = next(s for s in steps("database") if "supabase stop" in s.get("run", ""))
         self.assertIn("timeout 120s", stop["run"])
 
+    def test_social_feed_like_race_is_in_concurrency_suite(self):
+        concurrency = SCRIPTS["tests/db/concurrency.sh"]
+        self.assertIn("public.like_social_post", concurrency)
+        self.assertIn("social_post_likes", concurrency)
+        self.assertIn("ALREADY_LIKED", concurrency)
+        self.assertIn("N-1", concurrency)
+
     def test_no_cloud_access_anywhere(self):
         forbidden = ["supabase link", "db push", "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "qikqbvohqjblbcysbvel", "secrets.", "functions deploy"]
         blob = WF_TEXT + "".join(SCRIPTS.values())
@@ -72,12 +79,12 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_scholarship_application", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_scholarship_application", "11_competition_application", "12_social_feed", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
-        self.assertEqual(len(migs), 15)
-        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015"])
+        self.assertEqual(len(migs), 17)
+        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017"])
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]
@@ -88,7 +95,11 @@ class Scripts(unittest.TestCase):
                        "auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY", "DEMO_PASSWORD", "assert-local-db.mjs"):
             self.assertIn(needle, runner)
         for needle in ("/auth/v1/token", "/storage/v1/object/", "/rest/v1/cv_documents",
-                       "/functions/v1/recommend", "force: true", "cv-documents"):
+                       "/functions/v1/recommend", "force: true", "cv-documents", "/rest/v1/rpc/apply_for_competition", "/rest/v1/rpc/withdraw_competition_application", "COMPETITION_APPLICATION_SUBMITTED",
+                        "/rest/v1/rpc/get_social_feed", "/rest/v1/rpc/create_social_post", "/rest/v1/rpc/update_social_post",
+                        "/rest/v1/rpc/delete_social_post", "/rest/v1/rpc/get_social_post_comments", "/rest/v1/rpc/add_social_comment",
+                        "/rest/v1/rpc/update_social_comment", "/rest/v1/rpc/delete_social_comment", "/rest/v1/rpc/like_social_post",
+                        "/rest/v1/rpc/unlike_social_post", "SOCIAL_POST_NOT_FOUND", "ALREADY_LIKED"):
             self.assertIn(needle, http)
         for needle in ("/functions/v1/parse-cv", "/functions/v1/recommend", "confirm_cv_suggestions", "CV_NO_TEXT_FOUND", "CV_ALREADY_PARSED",
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
@@ -97,7 +108,13 @@ class Scripts(unittest.TestCase):
         self.assertIn("career-cohort.integration.mjs round1", runner)
         self.assertIn("career-cohort.integration.mjs round2", runner)
         self.assertIn('[ "$CODE" = "405" ]', runner)
-        self.assertIn("expected HTTP 405 for GET", runner)
+        self.assertIn("READY_STREAK=0", runner)
+        self.assertIn('[ "$READY_STREAK" -ge 2 ]', runner)
+        self.assertIn('"$LOG_DIR/functions-serve.log"', runner)
+        self.assertIn("expected two consecutive HTTP 405 GET responses", runner)
+        self.assertIn("MAX_FUNCTION_METHOD_RETRIES = 10", http)
+        self.assertIn("attempt < MAX_FUNCTION_METHOD_RETRIES", http)
+        self.assertIn("Retrying recommend method guard", http)
         self.assertIn("timeout 900s", runner)
         self.assertIn("career-cohort-reports/", WF_TEXT)
         self.assertIn("name: career-cohort-reports", WF_TEXT)

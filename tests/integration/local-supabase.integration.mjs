@@ -58,6 +58,11 @@ const pdf = Buffer.from("%PDF-1.4\n% local Supabase integration test\n1 0 obj<<>
 let cvId = null;
 let scholarshipApplicationId = null;
 let scholarshipOpportunityId = null;
+let competitionApplicationId = null;
+let competitionOpportunityId = null;
+let socialPostId = null;
+let socialSecondPostId = null;
+let socialCommentId = null;
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
@@ -89,9 +94,30 @@ try {
   pass("graduate cannot read another profile", otherProfile.status === 200 && otherProfile.json?.length === 0);
 
   // The Edge Function is exercised over the real local HTTP gateway, with JWT verification enabled.
-  const getFunction = await request("/functions/v1/recommend", {
-    method: "GET", headers: headers(a.token),
-  });
+  // A freshly started local Edge Function can briefly restart after the CLI's readiness probe.
+  // Retry the same GET for a bounded interval; success still requires the real handler's HTTP 405.
+  const MAX_FUNCTION_METHOD_RETRIES = 10;
+  let getFunction = { status: 0, json: null, text: "request not attempted" };
+  for (let attempt = 0; attempt < MAX_FUNCTION_METHOD_RETRIES; attempt++) {
+    try {
+      getFunction = await request("/functions/v1/recommend", {
+        method: "GET", headers: headers(a.token),
+      });
+    } catch (error) {
+      getFunction = { status: 0, json: null, text: String(error) };
+    }
+    if (getFunction.status === 405) break;
+    if (attempt < MAX_FUNCTION_METHOD_RETRIES - 1) {
+      console.warn(`Retrying recommend method guard after HTTP ${getFunction.status} (attempt ${attempt + 1}/${MAX_FUNCTION_METHOD_RETRIES})`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+  if (getFunction.status !== 405) {
+    console.error("recommend method guard diagnostics:", {
+      status: getFunction.status,
+      body: (getFunction.json ?? getFunction.text ?? "").toString().slice(0, 1000),
+    });
+  }
   pass("recommend endpoint rejects non-POST methods", getFunction.status === 405,
     { status: getFunction.status, body: getFunction.json ?? getFunction.text });
   const noAuth = await request("/functions/v1/recommend", {
@@ -283,6 +309,259 @@ try {
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_SUBMITTED" && n.related_entity_id === scholarshipApplicationId) &&
     scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_WITHDRAWN" && n.related_entity_id === scholarshipApplicationId));
 
+  // Competition entry is intentionally separate from event registration.
+  const competitionCatalog = await request(
+    "/rest/v1/opportunities?select=id,type&seed_key=eq.comp-hackathon",
+    { headers: headers(a.token) },
+  );
+  pass("seed competition is visible in the catalogue",
+    competitionCatalog.status === 200 && competitionCatalog.json?.length === 1 &&
+    competitionCatalog.json[0]?.type === "COMPETITION");
+  competitionOpportunityId = competitionCatalog.json?.[0]?.id ?? null;
+  assert.ok(competitionOpportunityId, "seed COMPETITION opportunity is required");
+
+  const competitionSubmit = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: competitionOpportunityId,
+      p_cv_document_id: cvId,
+      p_personal_statement: "I am submitting my software prototype for review.",
+      p_submission_data: { project_title: "Campus Assist", project_url: "https://example.test/project" },
+    }),
+  });
+  pass("graduate submits a competition entry over HTTP",
+    competitionSubmit.status === 200 && competitionSubmit.json?.status === "SUBMITTED" &&
+    competitionSubmit.json?.opportunity_id === competitionOpportunityId && competitionSubmit.json?.graduate_id === a.id);
+  competitionApplicationId = competitionSubmit.json?.id ?? null;
+  assert.ok(competitionApplicationId, "competition application id is required");
+
+  const competitionOwn = await request(
+    "/rest/v1/competition_applications?select=id,status,personal_statement,submission_data&id=eq." + competitionApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("graduate reads own competition entry",
+    competitionOwn.status === 200 && competitionOwn.json?.length === 1 &&
+    competitionOwn.json[0]?.status === "SUBMITTED" &&
+    competitionOwn.json[0]?.submission_data?.project_title === "Campus Assist");
+
+  const competitionDuplicate = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: competitionOpportunityId }),
+  });
+  pass("duplicate competition entry returns ALREADY_APPLIED",
+    competitionDuplicate.status === 409 && competitionDuplicate.json?.message === "ALREADY_APPLIED");
+
+  const peerCompetition = await request(
+    "/rest/v1/competition_applications?select=id&id=eq." + competitionApplicationId,
+    { headers: headers(b.token) },
+  );
+  pass("another graduate cannot read competition entry",
+    peerCompetition.status === 200 && Array.isArray(peerCompetition.json) && peerCompetition.json.length === 0);
+
+  const competitionHistory = await request(
+    "/rest/v1/competition_application_status_history?select=old_status,new_status,source_type&competition_application_id=eq." + competitionApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("competition history is readable by its owner",
+    competitionHistory.status === 200 && competitionHistory.json?.length === 1 &&
+    competitionHistory.json[0]?.new_status === "SUBMITTED");
+
+  const competitionWithdraw = await request("/rest/v1/rpc/withdraw_competition_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: competitionApplicationId }),
+  });
+  pass("graduate withdraws own competition entry",
+    competitionWithdraw.status === 200 && competitionWithdraw.json?.status === "WITHDRAWN");
+
+  const competitionWithdrawAgain = await request("/rest/v1/rpc/withdraw_competition_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: competitionApplicationId }),
+  });
+  pass("repeated competition withdrawal is rejected",
+    competitionWithdrawAgain.status === 422 && competitionWithdrawAgain.json?.message === "CANNOT_WITHDRAW_COMPETITION_APPLICATION");
+
+  const competitionReapply = await request("/rest/v1/rpc/apply_for_competition", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: competitionOpportunityId }),
+  });
+  pass("withdrawn competition entry cannot be submitted again",
+    competitionReapply.status === 409 && competitionReapply.json?.message === "ALREADY_APPLIED");
+
+  const competitionNotifications = await request(
+    "/rest/v1/notifications?select=type,related_entity_id&type=in.(COMPETITION_APPLICATION_SUBMITTED,COMPETITION_APPLICATION_WITHDRAWN)",
+    { headers: headers(a.token) },
+  );
+  pass("competition submit and withdraw notifications are created",
+    competitionNotifications.status === 200 &&
+    competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_SUBMITTED" && n.related_entity_id === competitionApplicationId) &&
+    competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_WITHDRAWN" && n.related_entity_id === competitionApplicationId));
+
+  // Social Feed: access is available only through the narrow authenticated RPC projection.
+  const socialCreate = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "  Alumni Connect community update  " }),
+  });
+  pass("graduate creates a Social Feed post", socialCreate.status === 200 &&
+    socialCreate.json?.content === "Alumni Connect community update" && socialCreate.json?.author_id === a.id);
+  socialPostId = socialCreate.json?.id ?? null;
+  assert.ok(socialPostId, "Social Feed post id is required");
+
+  const socialOwnIdentity = await request("/rest/v1/profiles?select=full_name&id=eq." + a.id, { headers: headers(a.token) });
+  pass("post author can read own display name for comparison", socialOwnIdentity.status === 200 && socialOwnIdentity.json?.length === 1);
+  const socialFeed = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: null, p_before_id: null, p_limit: 20 }),
+  });
+  const socialItem = socialFeed.json?.find((item) => item.id === socialPostId);
+  pass("another graduate sees post with display-only identity", socialFeed.status === 200 &&
+    !Object.hasOwn(socialItem ?? {}, "author_id") && socialItem?.author_name === socialOwnIdentity.json?.[0]?.full_name &&
+    Object.hasOwn(socialItem ?? {}, "author_avatar_url") && !("email" in (socialItem ?? {})) && !("phone" in (socialItem ?? {})));
+
+  const socialSecondCreate = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "Second post for cursor pagination" }),
+  });
+  pass("second graduate creates separate feed post", socialSecondCreate.status === 200 &&
+    socialSecondCreate.json?.author_id === b.id && socialSecondCreate.json?.content === "Second post for cursor pagination");
+  socialSecondPostId = socialSecondCreate.json?.id ?? null;
+  assert.ok(socialSecondPostId, "second Social Feed post id is required");
+
+  const socialPageOne = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: null, p_before_id: null, p_limit: 1 }),
+  });
+  const socialCursorItem = socialPageOne.json?.[0];
+  const socialPageTwo = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: socialCursorItem?.created_at, p_before_id: socialCursorItem?.id, p_limit: 1 }),
+  });
+  pass("Social Feed keyset pagination reaches next distinct item", socialPageOne.status === 200 &&
+    socialPageOne.json?.length === 1 && socialPageTwo.status === 200 && socialPageTwo.json?.length === 1 &&
+    socialPageTwo.json[0]?.id !== socialCursorItem?.id);
+
+  const socialRawTable = await request("/rest/v1/social_posts?select=id", { headers: headers(a.token) });
+  pass("graduate cannot bypass Social Feed RPCs through raw posts table", !socialRawTable.ok);
+
+  const socialComment = await request("/rest/v1/rpc/add_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "  Great to reconnect  " }),
+  });
+  pass("graduate adds a comment to another active graduate post", socialComment.status === 200 &&
+    socialComment.json?.post_id === socialPostId && socialComment.json?.content === "Great to reconnect");
+  socialCommentId = socialComment.json?.id ?? null;
+  assert.ok(socialCommentId, "Social Feed comment id is required");
+
+  const socialComments = await request("/rest/v1/rpc/get_social_post_comments", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_before_created_at: null, p_before_id: null, p_limit: 20 }),
+  });
+  pass("post owner reads comments with display-only author fields", socialComments.status === 200 &&
+    socialComments.json?.some((item) => item.id === socialCommentId && !Object.hasOwn(item, "author_id") &&
+      item.author_name === demoB.full_name && item.content === "Great to reconnect" &&
+      !("email" in item) && !("phone" in item)));
+
+  const socialCommentUpdate = await request("/rest/v1/rpc/update_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId, p_content: "Edited comment" }),
+  });
+  pass("comment author edits own comment", socialCommentUpdate.status === 200 && socialCommentUpdate.json?.content === "Edited comment");
+  const socialForeignCommentEdit = await request("/rest/v1/rpc/update_social_comment", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId, p_content: "Attempted foreign edit" }),
+  });
+  pass("another graduate cannot edit someone else's comment", socialForeignCommentEdit.status === 404 &&
+    socialForeignCommentEdit.json?.message === "SOCIAL_COMMENT_NOT_FOUND");
+
+  const socialCommentDelete = await request("/rest/v1/rpc/delete_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId }),
+  });
+  pass("comment author deletes own comment", socialCommentDelete.status === 200 && socialCommentDelete.json === true);
+  socialCommentId = null;
+  const socialCommentAgain = await request("/rest/v1/rpc/add_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Comment to verify post cascade" }),
+  });
+  pass("new comment can be added after deleting previous comment", socialCommentAgain.status === 200);
+  socialCommentId = socialCommentAgain.json?.id ?? null;
+
+  const socialLike = await request("/rest/v1/rpc/like_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("graduate likes a Social Feed post", socialLike.status === 200 && socialLike.json === true);
+  const socialDuplicateLike = await request("/rest/v1/rpc/like_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("duplicate like is rejected", socialDuplicateLike.status === 409 && socialDuplicateLike.json?.message === "ALREADY_LIKED");
+  const socialLikedFeed = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 20 }),
+  });
+  pass("feed exposes aggregate count and caller liked_by_me flag", socialLikedFeed.status === 200 &&
+    socialLikedFeed.json?.some((item) => item.id === socialPostId && item.likes_count === 1 && item.liked_by_me === true));
+  const socialUnlike = await request("/rest/v1/rpc/unlike_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("graduate removes own like", socialUnlike.status === 200 && socialUnlike.json === true);
+  const socialUnlikeAgain = await request("/rest/v1/rpc/unlike_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("unlike without existing like is rejected", socialUnlikeAgain.status === 404 && socialUnlikeAgain.json?.message === "NOT_LIKED");
+
+  const socialForeignPostEdit = await request("/rest/v1/rpc/update_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Foreign edit" }),
+  });
+  pass("another graduate cannot edit a post", socialForeignPostEdit.status === 404 &&
+    socialForeignPostEdit.json?.message === "SOCIAL_POST_NOT_FOUND");
+  const socialForeignPostDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("another graduate cannot delete a post", socialForeignPostDelete.status === 404 &&
+    socialForeignPostDelete.json?.message === "SOCIAL_POST_NOT_FOUND");
+
+  const socialPostUpdate = await request("/rest/v1/rpc/update_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Updated alumni network announcement" }),
+  });
+  pass("post author edits own post", socialPostUpdate.status === 200 &&
+    socialPostUpdate.json?.content === "Updated alumni network announcement");
+  const socialInvalidPost = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "   " }),
+  });
+  pass("blank Social Feed post is rejected", socialInvalidPost.status === 422 && socialInvalidPost.json?.message === "INVALID_INPUT");
+  const socialInvalidPage = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 0 }),
+  });
+  pass("invalid Social Feed page size is rejected", socialInvalidPage.status === 422 && socialInvalidPage.json?.message === "INVALID_INPUT");
+
+  const socialDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("post author deletes own post", socialDelete.status === 200 && socialDelete.json === true);
+  socialPostId = null;
+  const socialAfterDelete = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 50 }),
+  });
+  pass("deleted post and its comments/likes disappear from feed", socialAfterDelete.status === 200 &&
+    !socialAfterDelete.json?.some((item) => item.content === "Updated alumni network announcement"));
+  const socialSecondDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialSecondPostId }),
+  });
+  pass("second post author can delete own post", socialSecondDelete.status === 200 && socialSecondDelete.json === true);
+  socialSecondPostId = null;
+
+
   const bMetadata = await request(`/rest/v1/cv_documents?select=id,storage_path&storage_path=eq.${encodeURIComponent(objectPath)}`, {
     headers: headers(b.token),
   });
@@ -323,6 +602,34 @@ try {
     );
     pass("temporary career-path skills cleaned up for " + injected.graduate_id, cleanup.ok);
   }
+  // Remove Social Feed test posts that remain if an earlier assertion aborts the journey.
+  for (const [postId, token] of [[socialPostId, a.token], [socialSecondPostId, b.token]]) {
+    if (!postId) continue;
+    const cleanup = await request("/rest/v1/rpc/delete_social_post", {
+      method: "POST", headers: headers(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_post_id: postId }),
+    }).catch(() => ({ ok: false, status: 0 }));
+    pass("remaining Social Feed test post cleanup", cleanup.status === 200 || cleanup.status === 404);
+  }
+
+  // Remove data created by the synthetic competition workflow before reruns.
+  const competitionCleanup = [];
+  if (competitionApplicationId) {
+    competitionCleanup.push(await request("/rest/v1/competition_applications?id=eq." + competitionApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+    competitionCleanup.push(await request("/rest/v1/notifications?related_entity_id=eq." + competitionApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (competitionOpportunityId) {
+    competitionCleanup.push(await request("/rest/v1/recommendation_interactions?graduate_id=eq." + a.id +
+      "&opportunity_id=eq." + competitionOpportunityId + "&interaction_type=eq.APPLY", {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (competitionApplicationId) pass("competition test side effects cleaned up", competitionCleanup.length === 3 && competitionCleanup.every((r) => r.ok));
+
   // Remove data generated by this synthetic scholarship test so that reruns are deterministic.
   const scholarshipCleanup = [];
   if (scholarshipApplicationId) {

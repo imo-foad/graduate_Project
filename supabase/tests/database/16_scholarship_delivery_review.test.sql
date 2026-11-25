@@ -127,9 +127,9 @@ reset role;
 select is((select status from private.scholarship_delivery_outbox
   where application_id=(select id from public.scholarship_applications where graduate_id=tests.id('graduate1'))),
   'PENDING','configuring provider moves blocked application into queue');
-select tests.login('admin');
 select is((select delivery_status from public.scholarship_applications where graduate_id=tests.id('graduate1')),
   'PENDING','configuring provider updates delivery state without claiming external submission');
+select tests.login('admin');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar2'),'PROVIDER_A','remote-scholarship-2',true)$q$,
  'admin can configure a second listing under the same provider');
@@ -187,7 +187,7 @@ select is((select external_opportunity_id from private.scholarship_delivery_outb
 -- Only service_role can claim, and duplicate/parallel claims cannot both own one application.
 select tests.login('graduate2');
 select throws_ok($q$select * from public.claim_scholarship_delivery(tests.id('application2'),1)$q$,
-  'PT403','SERVICE_ROLE_REQUIRED','graduate cannot claim a delivery');
+  '42501',null,'graduate cannot claim a delivery because EXECUTE is revoked');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;

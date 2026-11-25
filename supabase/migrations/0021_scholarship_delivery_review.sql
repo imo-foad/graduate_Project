@@ -1784,8 +1784,8 @@ begin
      for update of a skip locked
      limit p_limit
   loop
-    select * into v_outbox from private.scholarship_delivery_outbox
-     where application_id = v_item.application_id for update;
+    select * into v_outbox from private.scholarship_delivery_outbox o
+     where o.application_id = v_item.application_id for update;
     if not found or not (
       (v_outbox.status = 'PENDING' and v_outbox.next_attempt_at <= now())
       or (v_outbox.status = 'PROCESSING' and v_outbox.lease_expires_at < now())

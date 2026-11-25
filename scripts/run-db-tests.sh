@@ -37,7 +37,7 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 18 ] || fail "expected at least 17 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -ge 18 ] || fail "expected at least 18 migration files, found ${#MIGRATIONS[@]}"
 for f in "${MIGRATIONS[@]}"; do
   grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
 done

@@ -414,7 +414,7 @@ try {
   });
   const socialItem = socialFeed.json?.find((item) => item.id === socialPostId);
   pass("another graduate sees post with display-only identity", socialFeed.status === 200 &&
-    socialItem?.author_id === a.id && socialItem?.author_name === socialOwnIdentity.json?.[0]?.full_name &&
+    !Object.hasOwn(socialItem ?? {}, "author_id") && socialItem?.author_name === socialOwnIdentity.json?.[0]?.full_name &&
     Object.hasOwn(socialItem ?? {}, "author_avatar_url") && !("email" in (socialItem ?? {})) && !("phone" in (socialItem ?? {})));
 
   const socialSecondCreate = await request("/rest/v1/rpc/create_social_post", {
@@ -456,8 +456,9 @@ try {
     body: JSON.stringify({ p_post_id: socialPostId, p_before_created_at: null, p_before_id: null, p_limit: 20 }),
   });
   pass("post owner reads comments with display-only author fields", socialComments.status === 200 &&
-    socialComments.json?.some((item) => item.id === socialCommentId && item.author_id === b.id &&
-      item.content === "Great to reconnect" && !("email" in item)));
+    socialComments.json?.some((item) => item.id === socialCommentId && !Object.hasOwn(item, "author_id") &&
+      item.author_name === demoB.full_name && item.content === "Great to reconnect" &&
+      !("email" in item) && !("phone" in item)));
 
   const socialCommentUpdate = await request("/rest/v1/rpc/update_social_comment", {
     method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),

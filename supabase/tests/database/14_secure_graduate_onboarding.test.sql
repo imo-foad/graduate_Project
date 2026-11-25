@@ -54,9 +54,9 @@ select ok(not has_table_privilege('authenticated','private.account_deletion_requ
   'authenticated cannot read deletion requests');
 select ok(not has_function_privilege('authenticated','public.bootstrap_first_platform_admin(uuid,text)','EXECUTE'),
   'authenticated cannot bootstrap the first admin');
-select ok(not has_function_privilege('authenticated','public.finalize_graduate_invitation(uuid,uuid,boolean,text)','EXECUTE'),
+select ok(not has_function_privilege('authenticated','public.finalize_graduate_invitation(uuid,uuid,boolean,uuid,text)','EXECUTE'),
   'authenticated cannot finalize invitations');
-select ok(not has_function_privilege('authenticated','public.get_approved_account_deletion(uuid)','EXECUTE'),
+select ok(not has_function_privilege('authenticated','public.get_approved_account_deletion(uuid,uuid)','EXECUTE'),
   'authenticated cannot access deletion worker claim');
 reset role;
 
@@ -120,7 +120,7 @@ insert into tests.ids(k,v)
 select 'invitation_id', id from private.graduate_invitations where email='new.grad@tests.local';
 select tests.login('outsider');
 select throws_ok($q$select public.finalize_graduate_invitation(
- tests.id('invitation_id'),tests.id('invitee'),true,null)$q$,
+ tests.id('invitation_id'),tests.id('invitee'),true,tests.id('admin'),null)$q$,
  '42501',null,'authenticated user has no execute grant for invitation finalization');
 reset role;
 insert into tests.ids(k,v) values ('invited_user',gen_random_uuid());
@@ -130,7 +130,7 @@ values(tests.id('invited_user'), 'authenticated','authenticated','new.grad@tests
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
 select is(public.finalize_graduate_invitation(
- tests.id('invitation_id'),tests.id('invited_user'),true,null),
+ tests.id('invitation_id'),tests.id('invited_user'),true,tests.id('admin'),null),
  'PENDING','service role links the Auth-created user to the invitation');
 reset role;
 update auth.users set email_confirmed_at=now() where id=tests.id('invited_user');
@@ -204,7 +204,7 @@ select is((select status from public.review_account_deletion_request(
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
-select throws_ok($q$select public.get_approved_account_deletion(tests.id('deletion_request_2'))$q$,
+select throws_ok($q$select public.get_approved_account_deletion(tests.id('deletion_request_2'),tests.id('admin'))$q$,
  'PT409','COMPANY_OWNERSHIP_TRANSFER_REQUIRED','account deletion refuses to remove an active company owner');
 reset role;
 

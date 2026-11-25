@@ -155,7 +155,7 @@ svc_scholar() {
     $1;
     commit;" 2>&1 | sed '/^$/d' || true
 }
-svc_scholar "select (public.claim_scholarship_delivery('$SCH_APP',1)).application_id" >/dev/null
+svc_scholar "select application_id from public.claim_scholarship_delivery('$SCH_APP',1)" >/dev/null
 SCH_OUTBOX=$(P -c "select id from private.scholarship_delivery_outbox where application_id='$SCH_APP'")
 svc_scholar "select (public.complete_scholarship_delivery('$SCH_OUTBOX','race-provider-ref',202,null)).id" >/dev/null
 SCH_DIGEST_A=$(printf 'race-payload-a' | sha256sum | awk '{print $1}')

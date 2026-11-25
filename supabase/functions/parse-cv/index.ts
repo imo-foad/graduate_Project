@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
   try {
     const { data: document, error: readError } = await userClient
       .from("cv_documents")
-      .select("id,graduate_id,storage_path,file_type,size_bytes,parse_status")
+      .select("id,graduate_id,storage_path,file_type,size_bytes,parse_status,parsed_at")
       .eq("id", cvDocumentId)
       .maybeSingle();
     if (readError) return json({ error: "CV_LOOKUP_FAILED" }, 500);

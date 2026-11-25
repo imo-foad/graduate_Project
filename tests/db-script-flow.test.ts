@@ -45,7 +45,7 @@ test("happy path (fake tools): every phase runs and the script reports success",
   const r = run();
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.ok(MIGS.length >= 21, `expected all 21 baseline migrations, found ${MIGS.length}`);
+  assert.ok(MIGS.length >= 22, `expected all 22 checked migrations, found ${MIGS.length}`);
 });
 test("the Social Feed migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0017_social_feed.sql" });
@@ -66,6 +66,10 @@ test("the scholarship migration is mandatory in db reset output", () => {
 test("the internal Scholarship management migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0020_internal_scholarship_management.sql" });
   assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0020_internal_scholarship_management.sql as applied"));
+});
+test("the graduate-invitation duplicate guard migration is mandatory in db reset output", () => {
+  const r = run({ FAKE_MISSING: "0023_graduate_invitation_duplicate_guard.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0023_graduate_invitation_duplicate_guard.sql as applied"));
 });
 test("the external Scholarship delivery migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0021_scholarship_delivery_review.sql" });

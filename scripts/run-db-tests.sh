@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> migrations 0001..0021 -> seeds -> pgTAP (16 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> all versioned migrations through 0023 -> seeds -> pgTAP (16 files) -> concurrency. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -37,7 +37,7 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 21 ] || fail "expected at least 20 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -ge 22 ] || fail "expected at least 22 migration files, found ${#MIGRATIONS[@]}"
 for f in "${MIGRATIONS[@]}"; do
   grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
 done

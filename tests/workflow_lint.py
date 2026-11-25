@@ -58,6 +58,13 @@ class Workflow(unittest.TestCase):
         self.assertIn("ALREADY_LIKED", concurrency)
         self.assertIn("N-1", concurrency)
 
+    def test_scholarship_provider_event_race_is_in_concurrency_suite(self):
+        concurrency = SCRIPTS["tests/db/concurrency.sh"]
+        self.assertIn("public.process_scholarship_provider_event", concurrency)
+        self.assertIn("same-event-id", concurrency)
+        self.assertIn("PROVIDER_EVENT_ID_CONFLICT", concurrency)
+        self.assertIn("scholarship_provider_events", concurrency)
+
     def test_no_cloud_access_anywhere(self):
         forbidden = ["supabase link", "db push", "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "qikqbvohqjblbcysbvel", "secrets.", "functions deploy"]
         blob = WF_TEXT + "".join(SCRIPTS.values())

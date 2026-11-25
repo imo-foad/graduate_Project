@@ -884,10 +884,7 @@ begin
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
 
-  select * into v_opportunity
-    from public.opportunities
-   where id = p_opportunity_id
-   for update;
+  select * into v_opportunity from public.opportunities where id = p_opportunity_id for update;
   if not found then raise exception 'OPPORTUNITY_NOT_FOUND' using errcode = 'PT404'; end if;
   if v_opportunity.type <> 'SCHOLARSHIP' then raise exception 'NOT_A_SCHOLARSHIP' using errcode = 'PT422'; end if;
   if not public.is_opportunity_open(v_opportunity.status, v_opportunity.deadline, v_opportunity.end_at) then

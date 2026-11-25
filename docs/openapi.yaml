@@ -123,7 +123,6 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        author_id: { type: string, format: uuid }
         author_name: { type: string }
         author_avatar_url: { type: string, nullable: true }
         content: { type: string, minLength: 1, maxLength: 5000 }
@@ -137,9 +136,18 @@ components:
       properties:
         id: { type: string, format: uuid }
         post_id: { type: string, format: uuid }
-        author_id: { type: string, format: uuid }
         author_name: { type: string }
         author_avatar_url: { type: string, nullable: true }
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SocialCommentMutation:
+      type: object
+      description: Mutation response returned to the authenticated comment author; author_id is the caller's own id.
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
         content: { type: string, minLength: 1, maxLength: 2000 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -812,7 +820,7 @@ paths:
                 p_post_id: { type: string, format: uuid }
                 p_content: { type: string, minLength: 1, maxLength: 2000 }
       responses:
-        '200': { description: Created comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialComment' } } } }
+        '200': { description: Created comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialCommentMutation' } } } }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_social_comment:
     post:
@@ -828,7 +836,7 @@ paths:
                 p_comment_id: { type: string, format: uuid }
                 p_content: { type: string, minLength: 1, maxLength: 2000 }
       responses:
-        '200': { description: Updated comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialComment' } } } }
+        '200': { description: Updated comment, content: { application/json: { schema: { $ref: '#/components/schemas/SocialCommentMutation' } } } }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/delete_social_comment:
     post:

@@ -163,6 +163,51 @@ class Contract(unittest.TestCase):
         self.assertIn("$ref", profile["properties"]["paths"]["items"])
         self.assertIn("career_profile", EDGE)
 
+    def test_scholarship_delivery_and_review_contract(self):
+        submit = API["paths"]["/functions/v1/submit-scholarship"]["post"]
+        schema = submit["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(schema["required"]), {"p_opportunity_id"})
+        self.assertEqual(
+            set(schema["properties"]),
+            {"p_opportunity_id", "p_cv_document_id", "p_personal_statement", "p_application_data"},
+        )
+        self.assertIs(schema["additionalProperties"], False)
+        self.assertTrue({"200", "202", "400", "401", "409", "422"} <= set(submit["responses"]))
+
+        sample_schema = API["components"]["schemas"]["ScholarshipApplication"]["properties"]
+        self.assertIn("PENDING_DELIVERY", sample_schema["status"]["enum"])
+        self.assertIn("SUBMITTED_EXTERNALLY", sample_schema["status"]["enum"])
+        self.assertIn("INTERNAL_ONLY", sample_schema["status"]["enum"])
+        self.assertIn("delivery_status", sample_schema)
+
+        delivery = API["paths"]["/functions/v1/deliver-scholarship"]["post"]
+        self.assertTrue({"200", "400", "401", "403", "503"} <= set(delivery["responses"]))
+        callback = API["paths"]["/functions/v1/scholarship-provider-callback"]["post"]
+        self.assertEqual(callback["security"], [])
+        self.assertIn("X-Alumni-Timestamp", [p["name"] for p in callback["parameters"]])
+        self.assertIn("X-Alumni-Signature", [p["name"] for p in callback["parameters"]])
+        callback_schema = callback["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(callback_schema["required"]),
+            {"provider_key", "event_id", "application_reference", "status"})
+        self.assertIs(callback_schema["additionalProperties"], False)
+
+        from pathlib import Path
+        root = Path(ROOT)
+        submit_edge = (root / "supabase/functions/submit-scholarship/index.ts").read_text()
+        delivery_edge = (root / "supabase/functions/deliver-scholarship/index.ts").read_text()
+        callback_edge = (root / "supabase/functions/scholarship-provider-callback/index.ts").read_text()
+        provider = (root / "supabase/functions/_shared/scholarship-provider.ts").read_text()
+        self.assertIn('auth.getUser()', submit_edge)
+        self.assertIn('rpc("apply_for_scholarship"', submit_edge)
+        self.assertIn("INTERNAL_ONLY", submit_edge)
+        self.assertIn('rpc("assert_scholarship_admin"', delivery_edge)
+        self.assertIn('rpc("claim_scholarship_delivery"', (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
+        self.assertIn("verifyProviderWebhookSignature", callback_edge)
+        self.assertIn('rpc("process_scholarship_provider_event"', callback_edge)
+        self.assertIn('redirect: "error"', provider)
+        self.assertIn("Idempotency-Key", provider)
+        self.assertIn("createSignedUrl", (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
+
     def test_social_feed_read_models_match_privacy_projection(self):
         schemas = API["components"]["schemas"]
         self.assertNotIn("author_id", schemas["SocialFeedItem"]["properties"])
@@ -220,6 +265,9 @@ class SecurityAndAuthContract(unittest.TestCase):
         for path, ops in API["paths"].items():
             if path == self.TOKEN: continue
             for method, op in ops.items():
+                if path == "/functions/v1/scholarship-provider-callback":
+                    self.assertEqual(op.get("security"), [], "provider callback must use HMAC, not a Supabase JWT")
+                    continue
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
 
     def test_grant_types_and_bodies(self):

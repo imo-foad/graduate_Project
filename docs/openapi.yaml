@@ -65,6 +65,29 @@ components:
         applied_at:
           type: string
           format: date-time
+    ScholarshipApplication:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        opportunity_id: { type: string, format: uuid }
+        cv_document_id: { type: string, format: uuid, nullable: true }
+        personal_statement: { type: string, maxLength: 10000, nullable: true }
+        application_data:
+          type: object
+          description: Scholarship form answers, maximum 32 KiB; no provider form schema is defined in the catalogue.
+          additionalProperties: true
+        status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
+        applied_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ScholarshipApplicationHistory:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scholarship_application_id: { type: string, format: uuid }
+        old_status: { type: string, nullable: true }
+        new_status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
+        source_type: { type: string, enum: [GRADUATE_ACTION] }
+        changed_at: { type: string, format: date-time }
     EventRegistration:
       type: object
       properties:
@@ -312,7 +335,8 @@ components:
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
-        INVALID_INTERACTION, JOB_NOT_DRAFT.
+        INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
+        SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION.
       content:
         application/json:
           schema:
@@ -468,6 +492,16 @@ paths:
       responses:
         '200':
           description: OK
+  /rest/v1/scholarship_applications:
+    get:
+      summary: Own scholarship applications (?select=*,opportunity:opportunities(title))
+      responses:
+        '200': { description: OK }
+  /rest/v1/scholarship_application_status_history:
+    get:
+      summary: Status history for the caller's own scholarship applications
+      responses:
+        '200': { description: OK }
   /rest/v1/event_registrations:
     get:
       summary: Own registrations
@@ -517,6 +551,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/apply_for_scholarship:
+    post:
+      summary: Submit once to an open and eligible SCHOLARSHIP opportunity; accepts an owned CV and form answers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_cv_document_id: { type: string, format: uuid, nullable: true }
+                p_personal_statement: { type: string, maxLength: 10000, nullable: true }
+                p_application_data:
+                  type: object
+                  description: Scholarship-specific answers; maximum 32 KiB. Empty object is allowed.
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Scholarship application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScholarshipApplication'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/withdraw_scholarship_application:
+    post:
+      summary: Withdraw the caller's own SUBMITTED scholarship application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Withdrawn scholarship application }
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/withdraw_application:

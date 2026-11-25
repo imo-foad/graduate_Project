@@ -17,7 +17,8 @@ test("every public table has RLS enabled", () => {
 });
 test("no table is writable by clients through catalogue/activity tables", () => {
   const readOnly = ["opportunities", "job_details", "event_details", "opportunity_skills", "opportunity_eligibility",
-    "applications", "application_status_history", "event_registrations", "recommendations", "cv_suggestions", "skills"];
+    "applications", "application_status_history", "event_registrations", "recommendations", "cv_suggestions", "skills",
+    "scholarship_applications", "scholarship_application_status_history"];
   for (const t of readOnly) {
     assert.doesNotMatch(sql, new RegExp(`create policy \\w+ on public\\.${t} for (insert|update|delete|all)`), `${t} has a write policy`);
     assert.doesNotMatch(sql, new RegExp(`grant[^;]*(insert|update|delete)[^;]*on[^;]*public\\.${t}\\b[^;]*to authenticated`, "i"), `${t} has a write grant`);
@@ -32,7 +33,8 @@ test("every SECURITY DEFINER function pins search_path", () => {
   for (const d of defs) assert.match(d.slice(0, 900), /set search_path = ''/, d.slice(0, 60));
 });
 test("RPCs derive identity from auth.uid(), not from a graduate-id parameter", () => {
-  for (const fn of ["apply_for_job", "withdraw_application", "register_for_event", "cancel_event_registration", "set_current_job", "get_my_insights"]) {
+  for (const fn of ["apply_for_job", "withdraw_application", "register_for_event", "cancel_event_registration", "set_current_job", "get_my_insights",
+    "apply_for_scholarship", "withdraw_scholarship_application"]) {
     const m = sql.match(new RegExp(`function public\\.${fn}\\([^)]*\\)`));
     assert.ok(m, fn);
     assert.doesNotMatch(m![0], /graduate_id|p_graduate/, `${fn} takes a client-supplied graduate id`);

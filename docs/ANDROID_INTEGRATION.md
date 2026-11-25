@@ -22,7 +22,7 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
    400 = bad credentials / used refresh token, 401 = missing or wrong `apikey`.
 4. **Never send a graduate id** to an RPC: identity comes from the JWT. (Direct inserts into `graduate_skills`,
    `saved_opportunities` carry `graduate_id` = your own uid; any other value is rejected by RLS.)
-5. **Catalogue is read-only**: GET `/rest/v1/opportunities` with PostgREST filters/pagination. There are no write endpoints.
+5. **Catalogue is read-only**: GET `/rest/v1/opportunities` with PostgREST filters/pagination. Do not write catalogue or activity tables directly; use the documented business-rule RPCs for submissions and registrations.
 6. **Errors**: RPC failures return HTTP 401/404/409/422 with `{"message": "<CODE>", "details": ...}`.
    Map `message` to UI strings: `ALREADY_APPLIED`, `ALREADY_REGISTERED`, `EVENT_FULL`, `OPPORTUNITY_CLOSED`,
    `REGISTRATION_CLOSED`, `NOT_ELIGIBLE` (details = failed requirements), `CANNOT_WITHDRAW`, ...
@@ -65,3 +65,20 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     `POST /rest/v1/rpc/set_job_experience_requirement` while the job is DRAFT with
     `p_opportunity_id`, `p_minimum_experience_years` (number or null) and `p_is_required`. Mandatory minimums
     exclude candidates below the threshold; preferred minimums reduce the experience match score.
+
+14. **Scholarship applications**:
+    - List opportunities with GET `/rest/v1/opportunities?type=eq.SCHOLARSHIP&order=deadline.asc`.
+    - Submit with POST `/rest/v1/rpc/apply_for_scholarship`:
+      ```json
+      {
+        "p_opportunity_id": "<scholarship uuid>",
+        "p_cv_document_id": "<own cv uuid or null>",
+        "p_personal_statement": "Why I am applying...",
+        "p_application_data": { "study_area": "Computer Science", "motivation": "Research" }
+      }
+      ```
+    - Only `p_opportunity_id` is required. The CV must belong to the caller; the statement is limited to 10,000 characters and `p_application_data` must be a JSON object no larger than 32 KiB. Answers are stored without an imposed form schema because the current catalogue does not provide scholarship-specific questions.
+    - The server checks opportunity type, open/deadline/end state, server-side eligibility and duplicate submissions. One submission per graduate/opportunity remains enforced after withdrawal.
+    - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/scholarship_application_status_history`.
+    - Withdraw with POST `/rest/v1/rpc/withdraw_scholarship_application` and body `{"p_application_id":"<application uuid>"}`.
+    - Seeded listings are sample data: requests are stored in this backend but are not transmitted to the named external provider. No external scholarship-provider integration is configured.

@@ -56,6 +56,8 @@ const objectPath = `${a.id}/ci-${randomUUID()}.pdf`;
 const foreignPath = `${a.id}/ci-foreign-${randomUUID()}.pdf`;
 const pdf = Buffer.from("%PDF-1.4\n% local Supabase integration test\n1 0 obj<<>>endobj\n%%EOF\n");
 let cvId = null;
+let scholarshipApplicationId = null;
+let scholarshipOpportunityId = null;
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
@@ -190,6 +192,97 @@ try {
   pass("A can create CV metadata for A's uploaded object", cvInsert.status === 201 && Array.isArray(cvInsert.json) && cvInsert.json.length === 1);
   cvId = cvInsert.json?.[0]?.id ?? null;
 
+  // Full graduate scholarship journey over the authenticated PostgREST RPCs.
+  const scholarshipCatalog = await request(
+    "/rest/v1/opportunities?select=id,type&seed_key=eq.schol-masters-cs",
+    { headers: headers(a.token) },
+  );
+  pass("seed scholarship is visible in the catalogue",
+    scholarshipCatalog.status === 200 && scholarshipCatalog.json?.length === 1 &&
+    scholarshipCatalog.json[0]?.type === "SCHOLARSHIP");
+  scholarshipOpportunityId = scholarshipCatalog.json?.[0]?.id ?? null;
+  assert.ok(scholarshipOpportunityId, "seed SCHOLARSHIP opportunity is required");
+  assert.ok(cvId, "caller-owned CV metadata row is required");
+
+  const scholarshipSubmit = await request("/rest/v1/rpc/apply_for_scholarship", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      p_opportunity_id: scholarshipOpportunityId,
+      p_cv_document_id: cvId,
+      p_personal_statement: "I am applying to continue postgraduate study in computing.",
+      p_application_data: { study_area: "Computer Science", motivation: "Research" },
+    }),
+  });
+  pass("graduate submits scholarship application over HTTP",
+    scholarshipSubmit.status === 200 && scholarshipSubmit.json?.status === "SUBMITTED" &&
+    scholarshipSubmit.json?.opportunity_id === scholarshipOpportunityId &&
+    scholarshipSubmit.json?.graduate_id === a.id);
+  scholarshipApplicationId = scholarshipSubmit.json?.id ?? null;
+  assert.ok(scholarshipApplicationId, "scholarship application id is required");
+
+  const scholarshipOwn = await request(
+    "/rest/v1/scholarship_applications?select=id,status,personal_statement,application_data&id=eq." + scholarshipApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("graduate reads own scholarship form and status",
+    scholarshipOwn.status === 200 && scholarshipOwn.json?.length === 1 &&
+    scholarshipOwn.json[0]?.status === "SUBMITTED" &&
+    scholarshipOwn.json[0]?.application_data?.study_area === "Computer Science" &&
+    scholarshipOwn.json[0]?.personal_statement?.startsWith("I am applying"));
+
+  const scholarshipDuplicate = await request("/rest/v1/rpc/apply_for_scholarship", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: scholarshipOpportunityId }),
+  });
+  pass("duplicate scholarship submission returns ALREADY_APPLIED",
+    scholarshipDuplicate.status === 409 && scholarshipDuplicate.json?.message === "ALREADY_APPLIED");
+
+  const peerScholarship = await request(
+    "/rest/v1/scholarship_applications?select=id&id=eq." + scholarshipApplicationId,
+    { headers: headers(b.token) },
+  );
+  pass("peer graduate cannot read scholarship submission",
+    peerScholarship.status === 200 && Array.isArray(peerScholarship.json) && peerScholarship.json.length === 0);
+
+  const scholarshipHistory = await request(
+    "/rest/v1/scholarship_application_status_history?select=old_status,new_status,source_type&scholarship_application_id=eq." + scholarshipApplicationId,
+    { headers: headers(a.token) },
+  );
+  pass("scholarship status history is readable by its owner",
+    scholarshipHistory.status === 200 && scholarshipHistory.json?.length === 1 &&
+    scholarshipHistory.json[0]?.new_status === "SUBMITTED" &&
+    scholarshipHistory.json[0]?.source_type === "GRADUATE_ACTION");
+
+  const scholarshipWithdraw = await request("/rest/v1/rpc/withdraw_scholarship_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: scholarshipApplicationId }),
+  });
+  pass("graduate withdraws own scholarship application",
+    scholarshipWithdraw.status === 200 && scholarshipWithdraw.json?.status === "WITHDRAWN");
+
+  const scholarshipWithdrawAgain = await request("/rest/v1/rpc/withdraw_scholarship_application", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_application_id: scholarshipApplicationId }),
+  });
+  pass("repeated scholarship withdrawal is rejected",
+    scholarshipWithdrawAgain.status === 422 && scholarshipWithdrawAgain.json?.message === "CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION");
+
+  const scholarshipReapply = await request("/rest/v1/rpc/apply_for_scholarship", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: scholarshipOpportunityId }),
+  });
+  pass("withdrawn scholarship application cannot be submitted again",
+    scholarshipReapply.status === 409 && scholarshipReapply.json?.message === "ALREADY_APPLIED");
+
+  const scholarshipNotifications = await request(
+    "/rest/v1/notifications?select=type,related_entity_id&type=in.(SCHOLARSHIP_APPLICATION_SUBMITTED,SCHOLARSHIP_APPLICATION_WITHDRAWN)",
+    { headers: headers(a.token) },
+  );
+  pass("scholarship submit and withdraw notifications are created",
+    scholarshipNotifications.status === 200 &&
+    scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_SUBMITTED" && n.related_entity_id === scholarshipApplicationId) &&
+    scholarshipNotifications.json?.some((n) => n.type === "SCHOLARSHIP_APPLICATION_WITHDRAWN" && n.related_entity_id === scholarshipApplicationId));
+
   const bMetadata = await request(`/rest/v1/cv_documents?select=id,storage_path&storage_path=eq.${encodeURIComponent(objectPath)}`, {
     headers: headers(b.token),
   });
@@ -230,6 +323,24 @@ try {
     );
     pass("temporary career-path skills cleaned up for " + injected.graduate_id, cleanup.ok);
   }
+  // Remove data generated by this synthetic scholarship test so that reruns are deterministic.
+  const scholarshipCleanup = [];
+  if (scholarshipApplicationId) {
+    scholarshipCleanup.push(await request("/rest/v1/scholarship_applications?id=eq." + scholarshipApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+    scholarshipCleanup.push(await request("/rest/v1/notifications?related_entity_id=eq." + scholarshipApplicationId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (scholarshipOpportunityId) {
+    scholarshipCleanup.push(await request("/rest/v1/recommendation_interactions?graduate_id=eq." + a.id +
+      "&opportunity_id=eq." + scholarshipOpportunityId + "&interaction_type=eq.APPLY", {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => ({ ok: false })));
+  }
+  if (scholarshipApplicationId) pass("scholarship test rows cleaned up", scholarshipCleanup.length === 3 && scholarshipCleanup.every((r) => r.ok));
+
   // Cleanup uses the local service role through the Storage/PostgREST APIs, never direct SQL on storage.objects.
   await removeObject(service, objectPath).catch(() => {});
   await removeObject(service, foreignPath).catch(() => {});

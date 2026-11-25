@@ -125,6 +125,9 @@ export async function deliverScholarshipApplications(
         },
       );
       if (completeError) {
+        if (completeError.message?.includes("SCHOLARSHIP_PROVIDER_REFERENCE_CONFLICT")) {
+          throw new ScholarshipProviderError("PROVIDER_REFERENCE_CONFLICT", false, ack.http_status);
+        }
         // Provider may have accepted the idempotent request. Keep this retryable; the same
         // Idempotency-Key will be reused and a compliant provider returns the same reference.
         throw new ScholarshipProviderError("DELIVERY_ACK_PERSIST_FAILED", true, ack.http_status);

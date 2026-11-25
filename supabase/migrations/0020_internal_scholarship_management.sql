@@ -21,22 +21,39 @@ alter table public.scholarship_application_status_history
 create index if not exists scholarship_applications_review_queue_idx
   on public.scholarship_applications(status, applied_at desc, id desc);
 
--- A central platform admin may download only CV objects attached to Scholarship applications.
--- This deliberately does not grant access to unrelated graduates' CVs.
+-- SECURITY DEFINER helper checks the association without being filtered by applicant-owned RLS.
+-- It grants no access to CVs unless they are attached to a Scholarship application.
+create or replace function private.can_admin_read_scholarship_cv(p_storage_path text)
+returns boolean
+language sql stable security definer set search_path = ''
+as $can_admin_read_scholarship_cv$
+  select auth.uid() is not null
+     and private.is_platform_admin()
+     and p_storage_path is not null
+     and exists (
+       select 1
+         from public.cv_documents d
+         join public.scholarship_applications a on a.cv_document_id = d.id
+         join public.opportunities o on o.id = a.opportunity_id
+        where d.storage_path = p_storage_path
+          and o.type = 'SCHOLARSHIP'
+     );
+$can_admin_read_scholarship_cv$;
+revoke all on function private.can_admin_read_scholarship_cv(text) from public, anon, authenticated;
+grant execute on function private.can_admin_read_scholarship_cv(text) to authenticated;
+
+drop policy if exists cv_scholarship_admin_select on public.cv_documents;
+create policy cv_scholarship_admin_select on public.cv_documents
+  for select to authenticated
+  using (private.can_admin_read_scholarship_cv(storage_path));
+
+-- Central admins can download only CV objects attached to Scholarship applications.
 drop policy if exists cv_objects_scholarship_admin_select on storage.objects;
 create policy cv_objects_scholarship_admin_select on storage.objects
   for select to authenticated
   using (
     bucket_id = 'cv-documents'
-    and private.is_platform_admin()
-    and exists (
-      select 1
-        from public.cv_documents d
-        join public.scholarship_applications a on a.cv_document_id = d.id
-        join public.opportunities o on o.id = a.opportunity_id
-       where d.storage_path = storage.objects.name
-         and o.type = 'SCHOLARSHIP'
-    )
+    and private.can_admin_read_scholarship_cv(name)
   );
 
 create or replace function public.create_admin_scholarship(
@@ -295,6 +312,7 @@ returns table (
   applicant_degree text,
   applicant_location text,
   cv_document_id uuid,
+  cv_storage_path text,
   personal_statement text,
   application_data jsonb,
   status text,
@@ -320,12 +338,13 @@ begin
   return query
   select a.id, a.opportunity_id, o.title, o.is_sample, a.graduate_id,
          p.full_name, gp.college, gp.department, gp.major, gp.graduation_year,
-         gp.degree, gp.location, a.cv_document_id, a.personal_statement,
+         gp.degree, gp.location, a.cv_document_id, cv.storage_path, a.personal_statement,
          a.application_data, a.status, a.applied_at, a.updated_at
     from public.scholarship_applications a
     join public.opportunities o on o.id = a.opportunity_id and o.type = 'SCHOLARSHIP'
     join public.profiles p on p.id = a.graduate_id
     join public.graduate_profiles gp on gp.profile_id = a.graduate_id
+    left join public.cv_documents cv on cv.id = a.cv_document_id
    where a.id = p_application_id;
 end
 $get_admin_scholarship_application$;

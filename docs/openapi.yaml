@@ -151,6 +151,29 @@ components:
         content: { type: string, minLength: 1, maxLength: 2000 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    SocialContentReport:
+      type: object
+      properties:
+        report_id: { type: string, format: uuid }
+        target_type: { type: string, enum: [POST, COMMENT] }
+        status: { type: string, enum: [OPEN, RESOLVED, DISMISSED] }
+        category: { type: string, enum: [SPAM, HARASSMENT, HATE_OR_VIOLENCE, THREATS, SCAM, PRIVACY, INAPPROPRIATE, OTHER] }
+        created_at: { type: string, format: date-time }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+        resolution_note: { type: string, nullable: true }
+    SocialModerationQueueItem:
+      type: object
+      properties:
+        report_id: { type: string, format: uuid }
+        target_type: { type: string, enum: [POST, COMMENT] }
+        target_id: { type: string, format: uuid }
+        category: { type: string }
+        details: { type: string, nullable: true }
+        report_status: { type: string, enum: [OPEN, RESOLVED, DISMISSED] }
+        reporter_name: { type: string }
+        target_author_name: { type: string, nullable: true }
+        content: { type: string }
+        content_moderation_status: { type: string, enum: [VISIBLE, HIDDEN, REMOVED, MISSING] }
     EventRegistration:
       type: object
       properties:
@@ -401,7 +424,10 @@ components:
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
         SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, NOT_A_COMPETITION,
         COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
-        ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
+        ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED,
+        CANNOT_REPORT_OWN_CONTENT, ALREADY_REPORTED, SOCIAL_CONTENT_NOT_FOUND, SOCIAL_REPORT_NOT_FOUND,
+        SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE, SOCIAL_CONTENT_NOT_FOUND,
+        RATE_LIMIT_EXCEEDED, RATE_LIMIT_UNAVAILABLE. HTTP 429 includes Retry-After seconds.
       content:
         application/json:
           schema:
@@ -738,7 +764,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/create_social_post:
     post:
-      summary: Create a post as the authenticated graduate
+      summary: Create a post as the authenticated graduate; per-user token bucket returns HTTP 429 when the posting budget is exhausted
       requestBody:
         required: true
         content:
@@ -753,7 +779,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_social_post:
     post:
-      summary: Edit only the authenticated author's post
+      summary: Edit only the authenticated author's visible post; moderated content cannot be edited
       requestBody:
         required: true
         content:
@@ -808,7 +834,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/add_social_comment:
     post:
-      summary: Add a comment as the authenticated graduate
+      summary: Add a comment to a visible post; per-user token bucket returns HTTP 429 when exhausted
       requestBody:
         required: true
         content:
@@ -855,7 +881,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/like_social_post:
     post:
-      summary: Like a feed post once per graduate
+      summary: Like a visible feed post once per graduate; per-user token bucket returns HTTP 429 when exhausted
       requestBody:
         required: true
         content:
@@ -882,6 +908,135 @@ paths:
                 p_post_id: { type: string, format: uuid }
       responses:
         '200': { description: true when unliked }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_social_content_report:
+    post:
+      summary: Report another graduate's visible post or comment for moderation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_target_type, p_target_id, p_category]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_category: { type: string, enum: [SPAM, HARASSMENT, HATE_OR_VIOLENCE, THREATS, SCAM, PRIVACY, INAPPROPRIATE, OTHER] }
+                p_details: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200':
+          description: Report accepted
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    report_id: { type: string, format: uuid }
+                    status: { type: string, enum: [OPEN] }
+        '409': { description: Duplicate report by the same graduate }
+        '429': { description: Per-user report budget exhausted; Retry-After is included }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_my_social_reports:
+    post:
+      summary: Read only the caller's own report history
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Caller-scoped report history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialContentReport' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_moderation_queue:
+    post:
+      summary: Platform-admin-only report queue; never exposed to graduates or company users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, enum: [OPEN, RESOLVED, DISMISSED, ALL], default: OPEN }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Moderation queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialModerationQueueItem' }
+        '403': { description: ADMIN_REQUIRED }
+  /rest/v1/rpc/moderate_social_report:
+    post:
+      summary: Platform-admin-only HIDE, REMOVE or DISMISS decision; writes immutable audit event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_report_id, p_action, p_reason]
+              properties:
+                p_report_id: { type: string, format: uuid }
+                p_action: { type: string, enum: [HIDE, REMOVE, DISMISS] }
+                p_reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        '200':
+          description: Report reviewed
+        '403': { description: ADMIN_REQUIRED }
+        '409': { description: Report already reviewed }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/restore_social_content:
+    post:
+      summary: Platform-admin-only restoration after appeal/review; restoration is separately audited
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_target_type, p_target_id, p_reason]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_reason: { type: string, minLength: 5, maxLength: 1000 }
+      responses:
+        '200': { description: true when restored }
+        '403': { description: ADMIN_REQUIRED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_moderation_history:
+    post:
+      summary: Platform-admin-only append-only moderation audit history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_target_type, p_target_id]
+              properties:
+                p_target_type: { type: string, enum: [POST, COMMENT] }
+                p_target_id: { type: string, format: uuid }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Immutable moderation event history }
+        '403': { description: ADMIN_REQUIRED }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/withdraw_application:
     post:
@@ -1040,6 +1195,7 @@ paths:
               properties:
                 force:
                   type: boolean
+      description: Per-user token bucket: 30 total requests/minute and 10 forced recomputations/hour. HTTP 429 includes Retry-After; 503 is returned if the trusted rate-limit store is unavailable.
       responses:
         '200':
           description: Recommendations
@@ -1079,6 +1235,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecommendError'
+        '429': { description: Per-user request or force quota exhausted; Retry-After is included }
+        '503': { description: Trusted rate-limit storage unavailable; request fails closed }
         '500':
           description: CANDIDATES_FAILED / SAVE_FAILED / READ_FAILED
           content:
@@ -1485,6 +1643,7 @@ paths:
         The caller supplies only the CV document id. Ownership is derived from the verified JWT.
         Digital-text PDFs and DOCX are supported, up to 5 MB. Scanned/image-only PDFs requiring OCR
         are not supported in this version. Extracted skills remain pending until confirm_cv_suggestions is called.
+        Per-user parsing uses a five-token hourly quota. HTTP 429 includes Retry-After, and quota rejection releases the processing claim.
       requestBody:
         required: true
         content:
@@ -1526,5 +1685,7 @@ paths:
         '409': { description: CV is already processing or has already been parsed }
         '413': { description: CV exceeds the 5 MB limit }
         '422': { description: 'Unsupported, malformed, mismatched, or text-empty CV file' }
+        '429': { description: Per-user CV parsing quota exhausted; Retry-After is included }
+        '503': { description: Trusted rate-limit storage unavailable; request fails closed }
         '500': { description: Internal processing failure }
         '502': { description: Private Storage download failed }

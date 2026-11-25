@@ -206,6 +206,57 @@ try {
     invitationRows.status === 200 &&
     invitationRows.json?.some((row) => row.invitation_id === invitationId && row.email === graduateEmail));
 
+  // A regular graduate cannot use any of the admin Edge Function capabilities.
+  const demoLogin = await login("graduate.demo@alumni.test", demoPassword);
+  const nonAdminInvite = await request("/functions/v1/invite-graduate", {
+    method: "POST",
+    headers: headers(demoLogin.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      email: "forbidden-" + suffix + "@tests.local",
+      full_name: "Forbidden User",
+      verification_note: "This must never be accepted from a graduate.",
+    }),
+  });
+  pass("ordinary graduate cannot invite new accounts",
+    nonAdminInvite.status === 403 && nonAdminInvite.json?.error === "ADMIN_REQUIRED");
+  const nonAdminManage = await request("/functions/v1/manage-graduate", {
+    method: "POST",
+    headers: headers(demoLogin.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ user_id: demoLogin.id, action: "SUSPEND", reason: "Unauthorized role escalation attempt" }),
+  });
+  pass("ordinary graduate cannot suspend accounts",
+    nonAdminManage.status === 403 && nonAdminManage.json?.error === "ADMIN_REQUIRED");
+
+  // Simulate the trusted Auth invitation acceptance event and verify the SQL trigger updates status.
+  const authInviteUsers = await request("/auth/v1/admin/users?page=1&perPage=100", {
+    headers: serviceHeaders(),
+  });
+  const authUsers = authInviteUsers.json?.users ?? [];
+  const inviteUser = authUsers.find((user) => user.email === graduateEmail);
+  assert.ok(inviteUser?.id, "Auth invited user must exist");
+  graduateId = inviteUser.id;
+  const confirmInvite = await authAdminUpdate(graduateId, {
+    email_confirm: true,
+    password: graduatePassword,
+  });
+  assert.equal(confirmInvite.status, 200, "Auth invitation confirmation fixture failed: " + confirmInvite.text);
+  const confirmedRows = await callRpc(adminToken, "list_graduate_invitations", {
+    p_status: "ACCEPTED",
+    p_limit: 100,
+  });
+  pass("Auth email confirmation moves invitation to ACCEPTED",
+    confirmedRows.status === 200 &&
+    confirmedRows.json?.some((row) => row.invitation_id === invitationId && row.auth_user_id === graduateId));
+
+  const graduate = await login(graduateEmail, graduatePassword);
+  graduateToken = graduate.token;
+  pass("invited graduate can sign in after confirmation", graduate.id === graduateId);
+
+  // A forged role in user_metadata never grants admin capability.
+  const forgedAdmin = await callRpc(graduateToken, "assert_platform_admin");
+  pass("forged user_metadata role does not confer platform-admin privilege",
+    forgedAdmin.status === 403 && forgedAdmin.json?.message === "ADMIN_REQUIRED");
+
   // Company onboarding starts with an unverified profile; only platform administration can verify it.
   const company = await callRpc(graduateToken, "create_company", {
     p_name: "P1 Verified Company " + suffix,
@@ -268,56 +319,6 @@ try {
   pass("verified company can publish its own draft job",
     publishedJob.status === 200 && firstRow(publishedJob.json)?.status === "ACTIVE");
 
-  // A regular graduate cannot use any of the admin Edge Function capabilities.
-  const demoLogin = await login("graduate.demo@alumni.test", demoPassword);
-  const nonAdminInvite = await request("/functions/v1/invite-graduate", {
-    method: "POST",
-    headers: headers(demoLogin.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({
-      email: "forbidden-" + suffix + "@tests.local",
-      full_name: "Forbidden User",
-      verification_note: "This must never be accepted from a graduate.",
-    }),
-  });
-  pass("ordinary graduate cannot invite new accounts",
-    nonAdminInvite.status === 403 && nonAdminInvite.json?.error === "ADMIN_REQUIRED");
-  const nonAdminManage = await request("/functions/v1/manage-graduate", {
-    method: "POST",
-    headers: headers(demoLogin.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ user_id: demoLogin.id, action: "SUSPEND", reason: "Unauthorized role escalation attempt" }),
-  });
-  pass("ordinary graduate cannot suspend accounts",
-    nonAdminManage.status === 403 && nonAdminManage.json?.error === "ADMIN_REQUIRED");
-
-  // Simulate the trusted Auth invitation acceptance event and verify the SQL trigger updates status.
-  const authInviteUsers = await request("/auth/v1/admin/users?page=1&perPage=100", {
-    headers: serviceHeaders(),
-  });
-  const authUsers = authInviteUsers.json?.users ?? [];
-  const inviteUser = authUsers.find((user) => user.email === graduateEmail);
-  assert.ok(inviteUser?.id, "Auth invited user must exist");
-  graduateId = inviteUser.id;
-  const confirmInvite = await authAdminUpdate(graduateId, {
-    email_confirm: true,
-    password: graduatePassword,
-  });
-  assert.equal(confirmInvite.status, 200, "Auth invitation confirmation fixture failed: " + confirmInvite.text);
-  const confirmedRows = await callRpc(adminToken, "list_graduate_invitations", {
-    p_status: "ACCEPTED",
-    p_limit: 100,
-  });
-  pass("Auth email confirmation moves invitation to ACCEPTED",
-    confirmedRows.status === 200 &&
-    confirmedRows.json?.some((row) => row.invitation_id === invitationId && row.auth_user_id === graduateId));
-
-  const graduate = await login(graduateEmail, graduatePassword);
-  graduateToken = graduate.token;
-  pass("invited graduate can sign in after confirmation", graduate.id === graduateId);
-
-  // A forged role in user_metadata never grants admin capability.
-  const forgedAdmin = await callRpc(graduateToken, "assert_platform_admin");
-  pass("forged user_metadata role does not confer platform-admin privilege",
-    forgedAdmin.status === 403 && forgedAdmin.json?.message === "ADMIN_REQUIRED");
 
   // Upload a private file and metadata to prove suspension and account deletion protect Storage.
   graduateCvPath = graduateId + "/onboarding-" + suffix + ".pdf";

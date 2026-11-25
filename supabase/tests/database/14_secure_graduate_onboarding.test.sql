@@ -163,8 +163,8 @@ select is(public.set_graduate_account_status_for_admin(
  true,'trusted admin service path can suspend a graduate');
 reset role;
 select tests.login('graduate');
-select throws_ok($q$select public._require_uid()$q$,
- 'PT403','ACCOUNT_UNAVAILABLE','suspended graduate cannot use authenticated RPCs');
+select throws_ok($q$select public.request_account_deletion('suspended account must be blocked')$q$,
+ 'PT403','ACCOUNT_UNAVAILABLE','suspended graduate cannot use authenticated RPCs through a granted RPC');
 select is((select count(*)::int from public.profiles where id=tests.id('graduate')),0,
  'restrictive RLS policy hides all public rows from a suspended graduate');
 select is((select count(*)::int from storage.objects
@@ -195,10 +195,10 @@ select is((select count(*)::int from public.profiles where id=tests.id('graduate
  'a pending deletion request immediately blocks profile reads');
 reset role;
 select tests.login('admin');
-select is((select status from public.review_account_deletion_request(
+select is(public.review_account_deletion_request(
  (select request_id from public.get_account_deletion_queue('REQUESTED',50)
   where user_id=tests.id('graduate')),
- 'REJECT','Identity and retention review did not support deletion')),
+ 'REJECT','Identity and retention review did not support deletion'),
  'REJECTED','admin can reject a deletion request and provide a reason');
 reset role;
 select tests.login('graduate');
@@ -208,8 +208,8 @@ reset role;
 
 -- An untransferred company creator/OWNER cannot be deleted.
 select tests.login('admin');
-select is((select status from public.review_account_deletion_request(
- tests.id('deletion_request_2'),'APPROVE','User identity and retention review complete')),
+select is(public.review_account_deletion_request(
+ tests.id('deletion_request_2'),'APPROVE','User identity and retention review complete'),
  'APPROVED','admin can approve deletion after identity review');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);

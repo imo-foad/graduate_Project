@@ -98,6 +98,9 @@ select throws_ok($q$select public.apply_for_competition(tests.id('c_validation')
 select throws_ok($q$select public.apply_for_competition(tests.id('c_validation'),null,repeat('x',10001))$q$,'PT422','INVALID_INPUT','oversized statement rejected');
 select throws_ok($q$select public.apply_for_competition(tests.id('c_validation'),null,null,null)$q$,'PT422','INVALID_INPUT','null submission data rejected');
 
+insert into tests.ids(k,v)
+select 'c_ok_application', id from public.competition_applications
+ where opportunity_id=tests.id('c_ok');
 select is((public.withdraw_competition_application((select id from public.competition_applications where opportunity_id=tests.id('c_ok')))).status,'WITHDRAWN','owner withdraws entry');
 select throws_ok($q$select public.withdraw_competition_application((select id from public.competition_applications where opportunity_id=tests.id('c_ok')))$q$,'PT422','CANNOT_WITHDRAW_COMPETITION_APPLICATION','repeated withdrawal rejected');
 select throws_ok($q$select public.apply_for_competition(tests.id('c_ok'))$q$,'PT409','ALREADY_APPLIED','withdrawal cannot bypass duplicate prevention');
@@ -116,7 +119,7 @@ select throws_ok($q$delete from public.competition_applications where opportunit
 select tests.login('a2');
 select is((select count(*)::int from public.competition_applications where opportunity_id=tests.id('c_ok')),0,'peer cannot read entry');
 select is((select count(*)::int from public.competition_application_status_history h join public.competition_applications a on a.id=h.competition_application_id where a.opportunity_id=tests.id('c_ok')),0,'peer cannot read history');
-select throws_ok($q$select public.withdraw_competition_application((select id from public.competition_applications where opportunity_id=tests.id('c_ok')))$q$,'PT404','COMPETITION_APPLICATION_NOT_FOUND','peer cannot withdraw entry');
+select throws_ok($q$select public.withdraw_competition_application(tests.id('c_ok_application'))$q$,'PT404','COMPETITION_APPLICATION_NOT_FOUND','peer cannot withdraw entry');
 select set_config('request.jwt.claims','',true);
 select throws_ok($q$select public.apply_for_competition(tests.id('c_validation'))$q$,'PT401','UNAUTHENTICATED','missing JWT rejected');
 reset role;

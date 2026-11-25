@@ -117,7 +117,7 @@ create table private.account_deletion_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
   status text not null default 'REQUESTED'
-    check (status in ('REQUESTED','APPROVED','REJECTED','COMPLETED')),
+    check (status in ('REQUESTED','APPROVED','DELETING','REJECTED','COMPLETED')),
   reason text check (reason is null or length(reason) <= 1000),
   requested_at timestamptz not null default now(),
   reviewed_by uuid references auth.users(id) on delete set null,
@@ -127,7 +127,7 @@ create table private.account_deletion_requests (
 );
 create unique index account_deletion_one_open_per_user
   on private.account_deletion_requests(user_id)
-  where user_id is not null and status in ('REQUESTED','APPROVED');
+  where user_id is not null and status in ('REQUESTED','APPROVED','DELETING');
 create index account_deletion_queue_idx
   on private.account_deletion_requests(status, requested_at);
 
@@ -500,7 +500,7 @@ begin
   if not private.is_platform_admin() then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
-  if p_status is null or p_status not in ('REQUESTED','APPROVED','REJECTED','COMPLETED','ALL')
+  if p_status is null or p_status not in ('REQUESTED','APPROVED','DELETING','REJECTED','COMPLETED','ALL')
      or p_limit is null or p_limit < 1 or p_limit > 100 then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
@@ -581,11 +581,31 @@ begin
      or exists (select 1 from public.company_memberships where user_id = v_user_id and role = 'OWNER' and is_active) then
     raise exception 'COMPANY_OWNERSHIP_TRANSFER_REQUIRED' using errcode = 'PT409';
   end if;
+  update private.account_deletion_requests
+     set status = 'DELETING'
+   where id = p_request_id and status = 'APPROVED';
   return v_user_id;
 end
 $get_approved_account_deletion$;
 revoke all on function public.get_approved_account_deletion(uuid) from public, anon, authenticated;
 grant execute on function public.get_approved_account_deletion(uuid) to service_role;
+
+create or replace function public.release_account_deletion_claim(p_request_id uuid)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $release_account_deletion_claim$
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  update private.account_deletion_requests
+     set status = 'APPROVED'
+   where id = p_request_id and status = 'DELETING';
+  return found;
+end
+$release_account_deletion_claim$;
+revoke all on function public.release_account_deletion_claim(uuid) from public, anon, authenticated;
+grant execute on function public.release_account_deletion_claim(uuid) to service_role;
 
 create or replace function private.mark_account_deletion_completed()
 returns trigger
@@ -594,7 +614,7 @@ as $mark_account_deletion_completed$
 begin
   update private.account_deletion_requests
      set user_id = null, status = 'COMPLETED', completed_at = now()
-   where user_id = old.id and status = 'APPROVED';
+   where user_id = old.id and status = 'DELETING';
   if found then
     insert into private.platform_admin_audit(target_user_id, action)
     values (old.id, 'ACCOUNT_DELETED');
@@ -631,8 +651,9 @@ begin
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
   if not exists (
-    select 1 from public.profiles p
+    select 1 from auth.users u join public.profiles p on p.id = u.id
      where p.id = p_new_owner_id and p.account_status = 'ACTIVE'
+       and u.email_confirmed_at is not null
   ) then
     raise exception 'USER_NOT_FOUND' using errcode = 'PT404';
   end if;

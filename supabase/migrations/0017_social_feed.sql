@@ -65,7 +65,6 @@ create or replace function public.get_social_feed(
 )
 returns table (
   id uuid,
-  author_id uuid,
   author_name text,
   author_avatar_url text,
   content text,
@@ -86,7 +85,6 @@ begin
 
   return query
   select sp.id,
-         sp.author_id,
          pr.full_name,
          case when coalesce('avatar_url' = any(gp.hidden_fields), false) then null else pr.avatar_url end,
          sp.content,
@@ -160,7 +158,6 @@ create or replace function public.get_social_post_comments(
 returns table (
   id uuid,
   post_id uuid,
-  author_id uuid,
   author_name text,
   author_avatar_url text,
   content text,
@@ -184,7 +181,7 @@ begin
   end if;
 
   return query
-  select c.id, c.post_id, c.author_id, pr.full_name,
+  select c.id, c.post_id, pr.full_name,
          case when coalesce('avatar_url' = any(gp.hidden_fields), false) then null else pr.avatar_url end,
          c.content, c.created_at, c.updated_at
     from public.social_post_comments c

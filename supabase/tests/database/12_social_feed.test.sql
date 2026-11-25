@@ -83,8 +83,9 @@ select throws_ok($q$select * from public.get_social_feed(null,null,0)$q$,
  'PT422','INVALID_INPUT','zero feed limit rejected');
 select throws_ok($q$select * from public.get_social_feed(null,null,51)$q$,
  'PT422','INVALID_INPUT','oversized feed limit rejected');
-select ok(position('email' in pg_get_function_result('public.get_social_feed(timestamptz,uuid,integer)'::regprocedure))=0,
- 'feed RPC result does not expose email or other private profile fields');
+select ok(position('email' in pg_get_function_result('public.get_social_feed(timestamptz,uuid,integer)'::regprocedure))=0
+ and position('author_id' in pg_get_function_result('public.get_social_feed(timestamptz,uuid,integer)'::regprocedure))=0,
+ 'feed RPC result exposes neither email nor author UUID/private identity fields');
 
 -- A hidden-avatar preference is honored; A2 still has a display name.
 select is((select author_avatar_url from public.get_social_feed(null,null,20) where content='B post'),null,

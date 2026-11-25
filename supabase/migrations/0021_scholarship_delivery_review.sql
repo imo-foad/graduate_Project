@@ -458,6 +458,8 @@ begin
       when 'IN_REVIEW' then 'بدأت الجهة مراجعة طلبك على «'||v_title||'».'
       when 'ACCEPTED' then 'تم قبول طلبك على «'||v_title||'».'
       else 'تم رفض طلبك على «'||v_title||'». راجع الملاحظة المرفقة مع الطلب.' end;
+  elsif v_app.status in ('ACCEPTED','REJECTED') then
+    raise exception 'INVALID_SCHOLARSHIP_STATUS_TRANSITION' using errcode = 'PT409';
   else
     raise exception 'INVALID_STATUS_TRANSITION' using errcode = 'PT422';
   end if;

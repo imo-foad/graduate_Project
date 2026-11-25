@@ -72,6 +72,7 @@ create table private.scholarship_delivery_outbox (
   external_opportunity_id text,
   status text not null check (status in ('BLOCKED','PENDING','PROCESSING','DELIVERED','FAILED','CANCELLED')),
   attempts integer not null default 0 check (attempts between 0 and 100),
+  delivery_generation integer not null default 1 check (delivery_generation between 1 and 1000),
   max_attempts integer not null default 5 check (max_attempts between 1 and 10),
   next_attempt_at timestamptz not null default now(),
   lease_expires_at timestamptz,
@@ -94,16 +95,17 @@ create table private.scholarship_delivery_attempts (
   id uuid primary key default gen_random_uuid(),
   outbox_id uuid not null references private.scholarship_delivery_outbox(id) on delete cascade,
   attempt_number integer not null check (attempt_number between 1 and 100),
+  delivery_generation integer not null default 1 check (delivery_generation between 1 and 1000),
   started_at timestamptz not null,
   finished_at timestamptz not null default now(),
   outcome text not null check (outcome in ('DELIVERED','RETRY_SCHEDULED','FAILED','BLOCKED')),
   http_status integer check (http_status is null or http_status between 100 and 599),
   error_code text check (error_code is null or error_code ~ '^[A-Z0-9_]{1,64}$'),
   provider_reference text,
-  unique (outbox_id, attempt_number)
+  unique (outbox_id, delivery_generation, attempt_number)
 );
 create index scholarship_delivery_attempts_recent_idx
-  on private.scholarship_delivery_attempts(outbox_id, attempt_number desc);
+  on private.scholarship_delivery_attempts(outbox_id, delivery_generation desc, attempt_number desc);
 
 create table private.scholarship_provider_events (
   id uuid primary key default gen_random_uuid(),
@@ -235,7 +237,7 @@ begin
     update private.scholarship_delivery_outbox o
        set provider_key = p_provider_key,
            external_opportunity_id = btrim(p_external_opportunity_id),
-           status = 'PENDING', attempts = 0,
+           status = 'PENDING', attempts = 0, delivery_generation = delivery_generation + 1,
            next_attempt_at = now(), lease_expires_at = null,
            last_error_code = null, updated_at = now()
       from public.scholarship_applications a
@@ -607,9 +609,9 @@ begin
      set delivery_status = 'BLOCKED'
    where id = v_outbox.application_id;
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, error_code
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, error_code
   ) values (
-    v_outbox.id, v_outbox.attempts, coalesce(v_outbox.updated_at, now()), 'BLOCKED', p_error_code
+    v_outbox.id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.updated_at, now()), 'BLOCKED', p_error_code
   );
   get diagnostics v_rows = row_count;
   return v_rows = 1;
@@ -674,8 +676,8 @@ begin
     'Provider acknowledged delivery with reference ' || btrim(p_provider_reference) || '.'
   );
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, outcome, http_status, provider_reference
-  ) values (p_outbox_id, v_outbox.attempts, 'DELIVERED', p_http_status, btrim(p_provider_reference));
+    outbox_id, delivery_generation, attempt_number, outcome, http_status, provider_reference
+  ) values (p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, 'DELIVERED', p_http_status, btrim(p_provider_reference));
   insert into public.notifications(profile_id, title, body, type, related_entity_id)
   values (
     v_app.graduate_id, 'تم إرسال طلب المنحة إلى الجهة المعلنة',
@@ -1214,9 +1216,9 @@ begin
      set delivery_status = 'BLOCKED'
    where id = v_outbox.application_id;
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, error_code
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, error_code
   ) values (
-    v_outbox.id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    v_outbox.id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     'BLOCKED', p_error_code
   );
   return true;
@@ -1283,7 +1285,7 @@ begin
   insert into private.scholarship_delivery_attempts(
     outbox_id, attempt_number, started_at, outcome, http_status, provider_reference
   ) values (
-    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     'DELIVERED', p_http_status, btrim(p_provider_reference)
   );
   insert into public.notifications(profile_id, title, body, type, related_entity_id)
@@ -1356,9 +1358,9 @@ begin
    where id = v_app.id returning * into v_app;
 
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, http_status, error_code
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, http_status, error_code
   ) values (
-    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     case when v_final then 'FAILED' else 'RETRY_SCHEDULED' end,
     p_http_status, p_error_code
   );
@@ -1812,9 +1814,9 @@ begin
   update public.scholarship_applications set delivery_status = 'BLOCKED'
    where id = v_app.id;
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, error_code
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, error_code
   ) values (
-    v_outbox.id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    v_outbox.id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     'BLOCKED', p_error_code
   );
   return true;
@@ -1881,7 +1883,7 @@ begin
     outbox_id, attempt_number, started_at, outcome, http_status,
     provider_reference, provider_request_id
   ) values (
-    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     'DELIVERED', p_http_status, btrim(p_provider_reference), nullif(btrim(coalesce(p_request_id,'')), '')
   );
   insert into public.notifications(profile_id, title, body, type, related_entity_id)
@@ -1955,9 +1957,9 @@ begin
    where id = v_app.id returning * into v_app;
 
   insert into private.scholarship_delivery_attempts(
-    outbox_id, attempt_number, started_at, outcome, http_status, error_code
+    outbox_id, delivery_generation, attempt_number, started_at, outcome, http_status, error_code
   ) values (
-    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    p_outbox_id, v_outbox.delivery_generation, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
     case when v_final then 'FAILED' else 'RETRY_SCHEDULED' end, p_http_status, p_error_code
   );
 

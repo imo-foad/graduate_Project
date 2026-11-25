@@ -63,6 +63,7 @@ begin
   perform tests.mk_opp('scholar2', false);
   perform tests.mk_opp('scholar3', false);
   perform tests.mk_opp('scholar4', false);
+  perform tests.mk_opp('scholar5', false);
   perform tests.mk_opp('sample-scholar', true);
   insert into private.platform_admins(user_id,is_active)
     values (tests.id('admin'),true);
@@ -138,6 +139,9 @@ select lives_ok($q$select public.configure_scholarship_provider_mapping(
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar4'),'PROVIDER_B','remote-scholarship-4',false)$q$,
  'admin can configure another provider');
+select lives_ok($q$select public.configure_scholarship_provider_mapping(
+ tests.id('scholar5'),'PROVIDER_B','remote-scholarship-5',true)$q$,
+ 'admin configures an enabled Provider B listing for its reviewer');
 select is(public.set_scholarship_reviewer(tests.id('reviewer-a'),'PROVIDER_A',true),
   true,'admin can assign provider-A reviewer');
 select is(public.set_scholarship_reviewer(tests.id('reviewer-b'),'PROVIDER_B',true),

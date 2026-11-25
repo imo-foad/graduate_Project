@@ -176,7 +176,7 @@ class Contract(unittest.TestCase):
 
         for name in ("get_social_feed", "get_social_post_comments"):
             match = re.search(
-                rf"create or replace function public\\.{name}\\([^)]*\\)\\s*returns table\\s*\\((.*?)\\)\\s*language",
+                rf"create or replace function public\.{name}\([^)]*\)\s*returns table\s*\((.*?)\)\s*language",
                 SQL, re.S | re.I,
             )
             self.assertIsNotNone(match, name)

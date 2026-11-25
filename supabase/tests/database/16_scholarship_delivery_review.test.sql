@@ -63,6 +63,7 @@ begin
   perform tests.mk_opp('scholar2', false);
   perform tests.mk_opp('scholar3', false);
   perform tests.mk_opp('scholar4', false);
+  perform tests.mk_opp('scholar5', false);
   perform tests.mk_opp('sample-scholar', true);
   insert into private.platform_admins(user_id,is_active)
     values (tests.id('admin'),true);
@@ -122,11 +123,13 @@ select tests.login('admin');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar1'),'PROVIDER_A','remote-scholarship-1',true)$q$,
  'active platform admin configures provider mapping');
+reset role;
 select is((select status from private.scholarship_delivery_outbox
   where application_id=(select id from public.scholarship_applications where graduate_id=tests.id('graduate1'))),
   'PENDING','configuring provider moves blocked application into queue');
 select is((select delivery_status from public.scholarship_applications where graduate_id=tests.id('graduate1')),
   'PENDING','configuring provider updates delivery state without claiming external submission');
+select tests.login('admin');
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar2'),'PROVIDER_A','remote-scholarship-2',true)$q$,
  'admin can configure a second listing under the same provider');
@@ -136,6 +139,9 @@ select lives_ok($q$select public.configure_scholarship_provider_mapping(
 select lives_ok($q$select public.configure_scholarship_provider_mapping(
  tests.id('scholar4'),'PROVIDER_B','remote-scholarship-4',false)$q$,
  'admin can configure another provider');
+select lives_ok($q$select public.configure_scholarship_provider_mapping(
+ tests.id('scholar5'),'PROVIDER_B','remote-scholarship-5',true)$q$,
+ 'admin configures an enabled Provider B listing for its reviewer');
 select is(public.set_scholarship_reviewer(tests.id('reviewer-a'),'PROVIDER_A',true),
   true,'admin can assign provider-A reviewer');
 select is(public.set_scholarship_reviewer(tests.id('reviewer-b'),'PROVIDER_B',true),
@@ -181,7 +187,7 @@ select is((select external_opportunity_id from private.scholarship_delivery_outb
 -- Only service_role can claim, and duplicate/parallel claims cannot both own one application.
 select tests.login('graduate2');
 select throws_ok($q$select * from public.claim_scholarship_delivery(tests.id('application2'),1)$q$,
-  'PT403','SERVICE_ROLE_REQUIRED','graduate cannot claim a delivery');
+  '42501',null,'graduate cannot claim a delivery because EXECUTE is revoked');
 reset role;
 select set_config('request.jwt.claims','{"role":"service_role"}',true);
 set local role service_role;
@@ -194,7 +200,7 @@ select is((select delivery_status from public.scholarship_applications where id=
 select is((select count(*)::int from public.claim_scholarship_delivery(tests.id('application2'),1)),
   0,'second worker cannot claim the same unexpired lease');
 select is((select idempotency_key from (
-  select outbox_id::text as idempotency_key from private.scholarship_delivery_outbox
+  select id::text as idempotency_key from private.scholarship_delivery_outbox
    where id=tests.id('outbox2')
 ) q),tests.id('outbox2')::text,'delivery idempotency key is the stable outbox id');
 select is((public.complete_scholarship_delivery(

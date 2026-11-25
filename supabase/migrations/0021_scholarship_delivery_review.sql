@@ -458,6 +458,8 @@ begin
       when 'IN_REVIEW' then 'بدأت الجهة مراجعة طلبك على «'||v_title||'».'
       when 'ACCEPTED' then 'تم قبول طلبك على «'||v_title||'».'
       else 'تم رفض طلبك على «'||v_title||'». راجع الملاحظة المرفقة مع الطلب.' end;
+  elsif v_app.status in ('ACCEPTED','REJECTED') and v_app.provider_key is not null then
+    raise exception 'INVALID_SCHOLARSHIP_STATUS_TRANSITION' using errcode = 'PT409';
   else
     raise exception 'INVALID_STATUS_TRANSITION' using errcode = 'PT422';
   end if;
@@ -1784,8 +1786,8 @@ begin
      for update of a skip locked
      limit p_limit
   loop
-    select * into v_outbox from private.scholarship_delivery_outbox
-     where application_id = v_item.application_id for update;
+    select * into v_outbox from private.scholarship_delivery_outbox o
+     where o.application_id = v_item.application_id for update;
     if not found or not (
       (v_outbox.status = 'PENDING' and v_outbox.next_attempt_at <= now())
       or (v_outbox.status = 'PROCESSING' and v_outbox.lease_expires_at < now())

@@ -182,6 +182,12 @@ class Contract(unittest.TestCase):
 
         delivery = API["paths"]["/functions/v1/deliver-scholarship"]["post"]
         self.assertTrue({"200", "400", "401", "403", "503"} <= set(delivery["responses"]))
+        reviewer_cv = API["paths"]["/functions/v1/get-scholarship-review-cv"]["post"]
+        reviewer_cv_schema = reviewer_cv["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(reviewer_cv_schema["required"]), {"application_id"})
+        self.assertTrue({"200", "400", "401", "403", "404", "409", "503"} <= set(reviewer_cv["responses"]))
+        reviewer_rpc_schema = API["paths"]["/rest/v1/rpc/get_scholarship_review_cv_path"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+        self.assertEqual(set(reviewer_rpc_schema["required"]), {"p_application_id"})
         callback = API["paths"]["/functions/v1/scholarship-provider-callback"]["post"]
         self.assertEqual(callback["security"], [])
         self.assertIn("X-Alumni-Timestamp", [p["name"] for p in callback["parameters"]])
@@ -196,6 +202,7 @@ class Contract(unittest.TestCase):
         submit_edge = (root / "supabase/functions/submit-scholarship/index.ts").read_text()
         delivery_edge = (root / "supabase/functions/deliver-scholarship/index.ts").read_text()
         callback_edge = (root / "supabase/functions/scholarship-provider-callback/index.ts").read_text()
+        reviewer_cv_edge = (root / "supabase/functions/get-scholarship-review-cv/index.ts").read_text()
         provider = (root / "supabase/functions/_shared/scholarship-provider.ts").read_text()
         self.assertIn('auth.getUser()', submit_edge)
         self.assertIn('rpc("apply_for_scholarship"', submit_edge)
@@ -204,6 +211,8 @@ class Contract(unittest.TestCase):
         self.assertIn('rpc("claim_scholarship_delivery"', (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
         self.assertIn("verifyProviderWebhookSignature", callback_edge)
         self.assertIn('rpc("process_scholarship_provider_event"', callback_edge)
+        self.assertIn('rpc("get_scholarship_review_cv_path"', reviewer_cv_edge)
+        self.assertIn("createSignedUrl", reviewer_cv_edge)
         self.assertIn('redirect: "error"', provider)
         self.assertIn("Idempotency-Key", provider)
         self.assertIn("createSignedUrl", (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())

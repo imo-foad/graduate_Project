@@ -70,6 +70,9 @@ select is((public.apply_for_competition(tests.id('c_ok'),tests.id('cv_a'),'I wil
   '{"project_title":"Campus Assist","project_url":"https://example.test/project","team_size":3}'::jsonb)).status,
   'SUBMITTED','eligible graduate submits a competition entry');
 reset role;
+insert into tests.ids(k,v)
+select 'c_ok_application', id from public.competition_applications
+ where opportunity_id=tests.id('c_ok');
 select is((select count(*)::int from public.competition_applications where graduate_id=tests.id('a1') and opportunity_id=tests.id('c_ok')),1,'one entry persisted');
 select is((select cv_document_id from public.competition_applications where opportunity_id=tests.id('c_ok')),tests.id('cv_a'),'owned CV attached');
 select is((select submission_data from public.competition_applications where opportunity_id=tests.id('c_ok')),
@@ -98,9 +101,6 @@ select throws_ok($q$select public.apply_for_competition(tests.id('c_validation')
 select throws_ok($q$select public.apply_for_competition(tests.id('c_validation'),null,repeat('x',10001))$q$,'PT422','INVALID_INPUT','oversized statement rejected');
 select throws_ok($q$select public.apply_for_competition(tests.id('c_validation'),null,null,null)$q$,'PT422','INVALID_INPUT','null submission data rejected');
 
-insert into tests.ids(k,v)
-select 'c_ok_application', id from public.competition_applications
- where opportunity_id=tests.id('c_ok');
 select is((public.withdraw_competition_application((select id from public.competition_applications where opportunity_id=tests.id('c_ok')))).status,'WITHDRAWN','owner withdraws entry');
 select throws_ok($q$select public.withdraw_competition_application((select id from public.competition_applications where opportunity_id=tests.id('c_ok')))$q$,'PT422','CANNOT_WITHDRAW_COMPETITION_APPLICATION','repeated withdrawal rejected');
 select throws_ok($q$select public.apply_for_competition(tests.id('c_ok'))$q$,'PT409','ALREADY_APPLIED','withdrawal cannot bypass duplicate prevention');

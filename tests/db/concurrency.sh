@@ -17,7 +17,7 @@ P() { psql "$DB_URL" -X -q -t -A -v ON_ERROR_STOP=1 "$@"; }
 check() { # description expected actual
   if [ "$2" = "$3" ]; then echo "PASS  $1 (=$3)"; else echo "FAIL  $1 expected=$2 actual=$3"; FAILS=$((FAILS+1)); fi
 }
-cleanup() { P -c "delete from auth.users where email like '${TAG}-%@tests.local'; delete from public.opportunities where seed_key like '${TAG}-%';" >/dev/null 2>&1; }
+cleanup() { P -c "update private.rate_limit_policies set refill_per_second=5::numeric/60 where action='SOCIAL_POST_CREATE'; delete from auth.users where email like '${TAG}-%@tests.local'; delete from public.opportunities where seed_key like '${TAG}-%';" >/dev/null 2>&1; }
 trap cleanup EXIT
 
 # --- setup (as postgres): N users, two events (no waitlist / waitlist), one job
@@ -111,6 +111,8 @@ check "concurrent saves: version unchanged by saving" "$V2" "$(ver)"
 
 
 # --- 8. twelve concurrent post attempts by one user: exactly the token-bucket burst is accepted
+# Slow refill only inside this disposable concurrency run, so scheduler timing cannot add a token.
+P -c "update private.rate_limit_policies set refill_per_second=0.000001 where action='SOCIAL_POST_CREATE'"
 LIMIT_UID=$(usr 4); OUT=$(mktemp); PIDS=()
 for i in $(seq 1 $N); do
   ( as_user "$LIMIT_UID" "select (public.create_social_post('${TAG} concurrent post $i')).id" >>"$OUT" ) & PIDS+=($!)

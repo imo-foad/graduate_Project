@@ -139,6 +139,12 @@ select is(public.set_scholarship_reviewer(tests.id('reviewer-a'),'PROVIDER_A',tr
 select is(public.set_scholarship_reviewer(tests.id('reviewer-b'),'PROVIDER_B',true),
   true,'admin can assign provider-B reviewer');
 reset role;
+update auth.users set email_confirmed_at=null where id=tests.id('admin');
+select tests.login('admin');
+select throws_ok($q$select public.assert_scholarship_admin()$q$,
+  'PT403','ADMIN_REQUIRED','unconfirmed platform-admin account loses scholarship admin privileges');
+reset role;
+update auth.users set email_confirmed_at=now() where id=tests.id('admin');
 
 -- Sample listings are clearly internal and never create external delivery work.
 select tests.login('graduate4');

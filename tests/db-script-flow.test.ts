@@ -45,7 +45,7 @@ test("happy path (fake tools): every phase runs and the script reports success",
   const r = run();
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.equal(MIGS.length, 18);
+  assert.equal(MIGS.length, 19);
 });
 test("the Social Feed migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0017_social_feed.sql" });
@@ -58,6 +58,10 @@ test("the competition migration is mandatory in db reset output", () => {
 test("the scholarship migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0015_scholarship_applications.sql" });
   assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0015_scholarship_applications.sql as applied"));
+});
+test("the internal Scholarship management migration is mandatory in db reset output", () => {
+  const r = run({ FAKE_MISSING: "0020_internal_scholarship_management.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0020_internal_scholarship_management.sql as applied"));
 });
 test("a migration missing from `db reset` output fails the run", () => {
   const r = run({ FAKE_MISSING: "0014_cv_intelligence_recommendations.sql" });

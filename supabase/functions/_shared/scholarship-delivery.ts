@@ -40,16 +40,12 @@ export async function deliverScholarshipApplications(
     throw new Error("INVALID_DELIVERY_BATCH_SIZE");
   }
 
-  let configs;
+  let configs: ReturnType<typeof parseScholarshipProviderConfigs> = {};
+  let configurationInvalid = false;
   try {
     configs = parseScholarshipProviderConfigs(Deno.env.get("SCHOLARSHIP_PROVIDERS_JSON"));
   } catch {
-    const { error } = await admin.rpc("claim_scholarship_delivery", {
-      p_application_id: applicationId,
-      p_limit: limit,
-    });
-    if (error) throw new Error("SCHOLARSHIP_DELIVERY_CLAIM_FAILED");
-    return [];
+    configurationInvalid = true;
   }
 
   const { data, error: claimError } = await admin.rpc("claim_scholarship_delivery", {
@@ -62,8 +58,9 @@ export async function deliverScholarshipApplications(
 
   for (const item of claimed) {
     const providerKey = item.provider_key ?? "";
-    if (!providerKey || !item.external_opportunity_id || !configs[providerKey]) {
-      const code = !providerKey || !item.external_opportunity_id
+    if (configurationInvalid || !providerKey || !item.external_opportunity_id || !configs[providerKey]) {
+      const code = configurationInvalid ? "PROVIDER_CONFIGURATION_INVALID"
+        : !providerKey || !item.external_opportunity_id
         ? "PROVIDER_MAPPING_MISSING"
         : "PROVIDER_NOT_CONFIGURED";
       const { error: blockError } = await admin.rpc("block_scholarship_delivery", {
@@ -110,6 +107,9 @@ export async function deliverScholarshipApplications(
       }
 
       payload.cv_download_url = cvDownloadUrl;
+      // Internal database identifiers are not disclosed to the external scholarship provider.
+      delete payload.graduate_id;
+      delete payload.cv_document_id;
       const ack = await sendScholarshipApplicationToProvider(
         configs[providerKey],
         item.idempotency_key,

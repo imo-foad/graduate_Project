@@ -117,7 +117,14 @@ components:
           type: object
           description: Internal Alumni Connect Scholarship answers, maximum 32 KiB; the current form is CV, personal statement and flexible JSON.
           additionalProperties: true
-        status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
+        status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED, INTERNAL_ONLY, WITHDRAWN] }
+        delivery_status: { type: string, enum: [NOT_REQUIRED, BLOCKED, PENDING, PROCESSING, DELIVERED, FAILED, CANCELLED] }
+        provider_key: { type: string, nullable: true }
+        provider_application_reference: { type: string, nullable: true }
+        externally_submitted_at: { type: string, format: date-time, nullable: true }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+        reviewed_by: { type: string, format: uuid, nullable: true }
+        review_note: { type: string, nullable: true }
         applied_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     ScholarshipApplicationHistory:
@@ -126,8 +133,8 @@ components:
         id: { type: string, format: uuid }
         scholarship_application_id: { type: string, format: uuid }
         old_status: { type: string, nullable: true }
-        new_status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
-        source_type: { type: string, enum: [GRADUATE_ACTION, ADMIN_ACTION] }
+        new_status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED, INTERNAL_ONLY, WITHDRAWN] }
+        source_type: { type: string, enum: [GRADUATE_ACTION, ADMIN_ACTION, SYSTEM, PROVIDER, REVIEWER, ADMIN] }
         changed_at: { type: string, format: date-time }
     CompetitionApplication:
       type: object
@@ -431,8 +438,8 @@ components:
       description: >-
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
-        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND.
+        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER, SCHOLARSHIP_REVIEWER_REQUIRED.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, SCHOLARSHIP_PROVIDER_REFERENCE_NOT_FOUND, SCHOLARSHIP_DELIVERY_NOT_FOUND.
         409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
@@ -440,7 +447,10 @@ components:
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
-        SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, SAMPLE_DATA_NOT_REVIEWABLE, NOT_A_COMPETITION,
+        SCHOLARSHIP_APPLICATION_NOT_FOUND, SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, SAMPLE_DATA_NOT_REVIEWABLE,
+        SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED,
+        INVALID_SCHOLARSHIP_STATUS_TRANSITION, SCHOLARSHIP_DELIVERY_NOT_RETRYABLE, SCHOLARSHIP_DELIVERY_IN_PROGRESS,
+        PROVIDER_EVENT_ID_CONFLICT, NOT_A_COMPETITION,
         COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
       content:
@@ -671,7 +681,7 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/apply_for_scholarship:
     post:
-      summary: Submit once to an open and eligible SCHOLARSHIP opportunity; accepts an owned CV and form answers
+      summary: Internal application RPC; Android clients should use POST /functions/v1/submit-scholarship to trigger provider delivery
       requestBody:
         required: true
         content:
@@ -698,7 +708,7 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/withdraw_scholarship_application:
     post:
-      summary: Withdraw the caller's own SUBMITTED scholarship application
+      summary: Withdraw only before provider delivery is acknowledged; externally submitted applications require provider-side handling
       requestBody:
         required: true
         content:
@@ -1069,6 +1079,244 @@ paths:
       responses:
         '200':
           description: JSON
+  /rest/v1/rpc/configure_scholarship_provider_mapping:
+    post:
+      summary: Platform-admin-only mapping between a non-sample scholarship and its external provider opportunity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_opportunity_id, p_provider_key, p_external_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_provider_key: { type: string, pattern: "^[A-Z0-9][A-Z0-9_-]{1,63}$" }
+                p_external_opportunity_id: { type: string, minLength: 1, maxLength: 200 }
+                p_is_enabled: { type: boolean, default: true }
+      responses:
+        '200': { description: Provider mapping saved; blocked applications are queued when enabled }
+        '403': { description: ADMIN_REQUIRED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_scholarship_reviewer:
+    post:
+      summary: Platform-admin-only assignment of a verified active reviewer to one provider key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_user_id, p_provider_key, p_is_active]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_provider_key: { type: string, pattern: "^[A-Z0-9][A-Z0-9_-]{1,63}$" }
+                p_is_active: { type: boolean }
+      responses:
+        '200': { description: Reviewer assignment saved }
+        '403': { description: ADMIN_REQUIRED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_scholarship_review_queue:
+    post:
+      summary: Read provider-scoped scholarship submissions; platform admins can read all providers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                p_provider_key: { type: string, nullable: true }
+                p_status: { type: string, enum: [PENDING_DELIVERY, SUBMITTED_EXTERNALLY, IN_REVIEW, ACCEPTED, REJECTED, DELIVERY_FAILED], nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Provider-scoped review queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    application_id: { type: string, format: uuid }
+                    opportunity_id: { type: string, format: uuid }
+                    opportunity_title: { type: string }
+                    provider_key: { type: string }
+                    graduate_id: { type: string, format: uuid }
+                    graduate_name: { type: string }
+                    graduate_email: { type: string }
+                    cv_document_id: { type: string, format: uuid, nullable: true }
+                    personal_statement: { type: string, nullable: true }
+                    application_data: { type: object }
+                    status: { type: string }
+                    delivery_status: { type: string }
+                    provider_application_reference: { type: string, nullable: true }
+        '403': { description: SCHOLARSHIP_REVIEWER_REQUIRED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/retry_scholarship_delivery:
+    post:
+      summary: Platform-admin-only manual retry after delivery failure or provider configuration is corrected
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Delivery returned to PENDING; invoke deliver-scholarship to process it }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/assert_scholarship_admin:
+    post:
+      summary: Verify that the authenticated account has an active, email-confirmed platform-admin membership
+      responses:
+        '200': { description: true }
+        '403': { description: ADMIN_REQUIRED }
+  /rest/v1/rpc/get_scholarship_review_cv_path:
+    post:
+      summary: Return a private Storage path only to a platform admin or a reviewer assigned to the application's provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Private Storage path (null when no CV was attached); use the reviewer Edge Function for a signed URL
+          content:
+            application/json:
+              schema:
+                type: string
+                nullable: true
+        '403': { description: SCHOLARSHIP_REVIEWER_REQUIRED }
+        '404': { description: SCHOLARSHIP_APPLICATION_NOT_FOUND }
+        '409': { description: SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /functions/v1/submit-scholarship:
+    post:
+      summary: Submit a scholarship application and trigger the first signed, idempotent provider delivery attempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_cv_document_id: { type: string, format: uuid, nullable: true }
+                p_personal_statement: { type: string, maxLength: 10000, nullable: true }
+                p_application_data:
+                  type: object
+                  description: JSON object no larger than 32 KiB.
+      responses:
+        '200': { description: Internal Scholarship submission recorded (SUBMITTED) or provider receipt acknowledged (SUBMITTED_EXTERNALLY) }
+        '202': { description: Application persisted but delivery is pending or blocked; response never claims external submission }
+        '400': { description: INVALID_REQUEST }
+        '401': { description: UNAUTHENTICATED }
+        '409': { description: ALREADY_APPLIED }
+        '422': { description: Invalid scholarship, closed opportunity or eligibility failure }
+  /functions/v1/deliver-scholarship:
+    post:
+      summary: Process due outbox items with service-role credentials, or retry one application as platform admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                application_id: { type: string, format: uuid, nullable: true }
+                limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200': { description: Processed delivery outcomes }
+        '400': { description: Invalid worker input }
+        '401': { description: UNAUTHENTICATED }
+        '403': { description: ADMIN_REQUIRED }
+        '503': { description: Worker or provider configuration unavailable }
+  /functions/v1/get-scholarship-review-cv:
+    post:
+      summary: Return a 10-minute private CV download URL only to an active reviewer assigned to the application's provider or a platform admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: CV link available or the application has no CV attached
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application_id: { type: string, format: uuid }
+                  cv_available: { type: boolean }
+                  download_url: { type: string, format: uri, nullable: true }
+                  expires_in_seconds: { type: integer, nullable: true }
+        '400': { description: Invalid request }
+        '401': { description: UNAUTHENTICATED }
+        '403': { description: SCHOLARSHIP_REVIEWER_REQUIRED }
+        '404': { description: SCHOLARSHIP_APPLICATION_NOT_FOUND }
+        '409': { description: SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE }
+        '503': { description: Signed URL unavailable }
+  /functions/v1/scholarship-provider-callback:
+    post:
+      summary: Receive provider review events authenticated by raw-body HMAC-SHA256 (no Supabase JWT)
+      description: >-
+        The provider sends X-Alumni-Timestamp (Unix seconds) and X-Alumni-Signature
+        (sha256 hex). The signature covers timestamp + "." + the exact raw JSON body,
+        using that provider's webhook_secret. Timestamps older than five minutes are rejected.
+        Provider event_id is idempotent; reusing it with a changed payload is rejected.
+      security: []
+      parameters:
+        - name: X-Alumni-Timestamp
+          in: header
+          required: true
+          schema: { type: string, pattern: "^[0-9]{10}$" }
+        - name: X-Alumni-Signature
+          in: header
+          required: true
+          schema: { type: string, pattern: "^sha256=[a-f0-9]{64}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider_key, event_id, application_reference, status]
+              properties:
+                provider_key: { type: string, pattern: "^[A-Z0-9][A-Z0-9_-]{1,63}$" }
+                event_id: { type: string, minLength: 1, maxLength: 200 }
+                application_reference: { type: string, minLength: 1, maxLength: 200 }
+                status: { type: string, enum: [IN_REVIEW, ACCEPTED, REJECTED] }
+                note: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200': { description: Provider event accepted; duplicate event returns result DUPLICATE }
+        '400': { description: Invalid body or signature timestamp format }
+        '401': { description: Invalid HMAC signature or unknown provider }
+        '413': { description: Request body exceeds the 16 KiB limit }
+        '404': { description: Provider application reference not found }
+        '409': { description: Invalid transition or provider event id reused with another payload }
+        '503': { description: Provider callback could not be committed; provider may retry the same event id }
   /functions/v1/recommend:
     post:
       summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Deterministic scoring;
@@ -1662,20 +1910,25 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/review_scholarship_application:
     post:
-      summary: Platform admin advances SUBMITTED to UNDER_REVIEW, then decides ACCEPTED or REJECTED
+      summary: Platform admins review internal submissions; assigned reviewers/admins review provider-backed submissions
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [p_application_id, p_status]
               properties:
                 p_application_id: { type: string, format: uuid }
-                p_status: { type: string, enum: [UNDER_REVIEW, ACCEPTED, REJECTED] }
-                p_note: { type: string, maxLength: 1000, nullable: true }
+                p_status: { type: string, enum: [UNDER_REVIEW, IN_REVIEW, ACCEPTED, REJECTED] }
+                p_note: { type: string, maxLength: 2000, nullable: true }
       responses:
-        '200': { description: Updated Scholarship application with audit history and applicant notification }
+        '200':
+          description: Updated Scholarship application and applicant notification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScholarshipApplication' }
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/assert_platform_admin:
     post:

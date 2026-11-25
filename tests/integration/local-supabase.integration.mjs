@@ -236,7 +236,14 @@ try {
   assert.ok(scholarshipOpportunityId, "seed SCHOLARSHIP opportunity is required");
   assert.ok(cvId, "caller-owned CV metadata row is required");
 
-  const scholarshipSubmit = await request("/rest/v1/rpc/apply_for_scholarship", {
+  const noAuthScholarship = await request("/functions/v1/submit-scholarship", {
+    method: "POST",
+    headers: headers(null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_opportunity_id: scholarshipOpportunityId }),
+  });
+  pass("scholarship submit endpoint rejects missing JWT", noAuthScholarship.status === 401);
+
+  const scholarshipSubmit = await request("/functions/v1/submit-scholarship", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
     body: JSON.stringify({
       p_opportunity_id: scholarshipOpportunityId,
@@ -245,11 +252,12 @@ try {
       p_application_data: { study_area: "Computer Science", motivation: "Research" },
     }),
   });
-  pass("graduate submits scholarship application over HTTP",
-    scholarshipSubmit.status === 200 && scholarshipSubmit.json?.status === "SUBMITTED" &&
-    scholarshipSubmit.json?.opportunity_id === scholarshipOpportunityId &&
-    scholarshipSubmit.json?.graduate_id === a.id);
-  scholarshipApplicationId = scholarshipSubmit.json?.id ?? null;
+  pass("graduate submits sample scholarship; platform keeps it in internal flow",
+    scholarshipSubmit.status === 200 &&
+    scholarshipSubmit.json?.status === "SUBMITTED" &&
+    scholarshipSubmit.json?.delivery_status === "NOT_REQUIRED" &&
+    scholarshipSubmit.json?.external_submission === false);
+  scholarshipApplicationId = scholarshipSubmit.json?.application_id ?? null;
   assert.ok(scholarshipApplicationId, "scholarship application id is required");
 
   const scholarshipOwn = await request(

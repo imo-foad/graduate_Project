@@ -75,7 +75,7 @@ test("profile_version is bumped only by real input changes; cache flag updates c
   const cand = finalFunctions(allMigrationsSql()).get("get_recommendation_candidates")!;
   assert.match(cand.body, /'profile_version'/);
 });
-test("Edge Function: user-facing reads use the user client; service role only for the two RPCs", async () => {
+test("Edge Function: user-facing reads use the user client; service role only for quota and trusted recommendation RPCs", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../supabase/functions/recommend/index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(src, /admin\.from\(/);

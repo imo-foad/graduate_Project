@@ -210,6 +210,7 @@ select is((select count(*)::int from private.scholarship_delivery_attempts
 select ok(exists(select 1 from public.notifications
   where profile_id=tests.id('graduate2') and type='SCHOLARSHIP_APPLICATION_SUBMITTED_EXTERNALLY'),
   'graduate is notified only after provider acknowledgement');
+select tests.login('graduate2');
 select throws_ok($q$select public.withdraw_scholarship_application(tests.id('application2'))$q$,
   'PT422','CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION','cannot locally withdraw after external submission');
 

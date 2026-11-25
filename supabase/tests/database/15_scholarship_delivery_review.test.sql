@@ -211,8 +211,19 @@ select throws_ok($q$select public.withdraw_scholarship_application(tests.id('app
 select tests.login('reviewer-a');
 select is((select count(*)::int from public.get_scholarship_review_queue('PROVIDER_A','SUBMITTED_EXTERNALLY',50)),
   1,'provider-A reviewer sees only provider-A submitted applications');
+select throws_ok($q$select public.get_scholarship_review_cv_path(tests.id('application2'))$q$,
+  'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','graduate who is not a reviewer cannot use reviewer CV endpoint');
 select throws_ok($q$select * from public.get_scholarship_review_queue('PROVIDER_B',null,50)$q$,
   'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','provider-A reviewer cannot inspect provider-B queue');
+select is(public.get_scholarship_review_cv_path(tests.id('application2')),
+  tests.id('graduate2')::text || '/scholarship-review-cv.pdf',
+  'provider-A reviewer can access the attached CV path for provider-A application');
+reset role;
+select tests.login('reviewer-b');
+select throws_ok($q$select public.get_scholarship_review_cv_path(tests.id('application2'))$q$,
+  'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','provider-B reviewer cannot access provider-A CV');
+reset role;
+select tests.login('reviewer-a');
 select is((public.review_scholarship_application(
  tests.id('application2'),'IN_REVIEW','Eligibility and documents are under review')).status,
  'IN_REVIEW','authorized reviewer can move submitted application into review');

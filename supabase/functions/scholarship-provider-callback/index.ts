@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   parseScholarshipProviderConfigs,
+  readBoundedTextStream,
   sha256Hex,
   verifyProviderWebhookSignature,
 } from "../_shared/scholarship-provider.ts";
@@ -18,8 +19,13 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceKey) return json({ error: "SERVER_CONFIGURATION_ERROR" }, 500);
 
-  const rawBody = await req.text();
-  if (!rawBody || rawBody.length > 16 * 1024) return json({ error: "INVALID_REQUEST" }, 400);
+  let rawBody: string;
+  try {
+    rawBody = await readBoundedTextStream(req.body, 16 * 1024);
+  } catch {
+    return json({ error: "REQUEST_BODY_TOO_LARGE" }, 413);
+  }
+  if (!rawBody) return json({ error: "INVALID_REQUEST" }, 400);
 
   const timestamp = req.headers.get("X-Alumni-Timestamp") ?? "";
   const signature = req.headers.get("X-Alumni-Signature") ?? "";

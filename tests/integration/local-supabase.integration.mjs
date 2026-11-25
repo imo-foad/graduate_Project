@@ -91,9 +91,30 @@ try {
   pass("graduate cannot read another profile", otherProfile.status === 200 && otherProfile.json?.length === 0);
 
   // The Edge Function is exercised over the real local HTTP gateway, with JWT verification enabled.
-  const getFunction = await request("/functions/v1/recommend", {
-    method: "GET", headers: headers(a.token),
-  });
+  // A freshly started local Edge Function can briefly restart after the CLI's readiness probe.
+  // Retry the same GET for a bounded interval; success still requires the real handler's HTTP 405.
+  const MAX_FUNCTION_METHOD_RETRIES = 10;
+  let getFunction = { status: 0, json: null, text: "request not attempted" };
+  for (let attempt = 0; attempt < MAX_FUNCTION_METHOD_RETRIES; attempt++) {
+    try {
+      getFunction = await request("/functions/v1/recommend", {
+        method: "GET", headers: headers(a.token),
+      });
+    } catch (error) {
+      getFunction = { status: 0, json: null, text: String(error) };
+    }
+    if (getFunction.status === 405) break;
+    if (attempt < MAX_FUNCTION_METHOD_RETRIES - 1) {
+      console.warn(`Retrying recommend method guard after HTTP ${getFunction.status} (attempt ${attempt + 1}/${MAX_FUNCTION_METHOD_RETRIES})`);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+  if (getFunction.status !== 405) {
+    console.error("recommend method guard diagnostics:", {
+      status: getFunction.status,
+      body: (getFunction.json ?? getFunction.text ?? "").toString().slice(0, 1000),
+    });
+  }
   pass("recommend endpoint rejects non-POST methods", getFunction.status === 405,
     { status: getFunction.status, body: getFunction.json ?? getFunction.text });
   const noAuth = await request("/functions/v1/recommend", {

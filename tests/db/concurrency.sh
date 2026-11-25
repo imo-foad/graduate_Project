@@ -129,9 +129,11 @@ SCH_GRAD=$(node -e 'console.log(require("crypto").randomUUID())')
 SCH_OPP=""
 SCH_APP=""
 cleanup_scholarship() {
-  P -c "delete from private.scholarship_provider_mappings where opportunity_id='$SCH_OPP';
-        delete from auth.users where id in ('$SCH_ADMIN','$SCH_GRAD');
-        delete from public.opportunities where seed_key='${TAG}-scholarship-race';" >/dev/null 2>&1 || true
+  if [ -n "${SCH_OPP:-}" ]; then
+    P -c "delete from private.scholarship_provider_mappings where opportunity_id='$SCH_OPP'" >/dev/null 2>&1 || true
+  fi
+  P -c "delete from auth.users where id in ('$SCH_ADMIN','$SCH_GRAD')" >/dev/null 2>&1 || true
+  P -c "delete from public.opportunities where seed_key='${TAG}-scholarship-race'" >/dev/null 2>&1 || true
 }
 trap 'cleanup_scholarship; cleanup' EXIT
 P <<SQL

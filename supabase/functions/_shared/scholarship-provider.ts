@@ -62,12 +62,15 @@ function safeEndpoint(value: unknown): string {
     url.hash ||
     url.hostname === "localhost" ||
     url.hostname.endsWith(".localhost") ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "::1" ||
-    /^10\./.test(url.hostname) ||
-    /^192\.168\./.test(url.hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(url.hostname) ||
-    url.hostname === "169.254.169.254"
+    url.hostname.endsWith(".local") ||
+    url.hostname.endsWith(".internal") ||
+    url.hostname.endsWith(".lan") ||
+    url.hostname.endsWith(".home") ||
+    url.hostname.endsWith(".test") ||
+    url.hostname.endsWith(".invalid") ||
+    url.hostname.includes(":") ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) ||
+    !url.hostname.includes(".")
   ) {
     throw new Error("UNSAFE_PROVIDER_ENDPOINT");
   }
@@ -186,6 +189,42 @@ function retryAfterSeconds(header: string | null): number | null {
   return delta > 0 ? Math.min(3600, delta) : null;
 }
 
+export async function readBoundedTextStream(
+  body: ReadableStream<Uint8Array> | null,
+  maxBytes: number,
+): Promise<string> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new RangeError("INVALID_MAX_BODY_BYTES");
+  }
+  if (!body) return "";
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new RangeError("BODY_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+}
+
 export async function sendScholarshipApplicationToProvider(
   config: ScholarshipProviderConfig,
   idempotencyKey: string,
@@ -200,7 +239,7 @@ export async function sendScholarshipApplicationToProvider(
     ...payload,
     idempotency_key: idempotencyKey,
   });
-  if (body.length > 64 * 1024) {
+  if (encoder.encode(body).byteLength > 64 * 1024) {
     throw new ScholarshipProviderError("PROVIDER_REQUEST_TOO_LARGE", false);
   }
 
@@ -227,13 +266,14 @@ export async function sendScholarshipApplicationToProvider(
     throw new ScholarshipProviderError("PROVIDER_NETWORK_ERROR", true);
   }
 
-  const responseText = await response.text().catch(() => "");
-  if (responseText.length > MAX_PROVIDER_RESPONSE_BYTES) {
-    throw new ScholarshipProviderError(
-      "PROVIDER_RESPONSE_TOO_LARGE",
-      false,
-      response.status,
-    );
+  let responseText: string;
+  try {
+    responseText = await readBoundedTextStream(response.body, MAX_PROVIDER_RESPONSE_BYTES);
+  } catch (error) {
+    if (error instanceof RangeError && error.message === "BODY_TOO_LARGE") {
+      throw new ScholarshipProviderError("PROVIDER_RESPONSE_TOO_LARGE", false, response.status);
+    }
+    throw new ScholarshipProviderError("PROVIDER_RESPONSE_READ_FAILED", true, response.status);
   }
 
   let responseBody: unknown = null;

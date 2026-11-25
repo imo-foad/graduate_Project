@@ -444,7 +444,7 @@ async function testCareerAndRecommendations(user) {
   record(user, "recommendations", "recommend endpoint returns deterministic recommendations with the current model",
     first.status === 200 && first.json?.source === "computed" &&
     first.json?.ai_mode === "deterministic" &&
-    first.json?.model_version === "deterministic-v3-career-intelligence" &&
+    first.json?.model_version === "deterministic-v4-availability" && // must match MODEL_VERSION in supabase/functions/_shared/scoring.ts
     Array.isArray(first.json?.items),
     { status: first.status, source: first.json?.source, model_version: first.json?.model_version });
   const validRecommendations = user.recommendationItems.every((item) =>

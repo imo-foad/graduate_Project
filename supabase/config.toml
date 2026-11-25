@@ -14,3 +14,12 @@ verify_jwt = true
 
 [functions.parse-cv]
 verify_jwt = true
+
+[functions.invite-graduate]
+verify_jwt = true
+
+[functions.manage-graduate]
+verify_jwt = true
+
+[functions.delete-graduate]
+verify_jwt = true

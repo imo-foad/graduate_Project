@@ -17,6 +17,24 @@ $is_platform_admin$;
 revoke all on function private.is_platform_admin() from public, anon, authenticated;
 grant execute on function private.is_platform_admin() to authenticated;
 
+create or replace function private.is_active_platform_admin(p_user_id uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $is_active_platform_admin$
+  select p_user_id is not null and exists (
+    select 1
+      from private.platform_admins a
+      join public.profiles p on p.id = a.user_id
+      join auth.users u on u.id = a.user_id
+     where a.user_id = p_user_id
+       and a.is_active
+       and p.account_status = 'ACTIVE'
+       and u.email_confirmed_at is not null
+  );
+$is_active_platform_admin$;
+revoke all on function private.is_active_platform_admin(uuid) from public, anon, authenticated;
+grant execute on function private.is_active_platform_admin(uuid) to service_role;
+
 create or replace function private.is_active_account()
 returns boolean
 language sql stable security definer set search_path = ''
@@ -222,7 +240,8 @@ create or replace function public.finalize_graduate_invitation(
   p_invitation_id uuid,
   p_auth_user_id uuid,
   p_success boolean,
-  p_failure_code text default null
+  p_failure_code text default null,
+  p_actor_id uuid
 )
 returns text
 language plpgsql security definer set search_path = ''
@@ -231,6 +250,9 @@ declare v_invite private.graduate_invitations;
 begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if not private.is_active_platform_admin(p_actor_id) then
+    raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if p_invitation_id is null or p_success is null
      or (p_success and p_auth_user_id is null)
@@ -276,7 +298,7 @@ begin
   return 'FAILED';
 end
 $finalize_graduate_invitation$;
-revoke all on function public.finalize_graduate_invitation(uuid, uuid, boolean, text) from public, anon, authenticated;
+revoke all on function public.finalize_graduate_invitation(uuid, uuid, boolean, text, uuid) from public, anon, authenticated;
 grant execute on function public.finalize_graduate_invitation(uuid, uuid, boolean, text) to service_role;
 
 create or replace function public.list_graduate_invitations(
@@ -440,11 +462,7 @@ begin
      or p_reason is null or length(btrim(p_reason)) not between 8 and 1000 then
     raise exception 'INVALID_INPUT' using errcode = 'PT422';
   end if;
-  if not exists (
-    select 1 from private.platform_admins a
-    join public.profiles p on p.id = a.user_id
-    where a.user_id = p_actor_id and a.is_active and p.account_status = 'ACTIVE'
-  ) then
+  if not private.is_active_platform_admin(p_actor_id) then
     raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
   end if;
   if not exists (select 1 from public.profiles where id = p_user_id) then
@@ -578,6 +596,9 @@ begin
   if auth.role() is distinct from 'service_role' then
     raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
   end if;
+  if not private.is_active_platform_admin(p_actor_id) then
+    raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
+  end if;
   select user_id into v_user_id from private.account_deletion_requests
    where id = p_request_id and status = 'APPROVED' for update;
   if not found or v_user_id is null then
@@ -596,7 +617,7 @@ begin
   return v_user_id;
 end
 $get_approved_account_deletion$;
-revoke all on function public.get_approved_account_deletion(uuid) from public, anon, authenticated;
+revoke all on function public.get_approved_account_deletion(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.get_approved_account_deletion(uuid) to service_role;
 
 create or replace function public.release_account_deletion_claim(p_request_id uuid)

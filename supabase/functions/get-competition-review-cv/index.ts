@@ -30,12 +30,15 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: "REQUEST_BODY_TOO_LARGE" }, 413);
   }
-  let body: unknown = null;
+  let parsedBody: unknown = null;
   try {
-    body = rawBody ? JSON.parse(rawBody) : null;
+    parsedBody = rawBody ? JSON.parse(rawBody) : null;
   } catch {
     return json({ error: "INVALID_REQUEST" }, 400);
   }
+  const body = parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+    ? parsedBody as Record<string, unknown>
+    : null;
   if (
     !body || typeof body !== "object" || Array.isArray(body) ||
     Object.keys(body).length !== 1 ||

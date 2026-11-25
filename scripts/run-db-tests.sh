@@ -61,9 +61,9 @@ WANT_OPPS="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("fixture
 [ "$(q 'select count(*) from public.opportunity_skills os left join public.skills s on s.id = os.skill_id where s.id is null')" = "0" ] || fail "opportunity_skills reference unknown skills"
 echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on second load)"
 
-# ---- D. pgTAP: all fifteen files must run and pass
+# ---- D. pgTAP: all sixteen files must run and pass
 echo "=== D. supabase test db"
-EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_scholarship_application 11_competition_application 12_social_feed 14_secure_graduate_onboarding 15_internal_scholarship_management 16_scholarship_delivery_review)
+EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_scholarship_application 11_competition_application 12_social_feed 14_secure_graduate_onboarding 15_internal_scholarship_management 16_scholarship_delivery_review 17_competition_delivery_review)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done

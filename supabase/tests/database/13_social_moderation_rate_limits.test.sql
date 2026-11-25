@@ -180,6 +180,21 @@ select ok(private.consume_user_rate_limit(tests.id('limited'),'PGTAP_BUCKET_TEST
 select is(private.consume_user_rate_limit(tests.id('reporter'),'PGTAP_BUCKET_TEST'),0,
  'rate-limit buckets are isolated per user');
 
+-- A suspended Auth account or disabled admin membership immediately loses moderator authority.
+reset role;
+update public.profiles set account_status='SUSPENDED' where id=tests.id('admin');
+select tests.login('admin');
+select throws_ok($q$select * from public.get_social_moderation_queue('OPEN',20)$q$,
+ 'PT403','ADMIN_REQUIRED','suspended platform admin cannot moderate');
+reset role;
+update public.profiles set account_status='ACTIVE' where id=tests.id('admin');
+update private.platform_admins set is_active=false where user_id=tests.id('admin');
+select tests.login('admin');
+select throws_ok($q$select * from public.get_social_moderation_queue('OPEN',20)$q$,
+ 'PT403','ADMIN_REQUIRED','disabled platform-admin membership cannot moderate');
+reset role;
+update private.platform_admins set is_active=true where user_id=tests.id('admin');
+
 -- Edge-function limiter accepts a service-role context, and refuses authenticated callers.
 select tests.login('reporter');
 select throws_ok($q$select public.consume_edge_rate_limit(tests.id('reporter'),'CV_PARSE')$q$,

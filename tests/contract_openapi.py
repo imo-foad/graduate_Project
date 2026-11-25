@@ -291,8 +291,15 @@ class SecurityAndAuthContract(unittest.TestCase):
         for path, ops in API["paths"].items():
             if path == self.TOKEN: continue
             for method, op in ops.items():
-                if path == "/functions/v1/scholarship-provider-callback":
+                hmac_callbacks = {
+                    "/functions/v1/scholarship-provider-callback",
+                    "/functions/v1/competition-provider-callback",
+                }
+                if path in hmac_callbacks:
                     self.assertEqual(op.get("security"), [], "provider callback must use HMAC, not a Supabase JWT")
+                    names = {p["name"] for p in op.get("parameters", []) if p.get("in") == "header"}
+                    self.assertTrue({"X-Alumni-Timestamp", "X-Alumni-Signature"} <= names,
+                                    f"{path} must require the timestamp and HMAC signature headers")
                     continue
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
 

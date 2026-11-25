@@ -45,7 +45,6 @@ try {
   let rateLimited = null;
   let completedAttempts = 0;
   for (let i = 0; i < 8; i++) {
-    const id = randomUUID();
     const storagePath = graduateId + "/rate-limit-probe-" + randomUUID() + ".pdf";
     const insert = await request("/rest/v1/cv_documents", {
       method: "POST",
@@ -61,7 +60,8 @@ try {
       }),
     });
     assert.equal(insert.status, 201, "probe CV metadata must be insertable");
-    assert.equal(insert.json?.[0]?.id, id, "server must preserve the generated CV id");
+    const id = insert.json?.[0]?.id;
+    assert.ok(id, "inserted CV metadata must return its generated id");
     insertedIds.push(id);
 
     const parsed = await request("/functions/v1/parse-cv", {

@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   });
   const { data: targetId, error: approvalError } = await adminClient.rpc(
     "get_approved_account_deletion",
-    { p_request_id: body.request_id },
+    { p_request_id: body.request_id, p_actor_id: authData.user.id },
   );
   if (approvalError || typeof targetId !== "string") {
     const message = approvalError?.message ?? "";

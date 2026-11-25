@@ -240,8 +240,8 @@ create or replace function public.finalize_graduate_invitation(
   p_invitation_id uuid,
   p_auth_user_id uuid,
   p_success boolean,
-  p_failure_code text default null,
-  p_actor_id uuid
+  p_actor_id uuid,
+  p_failure_code text default null
 )
 returns text
 language plpgsql security definer set search_path = ''
@@ -299,7 +299,7 @@ begin
 end
 $finalize_graduate_invitation$;
 revoke all on function public.finalize_graduate_invitation(uuid, uuid, boolean, text, uuid) from public, anon, authenticated;
-grant execute on function public.finalize_graduate_invitation(uuid, uuid, boolean, text) to service_role;
+grant execute on function public.finalize_graduate_invitation(uuid, uuid, boolean, uuid, text) to service_role;
 
 create or replace function public.list_graduate_invitations(
   p_status text default 'ALL',
@@ -587,7 +587,7 @@ begin
 end
 $review_account_deletion_request$;
 
-create or replace function public.get_approved_account_deletion(p_request_id uuid)
+create or replace function public.get_approved_account_deletion(p_request_id uuid, p_actor_id uuid)
 returns uuid
 language plpgsql security definer set search_path = ''
 as $get_approved_account_deletion$
@@ -618,7 +618,7 @@ begin
 end
 $get_approved_account_deletion$;
 revoke all on function public.get_approved_account_deletion(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.get_approved_account_deletion(uuid) to service_role;
+grant execute on function public.get_approved_account_deletion(uuid, uuid) to service_role;
 
 create or replace function public.release_account_deletion_claim(p_request_id uuid)
 returns boolean

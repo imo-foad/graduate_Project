@@ -302,7 +302,7 @@ begin
   return 'FAILED';
 end
 $finalize_graduate_invitation$;
-revoke all on function public.finalize_graduate_invitation(uuid, uuid, boolean, text, uuid) from public, anon, authenticated;
+revoke all on function public.finalize_graduate_invitation(uuid, uuid, boolean, uuid, text) from public, anon, authenticated;
 grant execute on function public.finalize_graduate_invitation(uuid, uuid, boolean, uuid, text) to service_role;
 
 create or replace function public.list_graduate_invitations(

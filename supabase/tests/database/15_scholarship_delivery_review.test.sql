@@ -53,6 +53,12 @@ begin
   perform tests.mk_user('reviewer-a');
   perform tests.mk_user('reviewer-b');
   perform tests.mk_user('admin');
+  insert into public.cv_documents(graduate_id,storage_path,file_type,size_bytes)
+  values (tests.id('graduate2'),tests.id('graduate2')::text || '/scholarship-review-cv.pdf','pdf',128);
+  insert into tests.ids(k,v)
+  select 'cv2',id from public.cv_documents
+   where graduate_id=tests.id('graduate2')
+     and storage_path=tests.id('graduate2')::text || '/scholarship-review-cv.pdf';
   perform tests.mk_opp('scholar1', false);
   perform tests.mk_opp('scholar2', false);
   perform tests.mk_opp('scholar3', false);
@@ -152,7 +158,7 @@ select ok(exists(select 1 from public.notifications
 
 -- A configured application is queued with a stable idempotency key.
 select tests.login('graduate2');
-select is((public.apply_for_scholarship(tests.id('scholar2'))).status,
+select is((public.apply_for_scholarship(tests.id('scholar2'),tests.id('cv2'))).status,
   'PENDING_DELIVERY','configured scholarship is queued, not falsely marked delivered');
 reset role;
 insert into tests.ids(k,v)

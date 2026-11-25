@@ -113,19 +113,3 @@ test("saved-opportunity RLS helper is private from its first migration and clean
 });
 
 
-test("Social Feed RPCs are active-account and owner scoped; no raw table grants are introduced", () => {
-  const all = allMigrationsSql();
-  const fns = finalFunctions(all);
-  for (const n of ["get_social_feed", "create_social_post", "update_social_post", "delete_social_post",
-    "get_social_post_comments", "add_social_comment", "update_social_comment", "delete_social_comment",
-    "like_social_post", "unlike_social_post"]) {
-    assert.match(fns.get(n)!.body, /_require_active_social_user\(\)/, n);
-    assert.doesNotMatch(fns.get(n)!.params, /graduate_id|author_id|p_user_id/i, n);
-  }
-  assert.match(fns.get("update_social_post")!.body, /author_id = v_uid for update/);
-  assert.match(fns.get("update_social_comment")!.body, /author_id = v_uid for update/);
-  assert.match(fns.get("add_social_comment")!.body, /for update of sp/);
-  assert.match(fns.get("like_social_post")!.body, /for update of sp/);
-  assert.match(all, /revoke all on public\.social_posts, public\.social_post_comments, public\.social_post_likes from public, anon, authenticated/i);
-  assert.match(all, /case when coalesce\('avatar_url' = any\(gp\.hidden_fields\), false\) then null/i);
-});

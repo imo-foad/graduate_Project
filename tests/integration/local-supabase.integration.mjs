@@ -62,6 +62,7 @@ let competitionApplicationId = null;
 let competitionOpportunityId = null;
 let socialPostId = null;
 let socialSecondPostId = null;
+let socialCommentId = null;
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);

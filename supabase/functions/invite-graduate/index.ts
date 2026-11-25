@@ -52,9 +52,13 @@ Deno.serve(async (req) => {
     return json({ error: "INVALID_REQUEST" }, 400);
   }
 
-  const { data: invitationRows, error: createError } = await userClient.rpc(
+  const adminClient = createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { data: invitationRows, error: createError } = await adminClient.rpc(
     "create_graduate_invitation",
     {
+      p_actor_id: authData.user.id,
       p_email: email,
       p_full_name: fullName,
       p_verification_note: verificationNote,
@@ -77,9 +81,6 @@ Deno.serve(async (req) => {
     return json({ error: "INVITATION_CREATE_FAILED" }, 503);
   }
 
-  const adminClient = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
   const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
     email,
     { data: { full_name: fullName } },

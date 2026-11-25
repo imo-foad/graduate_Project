@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
       p_invitation_id: invitationId,
       p_auth_user_id: null,
       p_success: false,
+      p_actor_id: authData.user.id,
       p_failure_code: failureCode,
     });
     if (finalizeError) console.error("invitation failure finalization failed", { code: finalizeError.code });
@@ -106,6 +107,7 @@ Deno.serve(async (req) => {
       p_invitation_id: invitationId,
       p_auth_user_id: inviteData.user.id,
       p_success: true,
+      p_actor_id: authData.user.id,
       p_failure_code: null,
     },
   );

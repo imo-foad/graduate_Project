@@ -109,4 +109,18 @@ check "concurrent saves: cache is fresh" "f" "$(P -c "select recommendations_dir
 check "concurrent saves: row belongs to one of the payloads" "1" "$(P -c "select count(*) from public.recommendations where graduate_id='$RU' and opportunity_id in ('$NOWAIT','$WAIT')")"
 check "concurrent saves: version unchanged by saving" "$V2" "$(ver)"
 
+
+# --- 8. concurrent duplicate Social Feed likes: one private edge, all other callers get ALREADY_LIKED
+SOCIAL_UID=$(usr 3)
+SOCIAL_POST=$(P -c "insert into public.social_posts (author_id, content) values ('$SOCIAL_UID', '${TAG} social-like-race') returning id")
+[ -n "$SOCIAL_POST" ] || { echo "PREREQUISITE FAILED: could not create Social Feed race post" >&2; exit 2; }
+OUT=$(mktemp); PIDS=()
+for i in $(seq 1 $N); do
+  ( as_user "$SOCIAL_UID" "select public.like_social_post('$SOCIAL_POST')" >>"$OUT" ) & PIDS+=($!)
+done
+wait "${PIDS[@]}"
+check "Social Feed like race: exactly one like edge" "1" "$(P -c "select count(*) from public.social_post_likes where post_id='$SOCIAL_POST' and graduate_id='$SOCIAL_UID'")"
+check "Social Feed like race: all competing requests rejected as ALREADY_LIKED" "$((N-1))" "$(grep -c 'ALREADY_LIKED' "$OUT")"
+rm -f "$OUT"
+
 echo; [ $FAILS -eq 0 ] && echo "ALL CONCURRENCY CHECKS PASSED" || { echo "$FAILS CHECK(S) FAILED"; exit 1; }

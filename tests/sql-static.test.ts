@@ -111,3 +111,5 @@ test("saved-opportunity RLS helper is private from its first migration and clean
   assert.match(migration10, /drop function if exists public\._opportunity_exists_for_saved_item\(uuid\)/i);
   assert.match(migration10, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
 });
+
+

@@ -34,7 +34,9 @@ test("every SECURITY DEFINER function pins search_path", () => {
 });
 test("RPCs derive identity from auth.uid(), not from a graduate-id parameter", () => {
   for (const fn of ["apply_for_job", "withdraw_application", "register_for_event", "cancel_event_registration", "set_current_job", "get_my_insights",
-    "apply_for_scholarship", "withdraw_scholarship_application", "apply_for_competition", "withdraw_competition_application"]) {
+    "apply_for_scholarship", "withdraw_scholarship_application", "apply_for_competition", "withdraw_competition_application",
+    "get_social_feed", "create_social_post", "update_social_post", "delete_social_post", "get_social_post_comments",
+    "add_social_comment", "update_social_comment", "delete_social_comment", "like_social_post", "unlike_social_post"]) {
     const m = sql.match(new RegExp(`function public\\.${fn}\\([^)]*\\)`));
     assert.ok(m, fn);
     assert.doesNotMatch(m![0], /graduate_id|p_graduate/, `${fn} takes a client-supplied graduate id`);

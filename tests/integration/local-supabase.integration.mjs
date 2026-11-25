@@ -60,6 +60,9 @@ let scholarshipApplicationId = null;
 let scholarshipOpportunityId = null;
 let competitionApplicationId = null;
 let competitionOpportunityId = null;
+let socialPostId = null;
+let socialSecondPostId = null;
+let socialCommentId = null;
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
@@ -393,6 +396,172 @@ try {
     competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_SUBMITTED" && n.related_entity_id === competitionApplicationId) &&
     competitionNotifications.json?.some((n) => n.type === "COMPETITION_APPLICATION_WITHDRAWN" && n.related_entity_id === competitionApplicationId));
 
+  // Social Feed: access is available only through the narrow authenticated RPC projection.
+  const socialCreate = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "  Alumni Connect community update  " }),
+  });
+  pass("graduate creates a Social Feed post", socialCreate.status === 200 &&
+    socialCreate.json?.content === "Alumni Connect community update" && socialCreate.json?.author_id === a.id);
+  socialPostId = socialCreate.json?.id ?? null;
+  assert.ok(socialPostId, "Social Feed post id is required");
+
+  const socialOwnIdentity = await request("/rest/v1/profiles?select=full_name&id=eq." + a.id, { headers: headers(a.token) });
+  pass("post author can read own display name for comparison", socialOwnIdentity.status === 200 && socialOwnIdentity.json?.length === 1);
+  const socialFeed = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: null, p_before_id: null, p_limit: 20 }),
+  });
+  const socialItem = socialFeed.json?.find((item) => item.id === socialPostId);
+  pass("another graduate sees post with display-only identity", socialFeed.status === 200 &&
+    !Object.hasOwn(socialItem ?? {}, "author_id") && socialItem?.author_name === socialOwnIdentity.json?.[0]?.full_name &&
+    Object.hasOwn(socialItem ?? {}, "author_avatar_url") && !("email" in (socialItem ?? {})) && !("phone" in (socialItem ?? {})));
+
+  const socialSecondCreate = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "Second post for cursor pagination" }),
+  });
+  pass("second graduate creates separate feed post", socialSecondCreate.status === 200 &&
+    socialSecondCreate.json?.author_id === b.id && socialSecondCreate.json?.content === "Second post for cursor pagination");
+  socialSecondPostId = socialSecondCreate.json?.id ?? null;
+  assert.ok(socialSecondPostId, "second Social Feed post id is required");
+
+  const socialPageOne = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: null, p_before_id: null, p_limit: 1 }),
+  });
+  const socialCursorItem = socialPageOne.json?.[0];
+  const socialPageTwo = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_before_created_at: socialCursorItem?.created_at, p_before_id: socialCursorItem?.id, p_limit: 1 }),
+  });
+  pass("Social Feed keyset pagination reaches next distinct item", socialPageOne.status === 200 &&
+    socialPageOne.json?.length === 1 && socialPageTwo.status === 200 && socialPageTwo.json?.length === 1 &&
+    socialPageTwo.json[0]?.id !== socialCursorItem?.id);
+
+  const socialRawTable = await request("/rest/v1/social_posts?select=id", { headers: headers(a.token) });
+  pass("graduate cannot bypass Social Feed RPCs through raw posts table", !socialRawTable.ok);
+
+  const socialComment = await request("/rest/v1/rpc/add_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "  Great to reconnect  " }),
+  });
+  pass("graduate adds a comment to another active graduate post", socialComment.status === 200 &&
+    socialComment.json?.post_id === socialPostId && socialComment.json?.content === "Great to reconnect");
+  socialCommentId = socialComment.json?.id ?? null;
+  assert.ok(socialCommentId, "Social Feed comment id is required");
+
+  const socialComments = await request("/rest/v1/rpc/get_social_post_comments", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_before_created_at: null, p_before_id: null, p_limit: 20 }),
+  });
+  pass("post owner reads comments with display-only author fields", socialComments.status === 200 &&
+    socialComments.json?.some((item) => item.id === socialCommentId && !Object.hasOwn(item, "author_id") &&
+      item.author_name === demoB.full_name && item.content === "Great to reconnect" &&
+      !("email" in item) && !("phone" in item)));
+
+  const socialCommentUpdate = await request("/rest/v1/rpc/update_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId, p_content: "Edited comment" }),
+  });
+  pass("comment author edits own comment", socialCommentUpdate.status === 200 && socialCommentUpdate.json?.content === "Edited comment");
+  const socialForeignCommentEdit = await request("/rest/v1/rpc/update_social_comment", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId, p_content: "Attempted foreign edit" }),
+  });
+  pass("another graduate cannot edit someone else's comment", socialForeignCommentEdit.status === 404 &&
+    socialForeignCommentEdit.json?.message === "SOCIAL_COMMENT_NOT_FOUND");
+
+  const socialCommentDelete = await request("/rest/v1/rpc/delete_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_comment_id: socialCommentId }),
+  });
+  pass("comment author deletes own comment", socialCommentDelete.status === 200 && socialCommentDelete.json === true);
+  socialCommentId = null;
+  const socialCommentAgain = await request("/rest/v1/rpc/add_social_comment", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Comment to verify post cascade" }),
+  });
+  pass("new comment can be added after deleting previous comment", socialCommentAgain.status === 200);
+  socialCommentId = socialCommentAgain.json?.id ?? null;
+
+  const socialLike = await request("/rest/v1/rpc/like_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("graduate likes a Social Feed post", socialLike.status === 200 && socialLike.json === true);
+  const socialDuplicateLike = await request("/rest/v1/rpc/like_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("duplicate like is rejected", socialDuplicateLike.status === 409 && socialDuplicateLike.json?.message === "ALREADY_LIKED");
+  const socialLikedFeed = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 20 }),
+  });
+  pass("feed exposes aggregate count and caller liked_by_me flag", socialLikedFeed.status === 200 &&
+    socialLikedFeed.json?.some((item) => item.id === socialPostId && item.likes_count === 1 && item.liked_by_me === true));
+  const socialUnlike = await request("/rest/v1/rpc/unlike_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("graduate removes own like", socialUnlike.status === 200 && socialUnlike.json === true);
+  const socialUnlikeAgain = await request("/rest/v1/rpc/unlike_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("unlike without existing like is rejected", socialUnlikeAgain.status === 404 && socialUnlikeAgain.json?.message === "NOT_LIKED");
+
+  const socialForeignPostEdit = await request("/rest/v1/rpc/update_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Foreign edit" }),
+  });
+  pass("another graduate cannot edit a post", socialForeignPostEdit.status === 404 &&
+    socialForeignPostEdit.json?.message === "SOCIAL_POST_NOT_FOUND");
+  const socialForeignPostDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("another graduate cannot delete a post", socialForeignPostDelete.status === 404 &&
+    socialForeignPostDelete.json?.message === "SOCIAL_POST_NOT_FOUND");
+
+  const socialPostUpdate = await request("/rest/v1/rpc/update_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId, p_content: "Updated alumni network announcement" }),
+  });
+  pass("post author edits own post", socialPostUpdate.status === 200 &&
+    socialPostUpdate.json?.content === "Updated alumni network announcement");
+  const socialInvalidPost = await request("/rest/v1/rpc/create_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_content: "   " }),
+  });
+  pass("blank Social Feed post is rejected", socialInvalidPost.status === 422 && socialInvalidPost.json?.message === "INVALID_INPUT");
+  const socialInvalidPage = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 0 }),
+  });
+  pass("invalid Social Feed page size is rejected", socialInvalidPage.status === 422 && socialInvalidPage.json?.message === "INVALID_INPUT");
+
+  const socialDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialPostId }),
+  });
+  pass("post author deletes own post", socialDelete.status === 200 && socialDelete.json === true);
+  socialPostId = null;
+  const socialAfterDelete = await request("/rest/v1/rpc/get_social_feed", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_limit: 50 }),
+  });
+  pass("deleted post and its comments/likes disappear from feed", socialAfterDelete.status === 200 &&
+    !socialAfterDelete.json?.some((item) => item.content === "Updated alumni network announcement"));
+  const socialSecondDelete = await request("/rest/v1/rpc/delete_social_post", {
+    method: "POST", headers: headers(b.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_post_id: socialSecondPostId }),
+  });
+  pass("second post author can delete own post", socialSecondDelete.status === 200 && socialSecondDelete.json === true);
+  socialSecondPostId = null;
+
+
   const bMetadata = await request(`/rest/v1/cv_documents?select=id,storage_path&storage_path=eq.${encodeURIComponent(objectPath)}`, {
     headers: headers(b.token),
   });
@@ -433,6 +602,16 @@ try {
     );
     pass("temporary career-path skills cleaned up for " + injected.graduate_id, cleanup.ok);
   }
+  // Remove Social Feed test posts that remain if an earlier assertion aborts the journey.
+  for (const [postId, token] of [[socialPostId, a.token], [socialSecondPostId, b.token]]) {
+    if (!postId) continue;
+    const cleanup = await request("/rest/v1/rpc/delete_social_post", {
+      method: "POST", headers: headers(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_post_id: postId }),
+    }).catch(() => ({ ok: false, status: 0 }));
+    pass("remaining Social Feed test post cleanup", cleanup.status === 200 || cleanup.status === 404);
+  }
+
   // Remove data created by the synthetic competition workflow before reruns.
   const competitionCleanup = [];
   if (competitionApplicationId) {

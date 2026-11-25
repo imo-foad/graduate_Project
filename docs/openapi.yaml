@@ -65,6 +65,22 @@ components:
         applied_at:
           type: string
           format: date-time
+    AdminScholarshipOpportunity:
+      type: object
+      description: Internal Alumni Connect Scholarship listing returned to platform admins.
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [SCHOLARSHIP] }
+        title: { type: string }
+        organizer_name: { type: string }
+        description: { type: string }
+        location: { type: string, nullable: true }
+        attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+        status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, EXPIRED, CANCELLED] }
+        deadline: { type: string, format: date-time, nullable: true }
+        target_fields: { type: array, items: { type: string } }
+        is_sample: { type: boolean }
+        created_by: { type: string, format: uuid, nullable: true }
     AdminScholarshipApplicationDetails:
       type: object
       properties:
@@ -1526,7 +1542,12 @@ paths:
                 p_allowed_degrees: { type: array, items: { type: string } }
                 p_required_certifications: { type: array, items: { type: string } }
       responses:
-        '200': { description: Created Scholarship DRAFT }
+        '200':
+          description: Created Scholarship DRAFT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_admin_scholarship:
     post:
@@ -1552,7 +1573,12 @@ paths:
                 p_allowed_degrees: { type: array, items: { type: string } }
                 p_required_certifications: { type: array, items: { type: string } }
       responses:
-        '200': { description: Updated Scholarship DRAFT }
+        '200':
+          description: Updated Scholarship DRAFT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/publish_admin_scholarship:
     post:
@@ -1567,7 +1593,12 @@ paths:
               properties:
                 p_opportunity_id: { type: string, format: uuid }
       responses:
-        '200': { description: Published Scholarship }
+        '200':
+          description: Published Scholarship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/close_admin_scholarship:
     post:
@@ -1582,7 +1613,12 @@ paths:
               properties:
                 p_opportunity_id: { type: string, format: uuid }
       responses:
-        '200': { description: Closed Scholarship }
+        '200':
+          description: Closed Scholarship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/list_admin_scholarship_applications:
     post:

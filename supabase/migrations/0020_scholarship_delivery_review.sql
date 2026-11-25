@@ -18,7 +18,7 @@ alter table public.scholarship_applications
   check (status in (
     'PENDING_DELIVERY','SUBMITTED_EXTERNALLY','IN_REVIEW','ACCEPTED','REJECTED',
     'DELIVERY_FAILED','INTERNAL_ONLY','WITHDRAWN'
-  ));
+  )) not valid;
 
 alter table public.scholarship_application_status_history
   drop constraint if exists scholarship_application_status_history_new_status_check;
@@ -153,7 +153,8 @@ insert into private.scholarship_delivery_outbox(
 )
 select a.id, m.provider_key, m.external_opportunity_id,
        case when m.is_enabled then 'PENDING' else 'BLOCKED' end,
-       case when m.is_enabled then null else 'PROVIDER_MAPPING_DISABLED' end
+       case when m.opportunity_id is null then 'PROVIDER_MAPPING_MISSING'
+            when m.is_enabled then null else 'PROVIDER_MAPPING_DISABLED' end
   from public.scholarship_applications a
   join public.opportunities o on o.id = a.opportunity_id
   left join private.scholarship_provider_mappings m on m.opportunity_id = a.opportunity_id
@@ -164,19 +165,6 @@ update public.scholarship_applications a
        delivery_status = case when m.is_enabled then 'PENDING' else 'BLOCKED' end
   from private.scholarship_provider_mappings m
  where m.opportunity_id = a.opportunity_id and a.status = 'PENDING_DELIVERY';
-
-insert into public.scholarship_application_status_history(
-  scholarship_application_id, old_status, new_status, source_type, note
-)
-select a.id, 'SUBMITTED', a.status, 'SYSTEM',
-       'Legacy application status normalized; no provider delivery was recorded before this migration.'
-  from public.scholarship_applications a
- where a.status in ('PENDING_DELIVERY','INTERNAL_ONLY')
-   and not exists (
-     select 1 from public.scholarship_application_status_history h
-      where h.scholarship_application_id = a.id
-        and h.note = 'Legacy application status normalized; no provider delivery was recorded before this migration.'
-   );
 
 create or replace function private.is_active_scholarship_reviewer(
   p_user_id uuid,
@@ -862,17 +850,664 @@ begin
 end
 $process_scholarship_provider_event$;
 
-create or replace function public.configure_scholarship_provider_mapping(
+-- The new status check is validated only after existing rows have been normalized.
+alter table public.scholarship_applications
+  validate constraint scholarship_applications_status_check;
+
+create or replace function public.apply_for_scholarship(
   p_opportunity_id uuid,
-  p_provider_key text,
-  p_external_opportunity_id text,
-  p_is_enabled boolean default true
-) returns boolean language plpgsql security definer set search_path = ''
-as $configure_scholarship_provider_mapping$
-declare v_actor uuid := public._require_uid();
+  p_cv_document_id uuid default null,
+  p_personal_statement text default null,
+  p_application_data jsonb default '{}'::jsonb
+)
+returns public.scholarship_applications
+language plpgsql security definer set search_path = ''
+as $apply_for_scholarship$
+declare
+  v_uid uuid := public._require_uid();
+  v_opportunity public.opportunities;
+  v_mapping private.scholarship_provider_mappings;
+  v_has_mapping boolean := false;
+  v_status text;
+  v_delivery_status text;
+  v_app public.scholarship_applications;
 begin
-  if not private.is_platform_admin() then raise exception 'ADMIN_REQUIRED' using errcode = 'PT403'; end if;
+  if p_opportunity_id is null
+     or p_application_data is null
+     or jsonb_typeof(p_application_data) is distinct from 'object'
+     or octet_length(p_application_data::text) > 32768
+     or (p_personal_statement is not null and length(p_personal_statement) > 10000) then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+
+  select * into v_opportunity
+    from public.opportunities
+   where id = p_opportunity_id
+   for update;
+  if not found then raise exception 'OPPORTUNITY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_opportunity.type <> 'SCHOLARSHIP' then raise exception 'NOT_A_SCHOLARSHIP' using errcode = 'PT422'; end if;
+  if not public.is_opportunity_open(v_opportunity.status, v_opportunity.deadline, v_opportunity.end_at) then
+    raise exception 'OPPORTUNITY_CLOSED' using errcode = 'PT422';
+  end if;
+  if cardinality(public.eligibility_failures(v_uid, v_opportunity.id)) > 0 then
+    raise exception 'NOT_ELIGIBLE' using errcode = 'PT422',
+      detail = array_to_string(public.eligibility_failures(v_uid, v_opportunity.id), ',');
+  end if;
+  if p_cv_document_id is not null and not exists (
+    select 1 from public.cv_documents
+     where id = p_cv_document_id and graduate_id = v_uid
+  ) then
+    raise exception 'CV_NOT_FOUND' using errcode = 'PT404';
+  end if;
+
+  if v_opportunity.is_sample then
+    v_status := 'INTERNAL_ONLY';
+    v_delivery_status := 'NOT_REQUIRED';
+  else
+    select * into v_mapping
+      from private.scholarship_provider_mappings
+     where opportunity_id = v_opportunity.id;
+    v_has_mapping := found and v_mapping.is_enabled;
+    v_status := 'PENDING_DELIVERY';
+    v_delivery_status := case when v_has_mapping then 'PENDING' else 'BLOCKED' end;
+  end if;
+
+  begin
+    insert into public.scholarship_applications(
+      opportunity_id, graduate_id, cv_document_id, personal_statement,
+      application_data, status, delivery_status, provider_key
+    ) values (
+      v_opportunity.id, v_uid, p_cv_document_id,
+      nullif(btrim(coalesce(p_personal_statement, '')), ''),
+      p_application_data, v_status, v_delivery_status,
+      case when v_has_mapping then v_mapping.provider_key else null end
+    ) returning * into v_app;
+  exception when unique_violation then
+    raise exception 'ALREADY_APPLIED' using errcode = 'PT409';
+  end;
+
+  if not v_opportunity.is_sample then
+    insert into private.scholarship_delivery_outbox(
+      application_id, provider_key, external_opportunity_id, status, last_error_code
+    ) values (
+      v_app.id,
+      case when v_has_mapping then v_mapping.provider_key else null end,
+      case when v_has_mapping then v_mapping.external_opportunity_id else null end,
+      case when v_has_mapping then 'PENDING' else 'BLOCKED' end,
+      case when v_has_mapping then null else 'PROVIDER_MAPPING_MISSING' end
+    );
+  end if;
+
+  insert into public.scholarship_application_status_history(
+    scholarship_application_id, old_status, new_status, source_type, actor_user_id, note
+  ) values (
+    v_app.id, null, v_status, 'GRADUATE_ACTION', v_uid,
+    case when v_status = 'INTERNAL_ONLY'
+      then 'Sample scholarship application saved locally; no external delivery is performed.'
+      when v_has_mapping
+      then 'Application accepted by the platform and queued for provider delivery.'
+      else 'Application stored locally; provider mapping is not configured, so no delivery was attempted.'
+    end
+  );
+
+  insert into public.notifications(profile_id, title, body, type, related_entity_id)
+  values (
+    v_uid,
+    case when v_status = 'INTERNAL_ONLY' then 'تم حفظ طلب المنحة التجريبي'
+      else 'تم استلام طلب المنحة داخل المنصة' end,
+    case
+      when v_status = 'INTERNAL_ONLY'
+        then 'تم حفظ طلبك على «' || v_opportunity.title || '» كبيانات تجريبية؛ لم يُرسل إلى الجهة المعلنة.'
+      when v_has_mapping
+        then 'تم استلام طلبك على «' || v_opportunity.title || '» وهو الآن في قائمة انتظار الإرسال. سنؤكد لك بعد استلام الجهة له.'
+      else 'تم حفظ طلبك على «' || v_opportunity.title || '» داخل المنصة، لكنه لم يُرسل إلى الجهة بعد لأن تكامل الجهة غير مُهيأ.'
+    end,
+    case when v_status = 'INTERNAL_ONLY' then 'SCHOLARSHIP_APPLICATION_INTERNAL_ONLY'
+      else 'SCHOLARSHIP_APPLICATION_PENDING_DELIVERY' end,
+    v_app.id
+  );
+  return v_app;
+end
+$apply_for_scholarship$;
+
+create or replace function public.withdraw_scholarship_application(p_application_id uuid)
+returns public.scholarship_applications
+language plpgsql security definer set search_path = ''
+as $withdraw_scholarship_application$
+declare
+  v_uid uuid := public._require_uid();
+  v_app public.scholarship_applications;
+  v_outbox private.scholarship_delivery_outbox;
+  v_old_status text;
+begin
+  if p_application_id is null then raise exception 'INVALID_INPUT' using errcode = 'PT422'; end if;
+  select * into v_app from public.scholarship_applications
+   where id = p_application_id and graduate_id = v_uid
+   for update;
+  if not found then raise exception 'SCHOLARSHIP_APPLICATION_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_app.status not in ('INTERNAL_ONLY','PENDING_DELIVERY','DELIVERY_FAILED') then
+    raise exception 'CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION' using errcode = 'PT422';
+  end if;
+
+  v_old_status := v_app.status;
+  if v_old_status <> 'INTERNAL_ONLY' then
+    select * into v_outbox from private.scholarship_delivery_outbox
+     where application_id = v_app.id for update;
+    if not found then raise exception 'SCHOLARSHIP_DELIVERY_NOT_FOUND' using errcode = 'PT404'; end if;
+    if v_outbox.status in ('PROCESSING','DELIVERED') then
+      raise exception 'SCHOLARSHIP_DELIVERY_IN_PROGRESS' using errcode = 'PT409';
+    end if;
+    update private.scholarship_delivery_outbox
+       set status = 'CANCELLED', lease_expires_at = null, updated_at = now()
+     where id = v_outbox.id;
+  end if;
+
+  update public.scholarship_applications
+     set status = 'WITHDRAWN',
+         delivery_status = case when v_old_status = 'INTERNAL_ONLY' then 'NOT_REQUIRED' else 'CANCELLED' end
+   where id = v_app.id returning * into v_app;
+
+  insert into public.scholarship_application_status_history(
+    scholarship_application_id, old_status, new_status, source_type, actor_user_id
+  ) values (v_app.id, v_old_status, 'WITHDRAWN', 'GRADUATE_ACTION', v_uid);
+  insert into public.notifications(profile_id, title, body, type, related_entity_id)
+  values (
+    v_uid, 'تم سحب طلب المنحة',
+    'تم إيقاف طلبك داخل المنصة. لا يمكن سحب الطلب بعد تأكيد إرساله إلى الجهة المعلنة.',
+    'SCHOLARSHIP_APPLICATION_WITHDRAWN', v_app.id
+  );
+  return v_app;
+end
+$withdraw_scholarship_application$;
+
+create or replace function public.retry_scholarship_delivery(p_application_id uuid)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $retry_scholarship_delivery$
+declare
+  v_uid uuid := public._require_uid();
+  v_app public.scholarship_applications;
+  v_outbox private.scholarship_delivery_outbox;
+  v_mapping private.scholarship_provider_mappings;
+begin
+  if not private.is_platform_admin() then
+    raise exception 'ADMIN_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_application_id is null then raise exception 'INVALID_INPUT' using errcode = 'PT422'; end if;
+
+  select * into v_app from public.scholarship_applications
+   where id = p_application_id for update;
+  if not found then raise exception 'SCHOLARSHIP_APPLICATION_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_app.status not in ('PENDING_DELIVERY','DELIVERY_FAILED') then
+    raise exception 'SCHOLARSHIP_DELIVERY_NOT_RETRYABLE' using errcode = 'PT409';
+  end if;
+  select * into v_outbox from private.scholarship_delivery_outbox
+   where application_id = v_app.id for update;
+  if not found then raise exception 'SCHOLARSHIP_DELIVERY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_outbox.status = 'PROCESSING' then
+    raise exception 'SCHOLARSHIP_DELIVERY_IN_PROGRESS' using errcode = 'PT409';
+  end if;
+  select * into v_mapping from private.scholarship_provider_mappings
+   where opportunity_id = v_app.opportunity_id and is_enabled;
+  if not found then raise exception 'SCHOLARSHIP_PROVIDER_NOT_CONFIGURED' using errcode = 'PT409'; end if;
+
+  update private.scholarship_delivery_outbox
+     set provider_key = v_mapping.provider_key,
+         external_opportunity_id = v_mapping.external_opportunity_id,
+         status = 'PENDING', attempts = 0, next_attempt_at = now(),
+         lease_expires_at = null, last_error_code = null, updated_at = now()
+   where id = v_outbox.id;
+  update public.scholarship_applications
+     set status = 'PENDING_DELIVERY', delivery_status = 'PENDING',
+         provider_key = v_mapping.provider_key,
+         provider_application_reference = null,
+         externally_submitted_at = null
+   where id = v_app.id;
+
+  if v_app.status = 'DELIVERY_FAILED' then
+    insert into public.scholarship_application_status_history(
+      scholarship_application_id, old_status, new_status, source_type, actor_user_id, note
+    ) values (
+      v_app.id, 'DELIVERY_FAILED', 'PENDING_DELIVERY', 'ADMIN', v_uid,
+      'Administrator queued a new delivery attempt.'
+    );
+  end if;
   return true;
 end
-$configure_scholarship_provider_mapping$;
+$retry_scholarship_delivery$;
+
+-- If a worker disappears after the last allowed attempt, close the expired lease permanently.
+create or replace function private.expire_scholarship_delivery_leases()
+returns integer
+language plpgsql security definer set search_path = ''
+as $expire_scholarship_delivery_leases$
+declare v_rows integer;
+begin
+  with expired as (
+    update private.scholarship_delivery_outbox
+       set status = 'FAILED', lease_expires_at = null,
+           last_error_code = 'DELIVERY_WORKER_LEASE_EXPIRED',
+           updated_at = now()
+     where status = 'PROCESSING'
+       and lease_expires_at < now()
+       and attempts >= max_attempts
+    returning id, application_id, attempts
+  )
+  update public.scholarship_applications a
+     set status = 'DELIVERY_FAILED', delivery_status = 'FAILED'
+    from expired e
+   where a.id = e.application_id;
+  get diagnostics v_rows = row_count;
+  return v_rows;
+end
+$expire_scholarship_delivery_leases$;
+
+create or replace function public.claim_scholarship_delivery(
+  p_application_id uuid default null,
+  p_limit integer default 10
+)
+returns table (
+  outbox_id uuid,
+  application_id uuid,
+  provider_key text,
+  external_opportunity_id text,
+  attempt_number integer,
+  idempotency_key text,
+  request_payload jsonb,
+  cv_storage_path text
+)
+language plpgsql security definer set search_path = ''
+as $claim_scholarship_delivery$
+declare
+  v_item record;
+  v_started_at timestamptz;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 50 then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  perform private.expire_scholarship_delivery_leases();
+
+  for v_item in
+    select a.id as application_id, o.id as outbox_id
+      from public.scholarship_applications a
+      join private.scholarship_delivery_outbox o on o.application_id = a.id
+     where (p_application_id is null or a.id = p_application_id)
+       and a.status = 'PENDING_DELIVERY'
+       and (
+         (o.status = 'PENDING' and o.next_attempt_at <= now())
+         or (o.status = 'PROCESSING' and o.lease_expires_at < now())
+       )
+       and o.attempts < o.max_attempts
+     order by o.next_attempt_at asc, o.created_at asc
+     for update of a, o skip locked
+     limit p_limit
+  loop
+    v_started_at := now();
+    update private.scholarship_delivery_outbox
+       set status = 'PROCESSING',
+           attempts = attempts + 1,
+           last_attempt_started_at = v_started_at,
+           lease_expires_at = v_started_at + interval '2 minutes',
+           updated_at = v_started_at
+     where id = v_item.outbox_id;
+
+    update public.scholarship_applications
+       set delivery_status = 'PROCESSING'
+     where id = v_item.application_id;
+
+    return query
+    select o.id, a.id, o.provider_key, o.external_opportunity_id, o.attempts,
+           o.id::text,
+           jsonb_build_object(
+             'schema_version', '1.0',
+             'event', 'scholarship.application.submitted',
+             'application_id', a.id,
+             'provider_opportunity_id', o.external_opportunity_id,
+             'submitted_at', a.applied_at,
+             'applicant', jsonb_build_object('full_name', p.full_name, 'email', p.email),
+             'personal_statement', a.personal_statement,
+             'answers', a.application_data
+           ),
+           cv.storage_path
+      from private.scholarship_delivery_outbox o
+      join public.scholarship_applications a on a.id = o.application_id
+      join public.profiles p on p.id = a.graduate_id
+      left join public.cv_documents cv on cv.id = a.cv_document_id and cv.graduate_id = a.graduate_id
+     where o.id = v_item.outbox_id;
+  end loop;
+end
+$claim_scholarship_delivery$;
+
+create or replace function public.block_scholarship_delivery(
+  p_outbox_id uuid,
+  p_error_code text
+)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $block_scholarship_delivery$
+declare
+  v_outbox private.scholarship_delivery_outbox;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_outbox_id is null or p_error_code is null
+     or p_error_code !~ '^[A-Z0-9_]{1,64}$' then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  select * into v_outbox from private.scholarship_delivery_outbox
+   where id = p_outbox_id for update;
+  if not found then raise exception 'SCHOLARSHIP_DELIVERY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_outbox.status <> 'PROCESSING' then
+    raise exception 'SCHOLARSHIP_DELIVERY_NOT_IN_PROGRESS' using errcode = 'PT409';
+  end if;
+  update private.scholarship_delivery_outbox
+     set status = 'BLOCKED', lease_expires_at = null,
+         last_error_code = p_error_code, updated_at = now()
+   where id = p_outbox_id;
+  update public.scholarship_applications
+     set delivery_status = 'BLOCKED'
+   where id = v_outbox.application_id;
+  insert into private.scholarship_delivery_attempts(
+    outbox_id, attempt_number, started_at, outcome, error_code
+  ) values (
+    v_outbox.id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    'BLOCKED', p_error_code
+  );
+  return true;
+end
+$block_scholarship_delivery$;
+
+create or replace function public.complete_scholarship_delivery(
+  p_outbox_id uuid,
+  p_provider_reference text,
+  p_http_status integer,
+  p_request_id text default null
+)
+returns public.scholarship_applications
+language plpgsql security definer set search_path = ''
+as $complete_scholarship_delivery$
+declare
+  v_outbox private.scholarship_delivery_outbox;
+  v_app public.scholarship_applications;
+  v_title text;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_outbox_id is null
+     or p_provider_reference is null or length(btrim(p_provider_reference)) not between 1 and 200
+     or p_http_status is null or p_http_status not between 200 and 299
+     or (p_request_id is not null and length(p_request_id) > 200) then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  select * into v_outbox from private.scholarship_delivery_outbox
+   where id = p_outbox_id for update;
+  if not found then raise exception 'SCHOLARSHIP_DELIVERY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_outbox.status = 'DELIVERED' then
+    select * into v_app from public.scholarship_applications where id = v_outbox.application_id;
+    return v_app;
+  end if;
+  if v_outbox.status <> 'PROCESSING' then
+    raise exception 'SCHOLARSHIP_DELIVERY_NOT_IN_PROGRESS' using errcode = 'PT409';
+  end if;
+  select * into v_app from public.scholarship_applications
+   where id = v_outbox.application_id for update;
+  if not found or v_app.status <> 'PENDING_DELIVERY' then
+    raise exception 'SCHOLARSHIP_APPLICATION_NOT_DELIVERABLE' using errcode = 'PT409';
+  end if;
+  update private.scholarship_delivery_outbox
+     set status = 'DELIVERED', lease_expires_at = null,
+         provider_reference = btrim(p_provider_reference),
+         delivered_at = now(), last_error_code = null, updated_at = now()
+   where id = p_outbox_id;
+  update public.scholarship_applications
+     set status = 'SUBMITTED_EXTERNALLY',
+         delivery_status = 'DELIVERED',
+         provider_key = v_outbox.provider_key,
+         provider_application_reference = btrim(p_provider_reference),
+         externally_submitted_at = now()
+   where id = v_app.id returning * into v_app;
+  select title into v_title from public.opportunities where id = v_app.opportunity_id;
+  insert into public.scholarship_application_status_history(
+    scholarship_application_id, old_status, new_status, source_type, note
+  ) values (
+    v_app.id, 'PENDING_DELIVERY', 'SUBMITTED_EXTERNALLY', 'PROVIDER',
+    'Provider acknowledged delivery with reference ' || btrim(p_provider_reference) || '.'
+  );
+  insert into private.scholarship_delivery_attempts(
+    outbox_id, attempt_number, started_at, outcome, http_status, provider_reference
+  ) values (
+    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    'DELIVERED', p_http_status, btrim(p_provider_reference)
+  );
+  insert into public.notifications(profile_id, title, body, type, related_entity_id)
+  values (
+    v_app.graduate_id, 'تم إرسال طلب المنحة إلى الجهة المعلنة',
+    'أكدت الجهة استلام طلبك على «' || v_title || '». رقم الطلب لدى الجهة: ' || btrim(p_provider_reference) || '.',
+    'SCHOLARSHIP_APPLICATION_SUBMITTED_EXTERNALLY', v_app.id
+  );
+  return v_app;
+exception
+  when unique_violation then
+    raise exception 'SCHOLARSHIP_PROVIDER_REFERENCE_CONFLICT' using errcode = 'PT409';
+end
+$complete_scholarship_delivery$;
+
+create or replace function public.fail_scholarship_delivery(
+  p_outbox_id uuid,
+  p_error_code text,
+  p_http_status integer default null,
+  p_retryable boolean default true,
+  p_retry_after_seconds integer default null
+)
+returns text
+language plpgsql security definer set search_path = ''
+as $fail_scholarship_delivery$
+declare
+  v_outbox private.scholarship_delivery_outbox;
+  v_final boolean;
+  v_delay integer;
+  v_app public.scholarship_applications;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_outbox_id is null
+     or p_error_code is null or p_error_code !~ '^[A-Z0-9_]{1,64}$'
+     or (p_http_status is not null and p_http_status not between 100 and 599)
+     or p_retryable is null
+     or (p_retry_after_seconds is not null and p_retry_after_seconds not between 1 and 3600) then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  select * into v_outbox from private.scholarship_delivery_outbox
+   where id = p_outbox_id for update;
+  if not found then raise exception 'SCHOLARSHIP_DELIVERY_NOT_FOUND' using errcode = 'PT404'; end if;
+  if v_outbox.status <> 'PROCESSING' then
+    raise exception 'SCHOLARSHIP_DELIVERY_NOT_IN_PROGRESS' using errcode = 'PT409';
+  end if;
+  v_final := (not p_retryable) or v_outbox.attempts >= v_outbox.max_attempts;
+  v_delay := least(
+    3600,
+    greatest(
+      coalesce(p_retry_after_seconds, 0),
+      (30 * power(2, greatest(v_outbox.attempts - 1, 0)))::integer
+    )
+  );
+
+  update private.scholarship_delivery_outbox
+     set status = case when v_final then 'FAILED' else 'PENDING' end,
+         lease_expires_at = null,
+         next_attempt_at = case when v_final then next_attempt_at else now() + make_interval(secs => v_delay) end,
+         last_error_code = p_error_code,
+         updated_at = now()
+   where id = p_outbox_id;
+
+  select * into v_app from public.scholarship_applications
+   where id = v_outbox.application_id for update;
+  update public.scholarship_applications
+     set delivery_status = case when v_final then 'FAILED' else 'PENDING' end,
+         status = case when v_final then 'DELIVERY_FAILED' else 'PENDING_DELIVERY' end
+   where id = v_app.id returning * into v_app;
+
+  insert into private.scholarship_delivery_attempts(
+    outbox_id, attempt_number, started_at, outcome, http_status, error_code
+  ) values (
+    p_outbox_id, v_outbox.attempts, coalesce(v_outbox.last_attempt_started_at, now()),
+    case when v_final then 'FAILED' else 'RETRY_SCHEDULED' end,
+    p_http_status, p_error_code
+  );
+
+  if v_final then
+    insert into public.scholarship_application_status_history(
+      scholarship_application_id, old_status, new_status, source_type, note
+    ) values (
+      v_app.id, 'PENDING_DELIVERY', 'DELIVERY_FAILED', 'SYSTEM',
+      'Provider delivery stopped after ' || v_outbox.attempts::text || ' attempts (' || p_error_code || ').'
+    );
+    insert into public.notifications(profile_id, title, body, type, related_entity_id)
+    values (
+      v_app.graduate_id, 'تعذر إرسال طلب المنحة',
+      'لم نتمكن من إرسال طلبك إلى الجهة المعلنة بعد عدة محاولات. سيظهر الطلب كفشل إرسال إلى أن يعيد المسؤول المحاولة.',
+      'SCHOLARSHIP_APPLICATION_DELIVERY_FAILED', v_app.id
+    );
+    return 'FAILED';
+  end if;
+  return 'PENDING';
+end
+$fail_scholarship_delivery$;
+
+create or replace function public.process_scholarship_provider_event(
+  p_provider_key text,
+  p_event_id text,
+  p_provider_reference text,
+  p_new_status text,
+  p_note text,
+  p_payload_digest text
+)
+returns text
+language plpgsql security definer set search_path = ''
+as $process_scholarship_provider_event$
+declare
+  v_app public.scholarship_applications;
+  v_title text;
+  v_existing_digest text;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'SERVICE_ROLE_REQUIRED' using errcode = 'PT403';
+  end if;
+  if p_provider_key is null or p_provider_key !~ '^[A-Z0-9][A-Z0-9_-]{1,63}$'
+     or p_event_id is null or length(btrim(p_event_id)) not between 1 and 200
+     or p_provider_reference is null or length(btrim(p_provider_reference)) not between 1 and 200
+     or p_new_status is null or p_new_status not in ('IN_REVIEW','ACCEPTED','REJECTED')
+     or (p_note is not null and length(p_note) > 2000)
+     or p_payload_digest is null or p_payload_digest !~ '^[a-f0-9]{64}$' then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+
+  select payload_digest into v_existing_digest
+    from private.scholarship_provider_events
+   where provider_key = p_provider_key and event_id = btrim(p_event_id);
+  if found then
+    if v_existing_digest <> p_payload_digest then
+      raise exception 'PROVIDER_EVENT_ID_CONFLICT' using errcode = 'PT409';
+    end if;
+    return 'DUPLICATE';
+  end if;
+
+  select * into v_app from public.scholarship_applications
+   where provider_key = p_provider_key
+     and provider_application_reference = btrim(p_provider_reference)
+   for update;
+  if not found then
+    raise exception 'SCHOLARSHIP_PROVIDER_REFERENCE_NOT_FOUND' using errcode = 'PT404';
+  end if;
+  if not (
+    (v_app.status = 'SUBMITTED_EXTERNALLY' and p_new_status in ('IN_REVIEW','ACCEPTED','REJECTED'))
+    or (v_app.status = 'IN_REVIEW' and p_new_status in ('ACCEPTED','REJECTED'))
+  ) then
+    raise exception 'INVALID_SCHOLARSHIP_STATUS_TRANSITION' using errcode = 'PT409';
+  end if;
+
+  begin
+    insert into private.scholarship_provider_events(
+      provider_key, event_id, application_id, received_status, payload_digest
+    ) values (
+      p_provider_key, btrim(p_event_id), v_app.id, p_new_status, p_payload_digest
+    );
+  exception when unique_violation then
+    return 'DUPLICATE';
+  end;
+
+  update public.scholarship_applications
+     set status = p_new_status,
+         reviewed_at = case when p_new_status in ('ACCEPTED','REJECTED') then now() else reviewed_at end,
+         review_note = nullif(btrim(coalesce(p_note,'')), '')
+   where id = v_app.id returning * into v_app;
+  insert into public.scholarship_application_status_history(
+    scholarship_application_id, old_status, new_status, source_type, note
+  ) values (
+    v_app.id,
+    case when p_new_status = 'IN_REVIEW' then 'SUBMITTED_EXTERNALLY' else 'IN_REVIEW' end,
+    p_new_status, 'PROVIDER', nullif(btrim(coalesce(p_note,'')), '')
+  );
+  select title into v_title from public.opportunities where id = v_app.opportunity_id;
+  insert into public.notifications(profile_id, title, body, type, related_entity_id)
+  values (
+    v_app.graduate_id,
+    case p_new_status when 'IN_REVIEW' then 'طلب المنحة قيد المراجعة'
+      when 'ACCEPTED' then 'تم قبول طلب المنحة' else 'تم رفض طلب المنحة' end,
+    case p_new_status when 'IN_REVIEW' then 'بدأت الجهة مراجعة طلبك على «' || v_title || '».'
+      when 'ACCEPTED' then 'تم قبول طلبك على «' || v_title || '».'
+      else 'تم رفض طلبك على «' || v_title || '». راجع الملاحظة المرفقة مع الطلب.' end,
+    'SCHOLARSHIP_APPLICATION_' || p_new_status, v_app.id
+  );
+  return p_new_status;
+end
+$process_scholarship_provider_event$;
+
+-- Lock down every new database entry point. Only trusted Edge Functions may claim/complete
+-- deliveries or apply provider callbacks; authenticated users see only scoped reviewer RPCs.
+revoke all on function public.configure_scholarship_provider_mapping(uuid,text,text,boolean) from public, anon, authenticated;
+revoke all on function public.set_scholarship_reviewer(uuid,text,boolean) from public, anon, authenticated;
+revoke all on function public.get_scholarship_review_queue(text,text,integer) from public, anon, authenticated;
+revoke all on function public.review_scholarship_application(uuid,text,text) from public, anon, authenticated;
+revoke all on function public.retry_scholarship_delivery(uuid) from public, anon, authenticated;
+revoke all on function public.claim_scholarship_delivery(uuid,integer) from public, anon, authenticated;
+revoke all on function public.block_scholarship_delivery(uuid,text) from public, anon, authenticated;
+revoke all on function public.complete_scholarship_delivery(uuid,text,integer,text) from public, anon, authenticated;
+revoke all on function public.fail_scholarship_delivery(uuid,text,integer,boolean,integer) from public, anon, authenticated;
+revoke all on function public.process_scholarship_provider_event(text,text,text,text,text,text) from public, anon, authenticated;
+
+grant execute on function public.configure_scholarship_provider_mapping(uuid,text,text,boolean),
+  public.set_scholarship_reviewer(uuid,text,boolean),
+  public.get_scholarship_review_queue(text,text,integer),
+  public.review_scholarship_application(uuid,text,text),
+  public.retry_scholarship_delivery(uuid) to authenticated;
+
+grant execute on function public.claim_scholarship_delivery(uuid,integer),
+  public.block_scholarship_delivery(uuid,text),
+  public.complete_scholarship_delivery(uuid,text,integer,text),
+  public.fail_scholarship_delivery(uuid,text,integer,boolean,integer),
+  public.process_scholarship_provider_event(text,text,text,text,text,text)
+to service_role;
+
+revoke all on function private.is_active_scholarship_reviewer(uuid,text) from public, anon, authenticated;
+grant execute on function private.is_active_scholarship_reviewer(uuid,text) to service_role;
+
+comment on table private.scholarship_delivery_outbox is
+  'Private transactional outbox for external scholarship delivery; retries are idempotent by outbox UUID.';
+comment on table private.scholarship_delivery_attempts is
+  'Minimal delivery attempt audit. Raw personal data and provider response bodies are never stored here.';
+comment on table private.scholarship_provider_events is
+  'Idempotency ledger for HMAC-authenticated provider status webhooks.';
+comment on table private.scholarship_reviewers is
+  'Provider-scoped internal reviewer authorization. A reviewer cannot see another provider queue.';
+comment on column public.scholarship_applications.status is
+  'Lifecycle: PENDING_DELIVERY is not sent; SUBMITTED_EXTERNALLY follows provider acknowledgment; INTERNAL_ONLY is sample-only.';
+comment on column public.scholarship_applications.delivery_status is
+  'Delivery sub-state independent from reviewer/application lifecycle.';
 

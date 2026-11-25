@@ -127,7 +127,7 @@ select is((public.update_admin_scholarship(
   array['Bachelor','Master'],
   '{}'::text[]
 )).title,'Graduate Research Award Updated','admin can update a Scholarship DRAFT and its criteria');
-select is(public.publish_admin_scholarship(tests.id('internal_sch')).status,
+select is((public.publish_admin_scholarship(tests.id('internal_sch'))).status,
   'ACTIVE','admin publishes Scholarship DRAFT');
 select throws_ok($q$select public.update_admin_scholarship(
   tests.id('internal_sch'),'Changed','Alumni Connect','This description is long enough.',
@@ -194,8 +194,8 @@ select throws_ok($q$select * from public.list_admin_scholarship_applications(
 select throws_ok($q$select public.review_scholarship_application(
   tests.id('app_a1'),'ACCEPTED','Direct decision')$q$,
   'PT422','INVALID_STATUS_TRANSITION','admin cannot skip UNDER_REVIEW');
-select is(public.review_scholarship_application(
-  tests.id('app_a1'),'UNDER_REVIEW','Initial eligibility and documents check').status,
+select is((public.review_scholarship_application(
+  tests.id('app_a1'),'UNDER_REVIEW','Initial eligibility and documents check')).status,
   'UNDER_REVIEW','admin starts review from SUBMITTED');
 select is((select count(*)::int from public.scholarship_application_status_history
   where scholarship_application_id=tests.id('app_a1')
@@ -206,8 +206,8 @@ select is((select count(*)::int from public.notifications
   where profile_id=tests.id('a1') and related_entity_id=tests.id('app_a1')
     and type='SCHOLARSHIP_APPLICATION_STATUS_UPDATED'),
   1,'student is notified when review begins');
-select is(public.review_scholarship_application(
-  tests.id('app_a1'),'ACCEPTED','Approved by central reviewer').status,
+select is((public.review_scholarship_application(
+  tests.id('app_a1'),'ACCEPTED','Approved by central reviewer')).status,
   'ACCEPTED','admin accepts an application after review');
 select throws_ok($q$select public.review_scholarship_application(
   tests.id('app_a1'),'REJECTED','Conflicting final decision')$q$,
@@ -219,11 +219,11 @@ select is((select count(*)::int from public.notifications
     and type='SCHOLARSHIP_APPLICATION_STATUS_UPDATED'),2,
   'student receives a second notification when final decision is recorded');
 
-select is(public.review_scholarship_application(
-  tests.id('app_a2'),'UNDER_REVIEW',null).status,
+select is((public.review_scholarship_application(
+  tests.id('app_a2'),'UNDER_REVIEW',null)).status,
   'UNDER_REVIEW','admin can independently begin review of a second application');
-select is(public.review_scholarship_application(
-  tests.id('app_a2'),'REJECTED','Does not meet final award criteria').status,
+select is((public.review_scholarship_application(
+  tests.id('app_a2'),'REJECTED','Does not meet final award criteria')).status,
   'REJECTED','admin rejects a reviewed application');
 select is((select count(*)::int from public.scholarship_application_status_history
   where scholarship_application_id=tests.id('app_a2') and source_type='ADMIN_ACTION'),
@@ -249,7 +249,7 @@ select is((select is_sample from public.get_admin_scholarship_application(tests.
 select throws_ok($q$select public.review_scholarship_application(
   tests.id('sample_app'),'UNDER_REVIEW','Should not review sample data')$q$,
   'PT422','SAMPLE_DATA_NOT_REVIEWABLE','admin cannot review sample Scholarship applications');
-select is(public.close_admin_scholarship(tests.id('internal_sch')).status,
+select is((public.close_admin_scholarship(tests.id('internal_sch'))).status,
   'CLOSED','admin can close a published Scholarship');
 select throws_ok($q$select public.close_admin_scholarship(tests.id('internal_sch'))$q$,
   'PT422','OPPORTUNITY_NOT_OPEN','closed Scholarship cannot be closed twice');

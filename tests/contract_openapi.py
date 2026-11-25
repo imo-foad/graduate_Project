@@ -128,7 +128,7 @@ class Contract(unittest.TestCase):
         self.assertEqual(set(schema["required"]), {"cv_document_id"})
         self.assertEqual(set(schema["properties"]), {"cv_document_id"})
         self.assertIs(schema["additionalProperties"], False)
-        self.assertTrue({"200", "400", "401", "404", "405", "409", "413", "422", "500", "502"} <= set(op["responses"]))
+        self.assertTrue({"200", "400", "401", "404", "405", "409", "413", "422", "429", "500", "502", "503"} <= set(op["responses"]))
         for needle in ("auth.getUser()", 'from("cv_documents")', 'from("cv-documents")',
                        'rpc("complete_cv_parse"', 'from("skills")', "confirmation_required"):
             self.assertIn(needle, CV_EDGE)
@@ -250,7 +250,7 @@ class SecurityAndAuthContract(unittest.TestCase):
 
     def test_recommend_documents_its_real_error_responses(self):
         r = API["paths"]["/functions/v1/recommend"]["post"]["responses"]
-        self.assertTrue({"200", "401", "409", "500"} <= set(r))
+        self.assertTrue({"200", "401", "409", "429", "500", "503"} <= set(r))
         flow = FLOW
         for code in API["components"]["schemas"]["RecommendError"]["properties"]["error"]["enum"]:
             if code in ("UNAUTHENTICATED", "METHOD_NOT_ALLOWED"): self.assertIn(code, EDGE)

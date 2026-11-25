@@ -1467,6 +1467,7 @@ paths:
         '202': { description: Entry saved; delivery is pending or retryable }
         '400': { description: Invalid request body }
         '401': { description: Missing or invalid graduate JWT }
+        '413': { description: Request body exceeds the 64 KiB limit }
         '404': { description: Opportunity or CV not found }
         '409': { description: Duplicate entry }
         '422': { description: Opportunity is not an eligible open Competition }
@@ -1489,6 +1490,7 @@ paths:
         '200': { description: Processed count and per-application outcomes }
         '400': { description: Invalid request or application_id required for admin retry }
         '401': { description: Missing or invalid credential }
+        '413': { description: Request body exceeds the 8 KiB limit }
         '403': { description: Active platform administrator required for user-token retry }
         '503': { description: Delivery worker unavailable }
   /functions/v1/competition-provider-callback:
@@ -1545,6 +1547,7 @@ paths:
         '400': { description: Invalid request body }
         '401': { description: Missing or invalid JWT }
         '403': { description: Reviewer is not assigned to the application's provider }
+        '413': { description: Request body exceeds the 4 KiB limit }
         '404': { description: Application not found }
         '409': { description: Application cannot be reviewed or storage path is invalid }
         '503': { description: CV authorization or signed URL service unavailable }

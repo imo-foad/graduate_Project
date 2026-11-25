@@ -110,7 +110,17 @@ check "concurrent saves: row belongs to one of the payloads" "1" "$(P -c "select
 check "concurrent saves: version unchanged by saving" "$V2" "$(ver)"
 
 
-# --- 8. concurrent duplicate Social Feed likes: one private edge, all other callers get ALREADY_LIKED
+# --- 8. twelve concurrent post attempts by one user: exactly the token-bucket burst is accepted
+LIMIT_UID=$(usr 4); OUT=$(mktemp); PIDS=()
+for i in $(seq 1 $N); do
+  ( as_user "$LIMIT_UID" "select (public.create_social_post('${TAG} concurrent post $i')).id" >>"$OUT" ) & PIDS+=($!)
+done
+wait "${PIDS[@]}"
+check "Social Feed post rate race: exactly five posts are accepted" "5" "$(P -c "select count(*) from public.social_posts where author_id='$LIMIT_UID' and content like '${TAG} concurrent post %'")"
+check "Social Feed post rate race: seven requests receive RATE_LIMIT_EXCEEDED" "$((N-5))" "$(grep -c 'RATE_LIMIT_EXCEEDED' "$OUT")"
+rm -f "$OUT"
+
+# --- 9. concurrent duplicate Social Feed likes: one private edge, all other callers get ALREADY_LIKED
 SOCIAL_UID=$(usr 3)
 SOCIAL_POST=$(P -c "insert into public.social_posts (author_id, content) values ('$SOCIAL_UID', '${TAG} social-like-race') returning id")
 [ -n "$SOCIAL_POST" ] || { echo "PREREQUISITE FAILED: could not create Social Feed race post" >&2; exit 2; }

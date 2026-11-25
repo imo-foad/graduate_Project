@@ -7,10 +7,10 @@ import { extractSkillsFromText, validateExtraction } from "../_shared/cv-extract
 import { extractStructuredCvData } from "../_shared/cv-structured-extract.ts";
 import { CvFileError, extractCvText } from "../_shared/cv-file-parser.ts";
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200, extraHeaders: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...extraHeaders },
   });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
   try {
     const { data: document, error: readError } = await userClient
       .from("cv_documents")
-      .select("id,graduate_id,storage_path,file_type,size_bytes,parse_status")
+      .select("id,graduate_id,storage_path,file_type,size_bytes,parse_status,parsed_at")
       .eq("id", cvDocumentId)
       .maybeSingle();
     if (readError) return json({ error: "CV_LOOKUP_FAILED" }, 500);
@@ -101,6 +101,32 @@ Deno.serve(async (req) => {
       return json({ error: code }, code === "CV_DOCUMENT_NOT_FOUND" ? 404 : 409);
     }
     processingStarted = true;
+
+    // The claim is acquired before charging quota: duplicate/concurrent requests that
+    // do no parsing work are rejected by the state machine and do not burn a token.
+    const { data: retryAfter, error: rateLimitError } = await admin.rpc("consume_edge_rate_limit", {
+      p_user_id: user.id,
+      p_action: "CV_PARSE",
+    });
+    if (rateLimitError) {
+      await admin.from("cv_documents")
+        .update({ parse_status: document.parse_status, error_message: null, parsed_at: null })
+        .eq("id", cvDocumentId).eq("graduate_id", user.id).eq("parse_status", "PROCESSING");
+      processingStarted = false;
+      return json({ error: "RATE_LIMIT_UNAVAILABLE" }, 503);
+    }
+    const retrySeconds = Math.max(0, Number(retryAfter ?? 0));
+    if (retrySeconds > 0) {
+      await admin.from("cv_documents")
+        .update({ parse_status: document.parse_status, error_message: null, parsed_at: document.parsed_at })
+        .eq("id", cvDocumentId).eq("graduate_id", user.id).eq("parse_status", "PROCESSING");
+      processingStarted = false;
+      return json(
+        { error: "RATE_LIMIT_EXCEEDED", retry_after_seconds: retrySeconds },
+        429,
+        { "Retry-After": String(retrySeconds) },
+      );
+    }
 
     const { data: file, error: downloadError } = await userClient.storage
       .from("cv-documents")

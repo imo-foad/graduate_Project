@@ -75,13 +75,13 @@ test("profile_version is bumped only by real input changes; cache flag updates c
   const cand = finalFunctions(allMigrationsSql()).get("get_recommendation_candidates")!;
   assert.match(cand.body, /'profile_version'/);
 });
-test("Edge Function: user-facing reads use the user client; service role only for the two RPCs", async () => {
+test("Edge Function: user-facing reads use the user client; service role only for quota and trusted recommendation RPCs", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../supabase/functions/recommend/index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(src, /admin\.from\(/);
   assert.match(src, /userClient\.from\("recommendations"\)/);
   const adminUses = [...src.matchAll(/admin\.(\w+)\(\s*"(\w+)"/g)].map((m) => `${m[1]}:${m[2]}`).sort();
-  assert.deepEqual(adminUses, ["rpc:get_recommendation_candidates", "rpc:save_recommendations"]);
+  assert.deepEqual(adminUses, ["rpc:consume_edge_rate_limit", "rpc:get_recommendation_candidates", "rpc:save_recommendations"]);
 });
 
 
@@ -113,3 +113,16 @@ test("saved-opportunity RLS helper is private from its first migration and clean
 });
 
 
+test("Edge Functions use trusted per-user rate limits and fail closed", async () => {
+  const { readFileSync } = await import("node:fs");
+  const recommend = readFileSync(new URL("../supabase/functions/recommend/index.ts", import.meta.url), "utf8");
+  const parseCv = readFileSync(new URL("../supabase/functions/parse-cv/index.ts", import.meta.url), "utf8");
+  assert.match(recommend, /consume_edge_rate_limit/);
+  assert.match(recommend, /RECOMMEND_FORCE/);
+  assert.match(recommend, /RATE_LIMIT_UNAVAILABLE/);
+  assert.match(recommend, /Retry-After/);
+  assert.match(parseCv, /consume_edge_rate_limit/);
+  assert.match(parseCv, /CV_PARSE/);
+  assert.match(parseCv, /RATE_LIMIT_UNAVAILABLE/);
+  assert.match(parseCv, /Retry-After/);
+});

@@ -1,6 +1,14 @@
 -- 0020: internal Scholarship organizer controls and central review lifecycle.
 -- Scholarships are owned and administered by Alumni Connect; no external provider API exists.
 
+-- Internal organizer workflow requires DRAFT as a persisted pre-publication state.
+alter table public.opportunities
+  drop constraint if exists opportunities_status_check;
+alter table public.opportunities
+  add constraint opportunities_status_check
+  check (status in ('DRAFT','ACTIVE','CLOSED','EXPIRED','CANCELLED'));
+
+
 alter table public.scholarship_applications
   drop constraint if exists scholarship_applications_status_check;
 alter table public.scholarship_applications

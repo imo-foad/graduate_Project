@@ -112,7 +112,8 @@ test("saved-opportunity RLS helper is private from its first migration and clean
   assert.match(migration10, /create or replace function private\._opportunity_exists_for_saved_item\(/i);
 });
 
-\ntest("Social Feed RPCs are active-account and owner scoped; no raw table grants are introduced", () => {
+
+test("Social Feed RPCs are active-account and owner scoped; no raw table grants are introduced", () => {
   const all = allMigrationsSql();
   const fns = finalFunctions(all);
   for (const n of ["get_social_feed", "create_social_post", "update_social_post", "delete_social_post",

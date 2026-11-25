@@ -456,7 +456,7 @@ components:
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
         SCHOLARSHIP_APPLICATION_NOT_FOUND, SCHOLARSHIP_APPLICATION_NOT_REVIEWABLE, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, SAMPLE_DATA_NOT_REVIEWABLE,
-        SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED,
+        SCHOLARSHIP_PROVIDER_MAPPING_NOT_ALLOWED, REVIEWER_NOT_ACTIVE, SCHOLARSHIP_PROVIDER_NOT_CONFIGURED, COMPETITION_PROVIDER_MAPPING_NOT_ALLOWED, COMPETITION_PROVIDER_NOT_CONFIGURED,
         INVALID_SCHOLARSHIP_STATUS_TRANSITION, SCHOLARSHIP_DELIVERY_NOT_RETRYABLE, SCHOLARSHIP_DELIVERY_IN_PROGRESS,
         PROVIDER_EVENT_ID_CONFLICT, NOT_A_COMPETITION, COMPETITION_PROVIDER_MAPPING_NOT_ALLOWED,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
@@ -2053,6 +2053,592 @@ paths:
         '200': { description: Company ownership transferred }
         4XX: { $ref: '#/components/responses/BusinessError' }
 
+  /functions/v1/submit-competition:
+    post:
+      summary: Submit a Competition entry and attempt its configured provider delivery
+      description: Requires the graduate JWT. Internal or sample listings remain local; a 202 response means the entry is saved but external delivery is still pending.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_cv_document_id: { type: string, format: uuid, nullable: true }
+                p_personal_statement: { type: string, maxLength: 10000, nullable: true }
+                p_submission_data: { type: object, additionalProperties: true, description: Flexible organizer entry answers; maximum 32 KiB. }
+      responses:
+        '200': { description: Entry saved; provider acknowledged delivery or the entry remains internal }
+        '202': { description: Entry saved; provider delivery is pending or retryable }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid graduate JWT }
+        '404': { description: Opportunity or CV not found }
+        '409': { description: Duplicate entry }
+        '422': { description: Opportunity is not an eligible open Competition }
+        '500': { description: Submission processing failed; check the persisted application before retrying }
+  /functions/v1/deliver-competition:
+    post:
+      summary: Process pending Competition delivery or retry one application
+      description: Intended for a trusted scheduler using the service-role credential, or an active platform admin JWT for a single-application retry. Never ship the service-role credential to Android.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                application_id: { type: string, format: uuid }
+                limit: { type: integer, minimum: 1, maximum: 50, default: 10 }
+      responses:
+        '200': { description: Number of processed applications and per-item delivery outcomes }
+        '400': { description: Invalid request or application_id required for an admin retry }
+        '401': { description: Missing or invalid credential }
+        '403': { description: Active platform administrator required for user-token retry }
+        '503': { description: Delivery worker unavailable }
+  /functions/v1/competition-provider-callback:
+    post:
+      summary: Receive a signed Competition organizer status event
+      description: The organizer authenticates with an HMAC signature over the exact raw request body and timestamp; no Supabase JWT or API key is accepted as a substitute.
+      security: []
+      parameters:
+        - in: header
+          name: X-Alumni-Timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Alumni-Signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider_key, event_id, application_reference, status]
+              properties:
+                provider_key: { type: string, pattern: '^[A-Z0-9][A-Z0-9_-]{1,63}
+    post:
+      summary: Parse the authenticated graduate's own private PDF/DOCX and create pending skill suggestions
+      description: >
+        The caller supplies only the CV document id. Ownership is derived from the verified JWT.
+        Digital-text PDFs and DOCX are supported, up to 5 MB. Scanned/image-only PDFs requiring OCR
+        are not supported in this version. Extracted skills remain pending until confirm_cv_suggestions is called.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cv_document_id]
+              properties:
+                cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: CV parsed; extracted skills are pending graduate confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cv_document_id, status, suggestions_count, suggestions, confirmation_required, extraction_mode]
+                properties:
+                  cv_document_id: { type: string, format: uuid }
+                  status: { type: string, enum: [DONE] }
+                  suggestions_count: { type: integer, minimum: 0 }
+                  confirmation_required: { type: boolean, enum: [true] }
+                  extraction_mode: { type: string, enum: [dictionary_text_match] }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      required: [skill_id, matched_term]
+                      properties:
+                        skill_id: { type: string }
+                        matched_term: { type: string }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '404': { description: CV document not found or not owned by caller }
+        '405': { description: Method not allowed }
+        '409': { description: CV is already processing or has already been parsed }
+        '413': { description: CV exceeds the 5 MB limit }
+        '422': { description: 'Unsupported, malformed, mismatched, or text-empty CV file' }
+        '500': { description: Internal processing failure }
+        '502': { description: Private Storage download failed }
+ }
+                p_external_opportunity_id: { type: string, minLength: 1, maxLength: 200 }
+                p_is_enabled: { type: boolean, default: true }
+      responses:
+        '200': { description: True when the provider mapping was saved }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_competition_reviewer:
+    post:
+      summary: Platform admin assigns or deactivates a reviewer for one organizer provider key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_user_id, p_provider_key, p_is_active]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_provider_key: { type: string }}
+    post:
+      summary: Confirms the authenticated caller has active platform-admin access
+      responses:
+        '200': { description: true when the caller is an active platform admin }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/list_graduate_invitations:
+    post:
+      summary: Platform admin lists graduate invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: ALL }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Invitation list }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_platform_admin_access:
+    post:
+      summary: Platform admin grants or revokes another verified user's platform-admin access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_user_id, p_is_active, p_reason]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_is_active: { type: boolean }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Admin access updated }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/request_account_deletion:
+    post:
+      summary: Authenticated user requests deletion of their own account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_reason: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200': { description: Deletion request id }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_account_deletion_queue:
+    post:
+      summary: Platform admin lists account deletion requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: REQUESTED }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Account deletion queue }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_account_deletion_request:
+    post:
+      summary: Platform admin approves or rejects an account deletion request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_request_id, p_decision, p_note]
+              properties:
+                p_request_id: { type: string, format: uuid }
+                p_decision: { type: string, enum: [APPROVE, REJECT] }
+                p_note: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: APPROVED or REJECTED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/transfer_company_creator:
+    post:
+      summary: Platform admin transfers company creator ownership to another verified account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_new_owner_id, p_reason]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_new_owner_id: { type: string, format: uuid }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Company ownership transferred }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+
+  /functions/v1/parse-cv:
+    post:
+      summary: Parse the authenticated graduate's own private PDF/DOCX and create pending skill suggestions
+      description: >
+        The caller supplies only the CV document id. Ownership is derived from the verified JWT.
+        Digital-text PDFs and DOCX are supported, up to 5 MB. Scanned/image-only PDFs requiring OCR
+        are not supported in this version. Extracted skills remain pending until confirm_cv_suggestions is called.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cv_document_id]
+              properties:
+                cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: CV parsed; extracted skills are pending graduate confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cv_document_id, status, suggestions_count, suggestions, confirmation_required, extraction_mode]
+                properties:
+                  cv_document_id: { type: string, format: uuid }
+                  status: { type: string, enum: [DONE] }
+                  suggestions_count: { type: integer, minimum: 0 }
+                  confirmation_required: { type: boolean, enum: [true] }
+                  extraction_mode: { type: string, enum: [dictionary_text_match] }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      required: [skill_id, matched_term]
+                      properties:
+                        skill_id: { type: string }
+                        matched_term: { type: string }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '404': { description: CV document not found or not owned by caller }
+        '405': { description: Method not allowed }
+        '409': { description: CV is already processing or has already been parsed }
+        '413': { description: CV exceeds the 5 MB limit }
+        '422': { description: 'Unsupported, malformed, mismatched, or text-empty CV file' }
+        '500': { description: Internal processing failure }
+        '502': { description: Private Storage download failed }
+ }
+                p_is_active: { type: boolean }
+      responses:
+        '200': { description: True when reviewer assignment was saved }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_competition_review_queue:
+    post:
+      summary: Lists only Competition entries visible to the caller's admin/reviewer scope
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                p_provider_key: { type: string, nullable: true }
+                p_status: { type: string, nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Scoped Competition review queue; provider credentials are never included
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    application_id: { type: string, format: uuid }
+                    opportunity_id: { type: string, format: uuid }
+                    opportunity_title: { type: string }
+                    provider_key: { type: string }
+                    graduate_id: { type: string, format: uuid }
+                    graduate_name: { type: string }
+                    graduate_email: { type: string }
+                    cv_document_id: { type: string, format: uuid, nullable: true }
+                    personal_statement: { type: string, nullable: true }
+                    submission_data: { type: object, additionalProperties: true }
+                    status: { type: string }
+                    delivery_status: { type: string }
+                    provider_application_reference: { type: string, nullable: true }
+                    applied_at: { type: string, format: date-time }
+                    externally_submitted_at: { type: string, format: date-time, nullable: true }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_competition_application:
+    post:
+      summary: Admin or assigned provider reviewer advances a Competition application through its permitted review states
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id, p_status]
+              properties:
+                p_application_id: { type: string, format: uuid }
+                p_status: { type: string, enum: [UNDER_REVIEW, IN_REVIEW, ACCEPTED, REJECTED] }
+                p_note: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200':
+          description: Updated Competition application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompetitionApplication' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/retry_competition_delivery:
+    post:
+      summary: Platform admin starts a new delivery generation for an eligible failed Competition entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: True when a new retry generation was queued }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_competition_review_cv_path:
+    post:
+      summary: Returns the CV object path only to an admin or reviewer assigned to the entry's provider
+      description: Internal path lookup for the reviewer Edge Function; Android should use get-competition-review-cv to obtain a short-lived signed URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Private CV storage path for the authorized reviewer
+          content:
+            application/json:
+              schema: { type: string, nullable: true }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/assert_competition_admin:
+    post:
+      summary: Confirms the authenticated caller has active platform-admin access for Competition administration
+      responses:
+        '200': { description: True when the caller is an active platform admin }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/assert_platform_admin:
+    post:
+      summary: Confirms the authenticated caller has active platform-admin access
+      responses:
+        '200': { description: true when the caller is an active platform admin }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/list_graduate_invitations:
+    post:
+      summary: Platform admin lists graduate invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: ALL }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Invitation list }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_platform_admin_access:
+    post:
+      summary: Platform admin grants or revokes another verified user's platform-admin access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_user_id, p_is_active, p_reason]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_is_active: { type: boolean }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Admin access updated }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/request_account_deletion:
+    post:
+      summary: Authenticated user requests deletion of their own account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_reason: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200': { description: Deletion request id }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_account_deletion_queue:
+    post:
+      summary: Platform admin lists account deletion requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: REQUESTED }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Account deletion queue }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_account_deletion_request:
+    post:
+      summary: Platform admin approves or rejects an account deletion request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_request_id, p_decision, p_note]
+              properties:
+                p_request_id: { type: string, format: uuid }
+                p_decision: { type: string, enum: [APPROVE, REJECT] }
+                p_note: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: APPROVED or REJECTED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/transfer_company_creator:
+    post:
+      summary: Platform admin transfers company creator ownership to another verified account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_new_owner_id, p_reason]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_new_owner_id: { type: string, format: uuid }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Company ownership transferred }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+
+  /functions/v1/parse-cv:
+    post:
+      summary: Parse the authenticated graduate's own private PDF/DOCX and create pending skill suggestions
+      description: >
+        The caller supplies only the CV document id. Ownership is derived from the verified JWT.
+        Digital-text PDFs and DOCX are supported, up to 5 MB. Scanned/image-only PDFs requiring OCR
+        are not supported in this version. Extracted skills remain pending until confirm_cv_suggestions is called.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cv_document_id]
+              properties:
+                cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: CV parsed; extracted skills are pending graduate confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cv_document_id, status, suggestions_count, suggestions, confirmation_required, extraction_mode]
+                properties:
+                  cv_document_id: { type: string, format: uuid }
+                  status: { type: string, enum: [DONE] }
+                  suggestions_count: { type: integer, minimum: 0 }
+                  confirmation_required: { type: boolean, enum: [true] }
+                  extraction_mode: { type: string, enum: [dictionary_text_match] }
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      required: [skill_id, matched_term]
+                      properties:
+                        skill_id: { type: string }
+                        matched_term: { type: string }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '404': { description: CV document not found or not owned by caller }
+        '405': { description: Method not allowed }
+        '409': { description: CV is already processing or has already been parsed }
+        '413': { description: CV exceeds the 5 MB limit }
+        '422': { description: 'Unsupported, malformed, mismatched, or text-empty CV file' }
+        '500': { description: Internal processing failure }
+        '502': { description: Private Storage download failed }
+ }
+                event_id: { type: string, minLength: 1, maxLength: 200 }
+                application_reference: { type: string, minLength: 1, maxLength: 200 }
+                status: { type: string, enum: [IN_REVIEW, ACCEPTED, REJECTED] }
+                note: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200': { description: Signed event accepted or recognized as an idempotent duplicate }
+        '400': { description: Invalid callback body }
+        '401': { description: Unknown provider or invalid signature }
+        '409': { description: Provider event conflicts with a prior event or invalid status transition }
+        '413': { description: Callback body exceeds the 16 KiB limit }
+        '503': { description: Provider configuration or event processing unavailable }
+  /functions/v1/get-competition-review-cv:
+    post:
+      summary: Obtain a short-lived signed CV download URL for an assigned Competition reviewer
+      description: Requires an active provider-scoped reviewer or platform-admin JWT. The signed URL expires after 600 seconds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [application_id]
+              properties:
+                application_id: { type: string, format: uuid }
+      responses:
+        '200': { description: CV availability and a 10-minute signed download URL when a CV is attached }
+        '400': { description: Invalid request body }
+        '401': { description: Missing or invalid JWT }
+        '403': { description: Reviewer is not assigned to the application's provider }
+        '404': { description: Application not found }
+        '409': { description: Application cannot be reviewed or storage path is invalid }
+        '503': { description: CV authorization or signed URL service unavailable }
   /functions/v1/parse-cv:
     post:
       summary: Parse the authenticated graduate's own private PDF/DOCX and create pending skill suggestions

@@ -462,27 +462,6 @@ revoke all on function public.set_graduate_account_status_for_admin(uuid, uuid, 
 grant execute on function public.set_graduate_account_status_for_admin(uuid, uuid, text, text)
   to service_role;
 
-create table private.account_deletion_requests (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
-  status text not null default 'REQUESTED'
-    check (status in ('REQUESTED','APPROVED','REJECTED','COMPLETED')),
-  reason text check (reason is null or length(reason) <= 1000),
-  requested_at timestamptz not null default now(),
-  reviewed_by uuid references auth.users(id) on delete set null,
-  reviewed_at timestamptz,
-  review_note text,
-  completed_at timestamptz
-);
-create unique index account_deletion_one_open_per_user
-  on private.account_deletion_requests(user_id)
-  where user_id is not null and status in ('REQUESTED','APPROVED');
-create index account_deletion_queue_idx
-  on private.account_deletion_requests(status, requested_at);
-alter table private.account_deletion_requests enable row level security;
-revoke all on private.account_deletion_requests from public, anon, authenticated;
-grant select, insert, update, delete on private.account_deletion_requests to service_role;
-
 create or replace function public.request_account_deletion(p_reason text default null)
 returns uuid
 language plpgsql security definer set search_path = ''

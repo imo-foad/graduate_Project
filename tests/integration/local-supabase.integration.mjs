@@ -54,8 +54,10 @@ const encodePath = (p) => p.split("/").map(encodeURIComponent).join("/");
 const bucket = "cv-documents";
 const objectPath = `${a.id}/ci-${randomUUID()}.pdf`;
 const foreignPath = `${a.id}/ci-foreign-${randomUUID()}.pdf`;
+const unattachedScholarshipCvPath = `${a.id}/ci-unattached-${randomUUID()}.pdf`;
 const pdf = Buffer.from("%PDF-1.4\n% local Supabase integration test\n1 0 obj<<>>endobj\n%%EOF\n");
 let cvId = null;
+let unattachedScholarshipCvId = null;
 let scholarshipApplicationId = null;
 let scholarshipOpportunityId = null;
 let adminId = null;
@@ -457,14 +459,54 @@ try {
   pass("admin opens application details and original flexible JSON answers",
     adminDetails.status === 200 && adminDetails.json?.length === 1 &&
     adminDetails.json[0]?.applicant_name === demoA.full_name &&
-    adminDetails.json[0]?.application_data?.study_area === "Computer Science");
+    adminDetails.json[0]?.application_data?.study_area === "Computer Science" &&
+    adminDetails.json[0]?.cv_storage_path === objectPath);
 
   const adminReadAttachedCv = await request(
-    "/storage/v1/object/" + bucket + "/" + encodePath(objectPath),
+    "/storage/v1/object/" + bucket + "/" + encodePath(adminDetails.json?.[0]?.cv_storage_path ?? ""),
     { headers: headers(adminToken) },
   );
   pass("platform admin can read the CV attached to a Scholarship application",
     adminReadAttachedCv.status === 200);
+
+  const unattachedCvUpload = await request(
+    "/storage/v1/object/" + bucket + "/" + encodePath(unattachedScholarshipCvPath),
+    {
+      method: "POST",
+      headers: headers(a.token, { "Content-Type": "application/pdf", "x-upsert": "false" }),
+      body: pdf,
+    },
+  );
+  pass("graduate can upload a separate CV that is not attached to a Scholarship",
+    unattachedCvUpload.status === 200 || unattachedCvUpload.status === 201);
+
+  const unattachedCvMetadata = await request("/rest/v1/cv_documents", {
+    method: "POST",
+    headers: headers(a.token, { "Content-Type": "application/json", Prefer: "return=representation" }),
+    body: JSON.stringify({
+      graduate_id: a.id,
+      storage_path: unattachedScholarshipCvPath,
+      file_type: "pdf",
+      size_bytes: pdf.length,
+    }),
+  });
+  pass("graduate stores metadata for the unrelated CV",
+    unattachedCvMetadata.status === 201 && unattachedCvMetadata.json?.length === 1);
+  unattachedScholarshipCvId = unattachedCvMetadata.json?.[0]?.id ?? null;
+
+  const adminReadUnattachedCv = await request(
+    "/storage/v1/object/" + bucket + "/" + encodePath(unattachedScholarshipCvPath),
+    { headers: headers(adminToken) },
+  );
+  pass("platform admin cannot read a CV not attached to any Scholarship application",
+    !adminReadUnattachedCv.ok);
+
+  const adminUnattachedMetadata = await request(
+    "/rest/v1/cv_documents?select=id&id=eq." + unattachedScholarshipCvId,
+    { headers: headers(adminToken) },
+  );
+  pass("platform admin cannot list metadata for an unrelated CV",
+    adminUnattachedMetadata.status === 200 && adminUnattachedMetadata.json?.length === 0);
 
   const invalidSkipReview = await request("/rest/v1/rpc/review_scholarship_application", {
     method: "POST",
@@ -928,6 +970,10 @@ try {
   if (cvId) await request(`/rest/v1/cv_documents?id=eq.${cvId}`, {
     method: "DELETE", headers: headers(service),
   }).catch(() => {});
+  if (unattachedScholarshipCvId) await request(`/rest/v1/cv_documents?id=eq.${unattachedScholarshipCvId}`, {
+    method: "DELETE", headers: headers(service),
+  }).catch(() => {});
+  await removeObject(service, unattachedScholarshipCvPath).catch(() => {});
 }
 
 console.log(`LOCAL HTTP INTEGRATION PASSED: ${passed} checks`);

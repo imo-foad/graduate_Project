@@ -413,7 +413,23 @@ try {
     deletionQueue.status === 200 &&
     deletionQueue.json?.some((row) => row.request_id === graduateRequestId && row.user_id === graduateId));
 
+  const approval = await callRpc(adminToken, "review_account_deletion_request", {
+    p_request_id: graduateRequestId,
+    p_decision: "APPROVE",
+    p_note: "Verified the account and approved the test deletion request.",
+  });
+  pass("admin can approve account deletion after review", approval.status === 200 && approval.json === "APPROVED");
+
   // Company creator deletion is blocked until platform administration transfers ownership.
+  const blockedDeletion = await request("/functions/v1/delete-graduate", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ request_id: graduateRequestId }),
+  });
+  pass("approved deletion is blocked while the graduate still owns a company",
+    blockedDeletion.status === 409 &&
+    blockedDeletion.json?.error === "COMPANY_OWNERSHIP_TRANSFER_REQUIRED");
+
   const ownershipTransfer = await callRpc(adminToken, "transfer_company_creator", {
     p_company_id: companyId,
     p_new_owner_id: demoLogin.id,
@@ -421,13 +437,6 @@ try {
   });
   pass("admin transfers company ownership before deleting its original creator",
     ownershipTransfer.status === 200 && ownershipTransfer.json === true);
-
-  const approval = await callRpc(adminToken, "review_account_deletion_request", {
-    p_request_id: graduateRequestId,
-    p_decision: "APPROVE",
-    p_note: "Verified the account and approved the test deletion request.",
-  });
-  pass("admin can approve account deletion after review", approval.status === 200 && approval.json === "APPROVED");
 
   const deletion = await request("/functions/v1/delete-graduate", {
     method: "POST",

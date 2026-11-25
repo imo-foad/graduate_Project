@@ -376,11 +376,17 @@ try {
       p_required_certifications: [],
     }),
   });
-  pass("platform admin creates an internal Scholarship DRAFT",
-    createInternalScholarship.status === 200 &&
+  const internalScholarshipCreated = createInternalScholarship.status === 200 &&
     createInternalScholarship.json?.type === "SCHOLARSHIP" &&
     createInternalScholarship.json?.status === "DRAFT" &&
-    createInternalScholarship.json?.is_sample === false);
+    createInternalScholarship.json?.is_sample === false;
+  if (!internalScholarshipCreated) {
+    console.error("Scholarship create RPC diagnostic:", JSON.stringify({
+      http_status: createInternalScholarship.status,
+      response: createInternalScholarship.json,
+    }));
+  }
+  pass("platform admin creates an internal Scholarship DRAFT", internalScholarshipCreated);
   adminScholarshipOpportunityId = createInternalScholarship.json?.id ?? null;
   assert.ok(adminScholarshipOpportunityId, "internal Scholarship id is required");
 

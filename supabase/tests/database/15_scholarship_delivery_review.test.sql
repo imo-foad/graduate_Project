@@ -208,11 +208,13 @@ select throws_ok($q$select public.withdraw_scholarship_application(tests.id('app
   'PT422','CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION','cannot locally withdraw after external submission');
 
 -- Reviewer authorization is provider-scoped. Review transitions are ordered and audited.
+select tests.login('graduate2');
+select throws_ok($q$select public.get_scholarship_review_cv_path(tests.id('application2'))$q$,
+  'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','graduate who is not a reviewer cannot use reviewer CV endpoint');
+reset role;
 select tests.login('reviewer-a');
 select is((select count(*)::int from public.get_scholarship_review_queue('PROVIDER_A','SUBMITTED_EXTERNALLY',50)),
   1,'provider-A reviewer sees only provider-A submitted applications');
-select throws_ok($q$select public.get_scholarship_review_cv_path(tests.id('application2'))$q$,
-  'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','graduate who is not a reviewer cannot use reviewer CV endpoint');
 select throws_ok($q$select * from public.get_scholarship_review_queue('PROVIDER_B',null,50)$q$,
   'PT403','SCHOLARSHIP_REVIEWER_REQUIRED','provider-A reviewer cannot inspect provider-B queue');
 select is(public.get_scholarship_review_cv_path(tests.id('application2')),

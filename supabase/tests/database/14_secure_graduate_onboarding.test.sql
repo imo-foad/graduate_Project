@@ -142,6 +142,11 @@ set local role service_role;
 select is(public.finalize_graduate_invitation(
  tests.id('invitation_id'),tests.id('invited_user'),true,tests.id('admin'),null),
  'PENDING','service role links the Auth-created user to the invitation');
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'NEW.GRAD@TESTS.LOCAL','Duplicate Graduate',
+ 'Duplicate active invitation must be classified from the invitation ledger')$q$,
+ 'PT409','INVITATION_ALREADY_ACTIVE',
+ 'a pending invitation with an Auth user is still a duplicate active invitation');
 reset role;
 update auth.users set email_confirmed_at=now() where id=tests.id('invited_user');
 select is((select status from private.graduate_invitations where id=tests.id('invitation_id')),

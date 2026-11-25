@@ -50,6 +50,8 @@ let graduateToken = null;
 let graduateCvPath = null;
 let graduateRequestId = null;
 let invitationId = null;
+let companyId = null;
+let companyJobId = null;
 let passed = 0;
 const pass = (name, condition) => {
   assert.equal(Boolean(condition), true, name);
@@ -203,6 +205,65 @@ try {
     invitationRows.status === 200 &&
     invitationRows.json?.some((row) => row.invitation_id === invitationId && row.email === graduateEmail));
 
+  // Company onboarding starts with an unverified profile; only platform administration can verify it.
+  const company = await callRpc(graduateToken, "create_company", {
+    p_name: "P1 Verified Company " + suffix,
+    p_website: "https://company-" + suffix + ".example",
+    p_description: "Synthetic company created by the onboarding HTTP integration.",
+  });
+  pass("invited graduate can create a pending company account",
+    company.status === 200 && company.json?.verification_status === "PENDING_REVIEW" &&
+    typeof company.json?.id === "string");
+  companyId = company.json?.id ?? null;
+  assert.ok(companyId, "company onboarding must return its id");
+
+  const companyJob = await callRpc(graduateToken, "create_company_job", {
+    p_company_id: companyId,
+    p_title: "P1 Verified Company Opportunity",
+    p_description: "A synthetic opportunity that remains unpublished until company verification.",
+  });
+  pass("pending company owner can save a draft job",
+    companyJob.status === 200 && companyJob.json?.status === "DRAFT");
+  companyJobId = companyJob.json?.id ?? null;
+  assert.ok(companyJobId, "company job draft id is required");
+
+  const prematurePublish = await callRpc(graduateToken, "publish_company_job", {
+    p_opportunity_id: companyJobId,
+  });
+  pass("unverified company cannot publish a job",
+    prematurePublish.status === 422 && prematurePublish.json?.message === "COMPANY_NOT_VERIFIED");
+
+  const untrustedCompanyReview = await callRpc(graduateToken, "review_company", {
+    p_company_id: companyId,
+    p_decision: "VERIFIED",
+    p_note: "Graduate must not approve their own company identity.",
+  });
+  pass("company owner cannot approve their own verification",
+    untrustedCompanyReview.status === 403 && untrustedCompanyReview.json?.message === "ADMIN_REQUIRED");
+
+  const verification = await callRpc(adminToken, "review_company", {
+    p_company_id: companyId,
+    p_decision: "VERIFIED",
+    p_note: "Local E2E verified the synthetic company registration record.",
+  });
+  pass("platform admin can verify a pending company through the audited review RPC",
+    verification.status === 200 && verification.json?.verification_status === "VERIFIED");
+
+  const verificationHistory = await request(
+    "/rest/v1/company_verification_history?select=company_id,actor_user_id,old_status,new_status,note&company_id=eq." + companyId,
+    { headers: headers(graduateToken) },
+  );
+  pass("company owner can inspect the recorded verification decision",
+    verificationHistory.status === 200 && verificationHistory.json?.some((row) =>
+      row.new_status === "VERIFIED" && row.old_status === "PENDING_REVIEW" &&
+      row.actor_user_id === adminId));
+
+  const publishedJob = await callRpc(graduateToken, "publish_company_job", {
+    p_opportunity_id: companyJobId,
+  });
+  pass("verified company can publish its own draft job",
+    publishedJob.status === 200 && publishedJob.json?.status === "ACTIVE");
+
   // A regular graduate cannot use any of the admin Edge Function capabilities.
   const demoLogin = await login("graduate.demo@alumni.test", demoPassword);
   const nonAdminInvite = await request("/functions/v1/invite-graduate", {
@@ -348,6 +409,15 @@ try {
     deletionQueue.status === 200 &&
     deletionQueue.json?.some((row) => row.request_id === graduateRequestId && row.user_id === graduateId));
 
+  // Company creator deletion is blocked until platform administration transfers ownership.
+  const ownershipTransfer = await callRpc(adminToken, "transfer_company_creator", {
+    p_company_id: companyId,
+    p_new_owner_id: demoLogin.id,
+    p_reason: "Transfer the test company to an active account before deleting its creator.",
+  });
+  pass("admin transfers company ownership before deleting its original creator",
+    ownershipTransfer.status === 200 && ownershipTransfer.json === true);
+
   const approval = await callRpc(adminToken, "review_account_deletion_request", {
     p_request_id: graduateRequestId,
     p_decision: "APPROVE",
@@ -387,6 +457,20 @@ try {
 
   console.log("ONBOARDING HTTP INTEGRATION PASSED: " + passed + " checks");
 } finally {
+  if (companyJobId) {
+    const cleanupJob = await request("/rest/v1/opportunities?id=eq." + companyJobId, {
+      method: "DELETE",
+      headers: serviceHeaders(),
+    }).catch(() => ({ ok: false }));
+    assert.ok(cleanupJob.ok, "temporary company opportunity cleanup must succeed");
+  }
+  if (companyId) {
+    const cleanupCompany = await request("/rest/v1/companies?id=eq." + companyId, {
+      method: "DELETE",
+      headers: serviceHeaders(),
+    }).catch(() => ({ ok: false }));
+    assert.ok(cleanupCompany.ok, "temporary company cleanup must succeed");
+  }
   if (graduateId) {
     // If any earlier assertion failed, do not leave a test identity or its private objects behind.
     await request("/storage/v1/object/" + bucket, {

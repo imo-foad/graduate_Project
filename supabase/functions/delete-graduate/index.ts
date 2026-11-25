@@ -45,8 +45,7 @@ Deno.serve(async (req) => {
     if (message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED")) {
       return json({ error: "COMPANY_OWNERSHIP_TRANSFER_REQUIRED" }, 409);
     }
-    if (message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED") ||
-        message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED")) {
+    if (message.includes("COMPANY_OWNERSHIP_TRANSFER_REQUIRED")) {
       return json({ error: "COMPANY_OWNERSHIP_TRANSFER_REQUIRED" }, 409);
     }
     if (message.includes("ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER")) {
@@ -59,24 +58,34 @@ Deno.serve(async (req) => {
     return json({ error: "ACCOUNT_DELETION_PRECHECK_FAILED" }, 503);
   }
 
+  const releaseClaim = async () => {
+    const { error } = await adminClient.rpc("release_account_deletion_claim", {
+      p_request_id: body.request_id,
+    });
+    if (error) console.error("failed to release account-deletion claim", { code: error.code });
+  };
+
   const { data: cvRows, error: cvReadError } = await adminClient
     .from("cv_documents")
     .select("storage_path")
     .eq("graduate_id", targetId);
   if (cvReadError) {
     console.error("CV storage cleanup lookup failed", { code: cvReadError.code });
+    await releaseClaim();
     return json({ error: "ACCOUNT_DELETION_PRECHECK_FAILED" }, 503);
   }
 
   const paths = (cvRows ?? []).map((row) => row.storage_path);
   if (paths.some((path) => typeof path !== "string" || !path.startsWith(targetId + "/"))) {
     console.error("CV storage path ownership mismatch during account deletion");
+    await releaseClaim();
     return json({ error: "CV_STORAGE_OWNERSHIP_MISMATCH" }, 409);
   }
   if (paths.length > 0) {
     const { error: storageError } = await adminClient.storage.from("cv-documents").remove(paths);
     if (storageError) {
       console.error("CV storage cleanup failed", { message: storageError.message });
+      await releaseClaim();
       return json({ error: "CV_STORAGE_CLEANUP_FAILED" }, 503);
     }
   }
@@ -84,6 +93,7 @@ Deno.serve(async (req) => {
   const { error: deleteError } = await adminClient.auth.admin.deleteUser(targetId);
   if (deleteError) {
     console.error("Auth account deletion failed after CV cleanup", { status: deleteError.status });
+    await releaseClaim();
     return json({ error: "AUTH_ACCOUNT_DELETION_FAILED" }, 503);
   }
 

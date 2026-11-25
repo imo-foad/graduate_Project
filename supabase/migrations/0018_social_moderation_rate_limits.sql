@@ -87,7 +87,7 @@ declare
   v_policy private.rate_limit_policies;
   v_tokens numeric(14,8);
   v_last_refill timestamptz;
-  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_now timestamptz;
   v_elapsed numeric(18,8);
   v_retry integer;
 begin
@@ -106,6 +106,8 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(p_user_id::text || ':' || p_action, 0)
   );
+  -- Read the clock only after waiting for the lock, so queue time contributes to refill.
+  v_now := pg_catalog.clock_timestamp();
 
   insert into private.user_rate_limits(user_id, action, tokens, last_refill_at)
   values (p_user_id, p_action, v_policy.capacity, v_now)

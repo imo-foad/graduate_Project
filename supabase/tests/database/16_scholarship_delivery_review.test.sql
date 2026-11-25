@@ -200,7 +200,7 @@ select is((select delivery_status from public.scholarship_applications where id=
 select is((select count(*)::int from public.claim_scholarship_delivery(tests.id('application2'),1)),
   0,'second worker cannot claim the same unexpired lease');
 select is((select idempotency_key from (
-  select outbox_id::text as idempotency_key from private.scholarship_delivery_outbox
+  select id::text as idempotency_key from private.scholarship_delivery_outbox
    where id=tests.id('outbox2')
 ) q),tests.id('outbox2')::text,'delivery idempotency key is the stable outbox id');
 select is((public.complete_scholarship_delivery(

@@ -37,6 +37,7 @@ async function request(path, init = {}) {
   };
 }
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
+const firstRow = (value) => Array.isArray(value) ? value[0] : value;
 const bucket = "cv-documents";
 const suffix = randomUUID().replaceAll("-", "");
 const adminEmail = "p1-admin-" + suffix + "@tests.local";
@@ -211,10 +212,11 @@ try {
     p_website: "https://company-" + suffix + ".example",
     p_description: "Synthetic company created by the onboarding HTTP integration.",
   });
+  const companyRow = firstRow(company.json);
   pass("invited graduate can create a pending company account",
-    company.status === 200 && company.json?.verification_status === "PENDING_REVIEW" &&
-    typeof company.json?.id === "string");
-  companyId = company.json?.id ?? null;
+    company.status === 200 && companyRow?.verification_status === "PENDING_REVIEW" &&
+    typeof companyRow?.id === "string");
+  companyId = companyRow?.id ?? null;
   assert.ok(companyId, "company onboarding must return its id");
 
   const companyJob = await callRpc(graduateToken, "create_company_job", {
@@ -222,9 +224,10 @@ try {
     p_title: "P1 Verified Company Opportunity",
     p_description: "A synthetic opportunity that remains unpublished until company verification.",
   });
+  const companyJobRow = firstRow(companyJob.json);
   pass("pending company owner can save a draft job",
-    companyJob.status === 200 && companyJob.json?.status === "DRAFT");
-  companyJobId = companyJob.json?.id ?? null;
+    companyJob.status === 200 && companyJobRow?.status === "DRAFT");
+  companyJobId = companyJobRow?.id ?? null;
   assert.ok(companyJobId, "company job draft id is required");
 
   const prematurePublish = await callRpc(graduateToken, "publish_company_job", {
@@ -246,8 +249,9 @@ try {
     p_decision: "VERIFIED",
     p_note: "Local E2E verified the synthetic company registration record.",
   });
+  const verificationRow = firstRow(verification.json);
   pass("platform admin can verify a pending company through the audited review RPC",
-    verification.status === 200 && verification.json?.verification_status === "VERIFIED");
+    verification.status === 200 && verificationRow?.verification_status === "VERIFIED");
 
   const verificationHistory = await request(
     "/rest/v1/company_verification_history?select=company_id,actor_user_id,old_status,new_status,note&company_id=eq." + companyId,
@@ -262,7 +266,7 @@ try {
     p_opportunity_id: companyJobId,
   });
   pass("verified company can publish its own draft job",
-    publishedJob.status === 200 && publishedJob.json?.status === "ACTIVE");
+    publishedJob.status === 200 && firstRow(publishedJob.json)?.status === "ACTIVE");
 
   // A regular graduate cannot use any of the admin Edge Function capabilities.
   const demoLogin = await login("graduate.demo@alumni.test", demoPassword);
@@ -409,7 +413,22 @@ try {
     deletionQueue.status === 200 &&
     deletionQueue.json?.some((row) => row.request_id === graduateRequestId && row.user_id === graduateId));
 
-  // Company creator deletion is blocked until platform administration transfers ownership.
+  const approval = await callRpc(adminToken, "review_account_deletion_request", {
+    p_request_id: graduateRequestId,
+    p_decision: "APPROVE",
+    p_note: "Verified the account and approved the test deletion request.",
+  });
+  pass("admin can approve account deletion after review", approval.status === 200 && approval.json === "APPROVED");
+
+  const blockedDeletion = await request("/functions/v1/delete-graduate", {
+    method: "POST",
+    headers: headers(adminToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ request_id: graduateRequestId }),
+  });
+  pass("approved deletion is blocked while the graduate still owns a company",
+    blockedDeletion.status === 409 &&
+    blockedDeletion.json?.error === "COMPANY_OWNERSHIP_TRANSFER_REQUIRED");
+
   const ownershipTransfer = await callRpc(adminToken, "transfer_company_creator", {
     p_company_id: companyId,
     p_new_owner_id: demoLogin.id,
@@ -417,13 +436,6 @@ try {
   });
   pass("admin transfers company ownership before deleting its original creator",
     ownershipTransfer.status === 200 && ownershipTransfer.json === true);
-
-  const approval = await callRpc(adminToken, "review_account_deletion_request", {
-    p_request_id: graduateRequestId,
-    p_decision: "APPROVE",
-    p_note: "Verified the account and approved the test deletion request.",
-  });
-  pass("admin can approve account deletion after review", approval.status === 200 && approval.json === "APPROVED");
 
   const deletion = await request("/functions/v1/delete-graduate", {
     method: "POST",

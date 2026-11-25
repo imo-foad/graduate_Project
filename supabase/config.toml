@@ -23,3 +23,12 @@ verify_jwt = true
 
 [functions.delete-graduate]
 verify_jwt = true
+
+[functions.submit-scholarship]
+verify_jwt = true
+
+[functions.deliver-scholarship]
+verify_jwt = true
+
+[functions.scholarship-provider-callback]
+verify_jwt = false

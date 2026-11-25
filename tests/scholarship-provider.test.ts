@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createProviderSignature,
   parseScholarshipProviderConfigs,
+  readBoundedTextStream,
   sendScholarshipApplicationToProvider,
   ScholarshipProviderError,
   sha256Hex,
@@ -25,6 +26,12 @@ test("provider configuration is secret-shaped, HTTPS-only and bounded", () => {
   })), /UNSAFE_PROVIDER_ENDPOINT/);
   assert.throws(() => parseScholarshipProviderConfigs(JSON.stringify({
     PROVIDER_A: { ...config, endpoint: "https://127.0.0.1:8080/private" },
+  })), /UNSAFE_PROVIDER_ENDPOINT/);
+  assert.throws(() => parseScholarshipProviderConfigs(JSON.stringify({
+    PROVIDER_A: { ...config, endpoint: "https://[::1]:8443/private" },
+  })), /UNSAFE_PROVIDER_ENDPOINT/);
+  assert.throws(() => parseScholarshipProviderConfigs(JSON.stringify({
+    PROVIDER_A: { ...config, endpoint: "https://scholarship-api.internal/submit" },
   })), /UNSAFE_PROVIDER_ENDPOINT/);
   assert.throws(() => parseScholarshipProviderConfigs(JSON.stringify({
     PROVIDER_A: { ...config, bearer_token: "short" },
@@ -108,6 +115,37 @@ test("provider request is signed and uses stable idempotency with strict acknowl
   );
   assert.equal(JSON.parse(rawBody).idempotency_key, idempotencyKey);
   assert.equal((await sha256Hex(rawBody)).length, 64);
+});
+
+test("provider response streams are bounded by byte count before decoding", async () => {
+  const accepted = await readBoundedTextStream(
+    new Response("ok").body,
+    2,
+  );
+  assert.equal(accepted, "ok");
+  await assert.rejects(
+    readBoundedTextStream(new Response("x".repeat(16 * 1024 + 1)).body, 16 * 1024),
+    (error: unknown) => error instanceof RangeError && error.message === "BODY_TOO_LARGE",
+  );
+  await assert.rejects(
+    readBoundedTextStream(new Response("ع".repeat(9000)).body, 16 * 1024),
+    (error: unknown) => error instanceof RangeError && error.message === "BODY_TOO_LARGE",
+    "byte count, not UTF-16 character count, enforces the limit",
+  );
+});
+
+test("provider oversized response is rejected without reading an unbounded body", async () => {
+  const tooLarge = (async () => new Response(
+    "ع".repeat(9000),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  )) as typeof fetch;
+  await assert.rejects(
+    sendScholarshipApplicationToProvider(
+      config, "aabbccdd-eeff-4111-8222-001122334455", {}, tooLarge,
+    ),
+    (error: unknown) => error instanceof ScholarshipProviderError &&
+      error.code === "PROVIDER_RESPONSE_TOO_LARGE" && !error.retryable,
+  );
 });
 
 test("provider 503 and 429 responses are retryable and respect Retry-After", async () => {

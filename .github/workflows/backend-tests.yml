@@ -50,7 +50,9 @@ jobs:
       - uses: supabase/setup-cli@v1
         with: { version: "3.3.0" }   # pinned to the version verified by CI run #52
       - name: Verify Supabase CLI
-        run: supabase --version
+        run: |
+          command -v supabase
+          timeout 30s supabase --version
       - name: "Database tests (local stack only, fails on any error)"
         run: bash scripts/run-db-tests.sh
       - name: Collect diagnostics

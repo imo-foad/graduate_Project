@@ -81,7 +81,12 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     - The server checks opportunity type, open/deadline/end state, server-side eligibility and duplicate submissions. One submission per graduate/opportunity remains enforced after withdrawal.
     - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/scholarship_application_status_history`.
     - Withdraw with POST `/rest/v1/rpc/withdraw_scholarship_application` and body `{"p_application_id":"<application uuid>"}`.
-    - Seeded listings are sample data: requests are stored in this backend but are not transmitted to the named external provider. No external scholarship-provider integration is configured.
+    - The current form stays unchanged: CV (optional), personal statement (maximum 10,000 characters) and flexible JSON answers (maximum 32 KiB). No per-Scholarship Form Builder is part of this contract.
+    - Seeded listings have `is_sample=true` and are demonstration-only. They remain visibly sample and cannot be reviewed or accepted/rejected. Real Scholarships are created by Alumni Connect platform admins with `is_sample=false`; their applications enter the internal review queue.
+    - Platform admins create/update/publish/close Scholarships with `create_admin_scholarship`, `update_admin_scholarship`, `publish_admin_scholarship` and `close_admin_scholarship`. Creation starts in DRAFT; publishing moves to ACTIVE; closing moves DRAFT/ACTIVE to CLOSED. The listing is managed inside Alumni Connect; there is no external provider submission.
+    - The central review queue uses `list_admin_scholarship_applications` (optional opportunity/status filters and paired cursor values); use `get_admin_scholarship_application` for applicant profile, CV id and submitted answers. Platform admins can download only CV objects attached to Scholarship applications; they cannot read unrelated graduates' CVs through this policy.
+    - Review through `review_scholarship_application`: SUBMITTED → UNDER_REVIEW → ACCEPTED or REJECTED. Decisions cannot skip or reverse a stage. Each step records ADMIN_ACTION, actor, timestamp and optional note in status history, and creates a notification for the applicant. A student can withdraw only while SUBMITTED.
+    - Applicants read their own status and history through the existing `scholarship_applications` and `scholarship_application_status_history` table paths.
 
 15. **Competition submissions**:
     - List competitions with GET `/rest/v1/opportunities?type=eq.COMPETITION&order=deadline.asc`.

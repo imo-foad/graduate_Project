@@ -65,6 +65,47 @@ components:
         applied_at:
           type: string
           format: date-time
+    AdminScholarshipOpportunity:
+      type: object
+      description: Internal Alumni Connect Scholarship listing returned to platform admins.
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [SCHOLARSHIP] }
+        title: { type: string }
+        organizer_name: { type: string }
+        description: { type: string }
+        location: { type: string, nullable: true }
+        attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+        status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, EXPIRED, CANCELLED] }
+        deadline: { type: string, format: date-time, nullable: true }
+        target_fields: { type: array, items: { type: string } }
+        is_sample: { type: boolean }
+        created_by: { type: string, format: uuid, nullable: true }
+    AdminScholarshipApplicationDetails:
+      type: object
+      properties:
+        application_id: { type: string, format: uuid }
+        opportunity_id: { type: string, format: uuid }
+        scholarship_title: { type: string }
+        is_sample: { type: boolean }
+        graduate_id: { type: string, format: uuid }
+        applicant_name: { type: string }
+        applicant_college: { type: string, nullable: true }
+        applicant_department: { type: string, nullable: true }
+        applicant_major: { type: string, nullable: true }
+        applicant_graduation_year: { type: integer, nullable: true }
+        applicant_degree: { type: string, nullable: true }
+        applicant_location: { type: string, nullable: true }
+        cv_document_id: { type: string, format: uuid, nullable: true }
+        cv_storage_path: { type: string, nullable: true, description: Storage object path; downloadable only when attached to a Scholarship application by an active platform admin. }
+        personal_statement: { type: string, maxLength: 10000, nullable: true }
+        application_data:
+          type: object
+          description: Flexible JSON answers supplied with the current CV + personal statement form.
+          additionalProperties: true
+        status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
+        applied_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     ScholarshipApplication:
       type: object
       properties:
@@ -74,9 +115,9 @@ components:
         personal_statement: { type: string, maxLength: 10000, nullable: true }
         application_data:
           type: object
-          description: Scholarship form answers, maximum 32 KiB; no provider form schema is defined in the catalogue.
+          description: Internal Alumni Connect Scholarship answers, maximum 32 KiB; the current form is CV, personal statement and flexible JSON.
           additionalProperties: true
-        status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
+        status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
         applied_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     ScholarshipApplicationHistory:
@@ -85,8 +126,8 @@ components:
         id: { type: string, format: uuid }
         scholarship_application_id: { type: string, format: uuid }
         old_status: { type: string, nullable: true }
-        new_status: { type: string, enum: [SUBMITTED, WITHDRAWN] }
-        source_type: { type: string, enum: [GRADUATE_ACTION] }
+        new_status: { type: string, enum: [SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN] }
+        source_type: { type: string, enum: [GRADUATE_ACTION, ADMIN_ACTION] }
         changed_at: { type: string, format: date-time }
     CompetitionApplication:
       type: object
@@ -391,17 +432,17 @@ components:
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, NOT_A_SCHOLARSHIP,
-        SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, NOT_A_COMPETITION,
+        SCHOLARSHIP_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_SCHOLARSHIP_APPLICATION, SAMPLE_DATA_NOT_REVIEWABLE, NOT_A_COMPETITION,
         COMPETITION_APPLICATION_NOT_FOUND, CANNOT_WITHDRAW_COMPETITION_APPLICATION,
-        ACCOUNT_UNAVAILABLE, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
+        ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
       content:
         application/json:
           schema:
@@ -1476,6 +1517,266 @@ paths:
                 p_opportunity_id: { type: string, format: uuid }
       responses:
         '200': { description: Closed opportunity }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+
+  /rest/v1/rpc/create_admin_scholarship:
+    post:
+      summary: Platform admin creates an internal SCHOLARSHIP DRAFT owned by Alumni Connect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_title, p_organizer_name, p_description]
+              properties:
+                p_title: { type: string, minLength: 3, maxLength: 200 }
+                p_organizer_name: { type: string, minLength: 2, maxLength: 200 }
+                p_description: { type: string, minLength: 10, maxLength: 10000 }
+                p_location: { type: string, nullable: true }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time, nullable: true }
+                p_target_fields: { type: array, items: { type: string } }
+                p_min_graduation_year: { type: integer, nullable: true }
+                p_max_graduation_year: { type: integer, nullable: true }
+                p_allowed_degrees: { type: array, items: { type: string } }
+                p_required_certifications: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Created Scholarship DRAFT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_admin_scholarship:
+    post:
+      summary: Platform admin edits an internal Scholarship DRAFT and its eligibility criteria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_title, p_organizer_name, p_description]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_title: { type: string, minLength: 3, maxLength: 200 }
+                p_organizer_name: { type: string, minLength: 2, maxLength: 200 }
+                p_description: { type: string, minLength: 10, maxLength: 10000 }
+                p_location: { type: string, nullable: true }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time, nullable: true }
+                p_target_fields: { type: array, items: { type: string } }
+                p_min_graduation_year: { type: integer, nullable: true }
+                p_max_graduation_year: { type: integer, nullable: true }
+                p_allowed_degrees: { type: array, items: { type: string } }
+                p_required_certifications: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Updated Scholarship DRAFT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/publish_admin_scholarship:
+    post:
+      summary: Platform admin publishes an internal Scholarship DRAFT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Published Scholarship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/close_admin_scholarship:
+    post:
+      summary: Platform admin closes an internal Scholarship DRAFT or ACTIVE listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Closed Scholarship
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScholarshipOpportunity'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/list_admin_scholarship_applications:
+    post:
+      summary: Platform admin lists all internal Scholarship applications with optional filters and cursor pagination
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_opportunity_id: { type: string, format: uuid, nullable: true }
+                p_status: { type: string, enum: [ALL, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, WITHDRAWN], default: ALL }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 25 }
+                p_before_applied_at: { type: string, format: date-time, nullable: true }
+                p_before_id: { type: string, format: uuid, nullable: true }
+      responses:
+        '200': { description: Filtered Scholarship application page }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_admin_scholarship_application:
+    post:
+      summary: Platform admin reads one Scholarship application and the applicant profile fields used for review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id]
+              properties:
+                p_application_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Scholarship application details for the platform admin
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminScholarshipApplicationDetails'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_scholarship_application:
+    post:
+      summary: Platform admin advances SUBMITTED to UNDER_REVIEW, then decides ACCEPTED or REJECTED
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_application_id, p_status]
+              properties:
+                p_application_id: { type: string, format: uuid }
+                p_status: { type: string, enum: [UNDER_REVIEW, ACCEPTED, REJECTED] }
+                p_note: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200': { description: Updated Scholarship application with audit history and applicant notification }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/assert_platform_admin:
+    post:
+      summary: Confirms the authenticated caller has active platform-admin access
+      responses:
+        '200': { description: true when the caller is an active platform admin }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/list_graduate_invitations:
+    post:
+      summary: Platform admin lists graduate invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: ALL }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Invitation list }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_platform_admin_access:
+    post:
+      summary: Platform admin grants or revokes another verified user's platform-admin access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_user_id, p_is_active, p_reason]
+              properties:
+                p_user_id: { type: string, format: uuid }
+                p_is_active: { type: boolean }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Admin access updated }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/request_account_deletion:
+    post:
+      summary: Authenticated user requests deletion of their own account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_reason: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        '200': { description: Deletion request id }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_account_deletion_queue:
+    post:
+      summary: Platform admin lists account deletion requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_status: { type: string, default: REQUESTED }
+                p_limit: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200': { description: Account deletion queue }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/review_account_deletion_request:
+    post:
+      summary: Platform admin approves or rejects an account deletion request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_request_id, p_decision, p_note]
+              properties:
+                p_request_id: { type: string, format: uuid }
+                p_decision: { type: string, enum: [APPROVE, REJECT] }
+                p_note: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: APPROVED or REJECTED }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/transfer_company_creator:
+    post:
+      summary: Platform admin transfers company creator ownership to another verified account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_new_owner_id, p_reason]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_new_owner_id: { type: string, format: uuid }
+                p_reason: { type: string, minLength: 8, maxLength: 1000 }
+      responses:
+        '200': { description: Company ownership transferred }
         4XX: { $ref: '#/components/responses/BusinessError' }
 
   /functions/v1/parse-cv:

@@ -255,6 +255,7 @@ const claimedDelivery = {
     schema_version: "1.0",
     event: "competition.application.submitted",
     application_id: "11111111-1111-4111-8111-111111111111",
+    provider_opportunity_id: "organizer-competition-9",
     graduate_id: "22222222-2222-4222-8222-222222222222",
     cv_document_id: "33333333-3333-4333-8333-333333333333",
     applicant: { full_name: "Test Applicant", email: "applicant@example.test" },

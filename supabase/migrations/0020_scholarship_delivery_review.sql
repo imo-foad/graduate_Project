@@ -187,7 +187,7 @@ as $is_active_scholarship_reviewer$
     );
 $is_active_scholarship_reviewer$;
 revoke all on function private.is_active_scholarship_reviewer(uuid, text) from public, anon, authenticated;
-grant execute on function private.is_active_scholarship_reviewer(uuid, text) to authenticated, service_role;
+grant execute on function private.is_active_scholarship_reviewer(uuid, text) to service_role;
 
 create or replace function private.is_active_scholarship_admin(p_user_id uuid)
 returns boolean

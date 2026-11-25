@@ -691,6 +691,49 @@ begin
 end
 $get_social_moderation_history$;
 
+-- A moderated item cannot be edited by its author while hidden/removed. Otherwise the
+-- author could replace the reviewed payload and later have that unreviewed revision restored.
+create or replace function public.update_social_post(p_post_id uuid, p_content text)
+returns public.social_posts
+language plpgsql security definer set search_path = ''
+as $update_social_post$
+declare v_uid uuid := public._require_uid(); v_content text; v_post public.social_posts;
+begin
+  perform public._require_active_social_user(v_uid);
+  select * into v_post from public.social_posts
+   where id = p_post_id and author_id = v_uid and moderation_status = 'VISIBLE'
+   for update;
+  if not found then raise exception 'SOCIAL_POST_NOT_FOUND' using errcode = 'PT404'; end if;
+  v_content := btrim(coalesce(p_content, ''));
+  if length(v_content) not between 1 and 5000 then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  update public.social_posts set content = v_content where id = v_post.id returning * into v_post;
+  return v_post;
+end
+$update_social_post$;
+
+create or replace function public.update_social_comment(p_comment_id uuid, p_content text)
+returns public.social_post_comments
+language plpgsql security definer set search_path = ''
+as $update_social_comment$
+declare v_uid uuid := public._require_uid(); v_content text; v_comment public.social_post_comments;
+begin
+  perform public._require_active_social_user(v_uid);
+  select * into v_comment from public.social_post_comments
+   where id = p_comment_id and author_id = v_uid and moderation_status = 'VISIBLE'
+   for update;
+  if not found then raise exception 'SOCIAL_COMMENT_NOT_FOUND' using errcode = 'PT404'; end if;
+  v_content := btrim(coalesce(p_content, ''));
+  if length(v_content) not between 1 and 2000 then
+    raise exception 'INVALID_INPUT' using errcode = 'PT422';
+  end if;
+  update public.social_post_comments set content = v_content
+   where id = v_comment.id returning * into v_comment;
+  return v_comment;
+end
+$update_social_comment$;
+
 revoke all on function public.create_social_content_report(text, uuid, text, text) from public, anon, authenticated;
 revoke all on function public.get_my_social_reports(integer) from public, anon, authenticated;
 revoke all on function public.get_social_moderation_queue(text, integer) from public, anon, authenticated;

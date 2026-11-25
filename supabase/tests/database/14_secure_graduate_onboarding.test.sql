@@ -95,25 +95,32 @@ select throws_ok($q$select public.set_platform_admin_access(tests.id('admin'),fa
   'PT409','LAST_ACTIVE_ADMIN','last active administrator cannot be revoked');
 reset role;
 
--- The invitation process requires a current platform admin and records explicit manual verification.
+-- Invitation creation is a service-role operation, with the active admin recorded as actor.
 select tests.login('outsider');
 select throws_ok($q$select * from public.create_graduate_invitation(
- 'new.grad@tests.local','New Graduate','Registrar record checked and identity verified')$q$,
- 'PT403','ADMIN_REQUIRED','ordinary graduate cannot send invitations');
+ tests.id('admin'),'new.grad@tests.local','New Graduate',
+ 'Registrar record checked and identity verified')$q$,
+ '42501',null,'ordinary graduate cannot execute the service-only invitation function');
+reset role;
+
+select set_config('request.jwt.claims',
+  jsonb_build_object('sub',tests.id('admin'),'role','service_role')::text,true);
+set local role service_role;
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'bad-email','New Graduate','Registrar record checked and identity verified')$q$,
+ 'PT422','INVALID_INPUT','invalid email is rejected by the service-role operation');
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'new.grad@tests.local','N','Registrar record checked and identity verified')$q$,
+ 'PT422','INVALID_INPUT','invalid display name is rejected by the service-role operation');
+select is((select status from public.create_graduate_invitation(
+ tests.id('admin'),'new.grad@tests.local','New Graduate',
+ 'Registrar record checked and identity verified')),
+ 'INVITING','service role creates an audited invitation on behalf of an active admin');
+select throws_ok($q$select * from public.create_graduate_invitation(
+ tests.id('admin'),'NEW.GRAD@TESTS.LOCAL','Duplicate Graduate','Another verified identity')$q$,
+ 'PT409','INVITATION_ALREADY_ACTIVE','normalized email cannot have duplicate active invitations');
 reset role;
 select tests.login('admin');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'bad-email','New Graduate','Registrar record checked and identity verified')$q$,
- 'PT422','INVALID_INPUT','invalid email is rejected');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'new.grad@tests.local','N','Registrar record checked and identity verified')$q$,
- 'PT422','INVALID_INPUT','invalid display name is rejected');
-select is((select status from public.create_graduate_invitation(
- 'new.grad@tests.local','New Graduate','Registrar record checked and identity verified')),
- 'INVITING','admin may create an audited graduate invitation');
-select throws_ok($q$select * from public.create_graduate_invitation(
- 'NEW.GRAD@TESTS.LOCAL','Duplicate Graduate','Another verified identity')$q$,
- 'PT409','INVITATION_ALREADY_ACTIVE','normalized email cannot have duplicate active invitations');
 select is((select count(*)::int from public.list_graduate_invitations('INVITING',50)),1,
  'admins can list invitations and their manual verification record');
 reset role;

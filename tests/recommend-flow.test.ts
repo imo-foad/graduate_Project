@@ -21,9 +21,9 @@ function deps(over: Partial<FlowDeps> & { versions?: number[]; saveErrors?: (str
       return { error: e ? { message: e } : null };
     }),
     readCached: over.readCached ?? (async () => { calls.read++; return { data: [
-      { opportunity: { status: "ACTIVE", deadline: new Date(NOW + 1e6).toISOString() } },
-      { opportunity: { status: "ACTIVE", deadline: new Date(NOW - 1e6).toISOString() } },
-      { opportunity: { status: "CLOSED" } }] }; }),
+      { opportunity: { type: "JOB", status: "ACTIVE", deadline: new Date(NOW + 1e6).toISOString() } },
+      { opportunity: { type: "JOB", status: "ACTIVE", deadline: new Date(NOW - 1e6).toISOString() } },
+      { opportunity: { type: "JOB", status: "CLOSED" } }] }; }),
   };
   return { d, calls };
 }
@@ -75,10 +75,10 @@ test("cached rows are filtered by current availability and report their status",
   const { d } = deps({
     cacheState: async () => ({ dirty: false, count: 4 }),
     readCached: async () => ({ data: [
-      { id: "open", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 1 } },
-      { id: "waitlist", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10, waitlist_enabled: true } },
-      { id: "full", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10 } },
-      { id: "upcoming", opportunity: { status: "ACTIVE", registration_opens_at: new Date(NOW + 1e6).toISOString() } },
+      { id: "open", opportunity: { type: "JOB", status: "ACTIVE", capacity: 10, registered_count: 1 } },
+      { id: "waitlist", opportunity: { type: "EVENT", status: "ACTIVE", capacity: 10, registered_count: 10, waitlist_enabled: true } },
+      { id: "full", opportunity: { type: "EVENT", status: "ACTIVE", capacity: 10, registered_count: 10 } },
+      { id: "upcoming", opportunity: { type: "EVENT", status: "ACTIVE", registration_opens_at: new Date(NOW + 1e6).toISOString() } },
     ] }),
   });
   const r = await runRecommend(d);

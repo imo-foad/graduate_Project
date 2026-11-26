@@ -3,12 +3,21 @@ export interface OpenCheckable { status?: string | null; deadline?: string | nul
 
 // Product scope (mirror of SQL public.is_opportunity_type_active). Scholarship (issue #14) and
 // Competition (issue #15) are cancelled product lines: their rows are retained for history only.
+// The final product scope for the six active types is still PENDING; this list only mirrors SQL today.
+export const ACTIVE_OPPORTUNITY_TYPES: readonly string[] = ["JOB", "INTERNSHIP", "TRAINING", "EVENT", "CONFERENCE", "VOLUNTEER"];
 export const CANCELLED_OPPORTUNITY_TYPES: readonly string[] = ["SCHOLARSHIP", "COMPETITION"];
+
+/**
+ * Exact mirror of SQL `coalesce(p_type in ('JOB', ...), false)`: an allow-list, case-sensitive, and
+ * without trimming. `"job"`, `"JOB "`, `" JOB"`, `""`, unknown values and non-strings are all false.
+ * Keep this in sync with public.is_opportunity_type_active — a deny-list here would silently accept
+ * unknown types that SQL rejects.
+ */
+export function isActiveOpportunityType(type: string | null | undefined): boolean {
+  return typeof type === "string" && ACTIVE_OPPORTUNITY_TYPES.includes(type);
+}
 export function isCancelledOpportunityType(type: string | null | undefined): boolean {
   return typeof type === "string" && CANCELLED_OPPORTUNITY_TYPES.includes(type);
-}
-export function isActiveOpportunityType(type: string | null | undefined): boolean {
-  return typeof type === "string" && type.length > 0 && !isCancelledOpportunityType(type);
 }
 
 export function isOpportunityOpen(o: OpenCheckable | null | undefined, now: Date = new Date()): boolean {
@@ -53,16 +62,18 @@ export function registrationAvailability(o: AvailabilityCheckable | null | undef
 }
 
 /**
- * Drop recommendations that cannot be acted on: cancelled opportunity types, closed opportunities and
+ * Drop recommendations that cannot be acted on: anything outside the active type allow-list, closed opportunities and
  * full events without a waitlist. Defence in depth for the project scope: the SQL candidate projection
- * already excludes cancelled types, and this also filters legacy cached rows.
+ * already applies the same allow-list, and this also filters legacy cached rows.
  */
 export function filterAvailableRecommendations<T extends { opportunity?: (AvailabilityCheckable & { type?: string | null }) | null }>(
   items: T[],
   now: Date = new Date(),
 ): T[] {
   return items.filter((r) => {
-    if (r.opportunity && isCancelledOpportunityType(r.opportunity.type)) return false;
+    // Parity with the SQL candidate projection: only the active allow-list may be surfaced. This also
+    // catches legacy cached rows for cancelled lines, unknown types and malformed type values.
+    if (r.opportunity && !isActiveOpportunityType(r.opportunity.type)) return false;
     const status = registrationAvailability(r.opportunity, now);
     return status !== "CLOSED" && status !== "FULL";
   });

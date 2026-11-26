@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { scoreOpportunity, weightProfile } from "../supabase/functions/_shared/scoring.ts";
 
 test("all recommendation families keep weights normalised", () => {
-  for (const type of ["JOB","INTERNSHIP","EVENT","CONFERENCE","TRAINING","SCHOLARSHIP","COMPETITION"]) {
+  for (const type of ["JOB","INTERNSHIP","EVENT","CONFERENCE","TRAINING","VOLUNTEER"]) {
     const total = Object.values(weightProfile(type)).reduce((sum, weight) => sum + (weight ?? 0), 0);
     assert.equal(total, 100, type);
   }

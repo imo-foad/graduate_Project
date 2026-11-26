@@ -863,43 +863,6 @@
   "registration_opens_days": 5
  },
  {
-  "seed_key": "comp-hackathon",
-  "type": "COMPETITION",
-  "title": "University Hackathon",
-  "organizer_name": "Dev Club (sample)",
-  "description": "48-hour team hackathon.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 22,
-  "start_days": 28,
-  "end_days": 30,
-  "capacity": 80,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Computer Science"
-  ],
-  "event": {
-   "venue": "Cairo Campus (sample)",
-   "target_audience": "Graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "PROBLEM_SOLVING",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   },
-   {
-    "skill_id": "TEAMWORK",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
   "seed_key": "vol-code-mentor",
   "type": "VOLUNTEER",
   "title": "Volunteer Coding Mentor",
@@ -1076,32 +1039,5 @@
     "is_required": false
    }
   ]
- },
- {
-  "seed_key": "schol-masters-cs",
-  "type": "SCHOLARSHIP",
-  "title": "Master's Scholarship in Computing",
-  "organizer_name": "Future Fund (sample)",
-  "description": "Funded postgraduate scholarship.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 60,
-  "target_fields": [
-   "Computer Science"
-  ],
-  "skills": [
-   {
-    "skill_id": "ALGORITHMS",
-    "importance": 3,
-    "min_level": 2,
-    "is_required": false
-   }
-  ],
-  "eligibility": {
-   "allowed_degrees": [
-    "Bachelor"
-   ]
-  }
  }
 ]

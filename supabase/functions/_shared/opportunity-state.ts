@@ -1,6 +1,16 @@
 // Mirror of SQL public.is_opportunity_open(status, deadline, end_at). Boundary: deadline/end_at == now is still open.
 export interface OpenCheckable { status?: string | null; deadline?: string | null; end_at?: string | null }
 
+// Product scope (mirror of SQL public.is_opportunity_type_active). Scholarship (issue #14) and
+// Competition (issue #15) are cancelled product lines: their rows are retained for history only.
+export const CANCELLED_OPPORTUNITY_TYPES: readonly string[] = ["SCHOLARSHIP", "COMPETITION"];
+export function isCancelledOpportunityType(type: string | null | undefined): boolean {
+  return typeof type === "string" && CANCELLED_OPPORTUNITY_TYPES.includes(type);
+}
+export function isActiveOpportunityType(type: string | null | undefined): boolean {
+  return typeof type === "string" && type.length > 0 && !isCancelledOpportunityType(type);
+}
+
 export function isOpportunityOpen(o: OpenCheckable | null | undefined, now: Date = new Date()): boolean {
   if (!o || o.status !== "ACTIVE") return false;
   const t = now.getTime();
@@ -42,12 +52,17 @@ export function registrationAvailability(o: AvailabilityCheckable | null | undef
   return "OPEN";
 }
 
-/** Drop recommendations that cannot be acted on: closed opportunities and full events without a waitlist. */
-export function filterAvailableRecommendations<T extends { opportunity?: AvailabilityCheckable | null }>(
+/**
+ * Drop recommendations that cannot be acted on: cancelled opportunity types, closed opportunities and
+ * full events without a waitlist. Defence in depth for the project scope: the SQL candidate projection
+ * already excludes cancelled types, and this also filters legacy cached rows.
+ */
+export function filterAvailableRecommendations<T extends { opportunity?: (AvailabilityCheckable & { type?: string | null }) | null }>(
   items: T[],
   now: Date = new Date(),
 ): T[] {
   return items.filter((r) => {
+    if (r.opportunity && isCancelledOpportunityType(r.opportunity.type)) return false;
     const status = registrationAvailability(r.opportunity, now);
     return status !== "CLOSED" && status !== "FULL";
   });

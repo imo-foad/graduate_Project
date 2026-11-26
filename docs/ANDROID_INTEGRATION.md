@@ -41,7 +41,7 @@ Expected outcomes:
 - `503 OTP_DELIVERY_FAILED`: the account remains pending and OTP delivery must be retried.
 - **Safe OTP resend:** resubmit the same registration request using the same phone number and National ID. The server compares the normalized phone with the keyed National-ID digest and resumes only that exact `PENDING_VERIFICATION` account; it sends a new OTP without creating a second Auth user. A different identity, a different phone, or an already-active account is not eligible for this retry and receives the normal conflict response. This retry does not change the password already stored for the pending Auth account; use password recovery if it must be changed.
 
-The mock identity provider is allowed only in explicitly configured disposable local tests. It must not silently replace an unavailable institutional provider in any shared or production environment.
+The mock identity provider is allowed only when `ALLOW_MOCK_IDENTITY=true` **and** the Edge Function's `SUPABASE_URL` uses HTTP with a local host (`localhost`, `127.0.0.1`, `kong` or `supabase_kong`). The Edge Function rejects mock mode with `503 MOCK_IDENTITY_LOCAL_ONLY` on any hosted/non-local URL, even if the flag is accidentally enabled. It must never silently replace an unavailable institutional provider in a shared or production environment.
 
 **Step B — confirm the SMS code**
 

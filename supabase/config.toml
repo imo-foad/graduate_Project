@@ -13,7 +13,7 @@ enable_signup = false   # demo accounts are provisioned by scripts/provision-dem
 # Enables the GoTrue phone provider for phone/password login of locally provisioned users.
 # Global [auth].enable_signup remains false: public phone/email signup is still disabled.
 # Keep phone confirmation enabled; synthetic Auth Admin provisioning explicitly confirms test accounts.
-enable_signup = true
+enabled = true
 enable_confirmations = true
 
 [functions.recommend]

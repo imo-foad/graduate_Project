@@ -77,7 +77,8 @@ jobs:
           grep -Fxq "SMOKE RESULT: PASS" .ci-logs/university-seed-smoke.log
           grep -q "PASS: synthetic university seed applied twice" .ci-logs/university-seed-smoke.log
           grep -q "Auth first pass:" .ci-logs/university-seed-apply.log
-          grep -q "Counts:" .ci-logs/university-seed-apply.log
+          grep -q "First-pass counts:" .ci-logs/university-seed-apply.log
+          grep -q "Second-pass counts:" .ci-logs/university-seed-apply.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -54,6 +54,99 @@ test("provisioning request targets Auth admin API and carries no hard-coded secr
 
 const university = JSON.parse(readFileSync(new URL("../fixtures/university-accounts.json", import.meta.url), "utf8"));
 
+test("synthetic phone fixtures match the exact SQL E.164 constraint", () => {
+  const sql = readFileSync(new URL("../supabase/migrations/0034_synthetic_university_dataset.sql", import.meta.url), "utf8");
+  assert.match(sql, /left\(phone, 1\) = '\+'[\s\S]*substring\(phone from 2\) ~ '\^\[1-9\]\[0-9\]\{7,14\}\
+  assert.deepEqual(validateUniversityFixtures(university), []);
+  assert.equal(university.students.length,20);
+  assert.equal(university.faculty.length,10);
+  assert.equal(university.administrators.length,10);
+  assert.equal(new Set(university.students.map((s: any)=>s.gpa)).size,20);
+  assert.ok(university.students.every((s: any)=>s.gpa_scale===4.0 && s.gpa>=0 && s.gpa<=4));
+  assert.equal(new Set(university.students.map((s: any)=>s.academic_track)).size,7);
+});
+
+test("university fixture validation requires at least five distinct approved tracks", () => {
+  const invalid = structuredClone(university);
+  const keepTracks = new Set([
+    "Software Engineering", "Artificial Intelligence",
+    "Data Science and Analytics", "Cybersecurity",
+  ]);
+  for (const student of invalid.students) {
+    if (!keepTracks.has(student.academic_track)) student.academic_track = "Software Engineering";
+  }
+  assert.equal(new Set(invalid.students.map((student: any) => student.academic_track)).size, 4);
+  assert.ok(validateUniversityFixtures(invalid).some((error: string) => error.includes("at least five")));
+});
+
+test("university fixture validation rejects invalid GPA, track and duplicate reference", () => {
+  const invalid=structuredClone(university);
+  invalid.students[0].gpa=4.25;
+  invalid.students[1].academic_track="Cancelled Track";
+  invalid.students[2].institution_ref=invalid.students[0].institution_ref;
+  const errors=validateUniversityFixtures(invalid);
+  assert.ok(errors.some((e: string)=>e.includes("GPA")));
+  assert.ok(errors.some((e: string)=>e.includes("academic track")));
+  assert.ok(errors.some((e: string)=>e.includes("institution_ref")));
+});
+
+test("new synthetic Auth request creates phone-only accounts without SMS delivery", () => {
+  const req=buildCreatePhoneUserRequest("http://127.0.0.1:54321","local-key",university.students[0],"demo-password-123");
+  assert.equal(req.url,"http://127.0.0.1:54321/auth/v1/admin/users");
+  const body=JSON.parse(req.init.body as string);
+  assert.equal(body.phone,university.students[0].phone);
+  assert.equal(body.phone_confirm,true);
+  assert.equal(body.user_metadata.synthetic_seed,true);
+  assert.equal(Object.hasOwn(body,"email"),false);
+});
+
+test("non-local university Auth URL is rejected before the first network request", async () => {
+  let requests=0;
+  await assert.rejects(provisionUniversityAccounts({
+    supabaseUrl:"https://demo-project.supabase.co",serviceRoleKey:"not-real",
+    password:"synthetic-demo-password",accounts:university,
+    fetchImpl:async()=>{requests+=1;throw new Error("network call must not happen");},
+  }),/REFUSING non-local/);
+  assert.equal(requests,0);
+  assert.throws(()=>assertLocalSupabaseApiUrl("http://10.0.0.12:54321"),/REFUSING non-local/);
+  assert.throws(()=>assertLocalSupabaseApiUrl("https://127.0.0.1:54321"),/REFUSING non-local/);
+  assert.equal(assertLocalSupabaseApiUrl("http://localhost:54321"),"http://localhost:54321");
+});
+
+test("university seed SQL is guarded, transactional, deterministic and credential-free", () => {
+  const sql=buildSeed()["04_university_accounts.sql"];
+  assert.match(sql,/^begin;$/m);
+  assert.match(sql,/^commit;$/m);
+  assert.match(sql,/SYNTHETIC_UNIVERSITY_SEED_REQUIRES_LOCAL_GUARD/);
+  assert.match(sql,/SYNTHETIC_SEED/);
+  assert.match(sql,/private\.platform_admins/);
+  assert.match(sql,/student_academic_records/);
+  assert.match(sql,/faculty_academic_records/);
+  assert.match(sql,/raw_user_meta_data.*synthetic_seed/);
+  assert.match(sql,/raw_user_meta_data.*seed_key/);
+  assert.doesNotMatch(sql,/DEMO_PASSWORD|service_role_key|national_id/i);
+  assert.equal(buildSeed()["04_university_accounts.sql"],sql);
+});
+
+test("both synthetic seed targets reject hosted endpoints before any external operation", () => {
+  assert.throws(() => assertLocalUniversitySeedTargets(
+    "http://localhost:54321", "postgresql://postgres:secret@db.example.supabase.co:5432/postgres", {}
+  ), /not local/);
+  assert.throws(() => assertLocalUniversitySeedTargets(
+    "https://localhost:54321", "postgresql://postgres:postgres@127.0.0.1:54322/postgres", {}
+  ), /REFUSING non-local/);
+  assert.deepEqual(
+    assertLocalUniversitySeedTargets(
+      "http://127.0.0.1:54321","postgresql://postgres:postgres@127.0.0.1:54322/postgres",{}
+    ),
+    {apiBase:"http://127.0.0.1:54321",dbTarget:{host:"127.0.0.1",port:54322}}
+  );
+});
+/);
+  assert.ok([...university.students, ...university.faculty, ...university.administrators]
+    .every((account: any) => /^\+[1-9][0-9]{7,14}$/.test(account.phone)));
+});
+
 test("university fixture has 20 students, 10 faculty, 10 admins and 20 distinct GPA values", () => {
   assert.deepEqual(validateUniversityFixtures(university), []);
   assert.equal(university.students.length,20);

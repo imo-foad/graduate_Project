@@ -147,3 +147,13 @@ test("recommendation candidates carry status and timestamps required by the scor
       `candidate JSON must expose ${field} to the deterministic scorer`);
   }
 });
+
+test("company verification invalidates recommendation caches with an explicit all-graduates predicate", () => {
+  const trigger = finalFunctions(allMigrationsSql()).get("mark_company_recommendations_dirty");
+  assert.ok(trigger, "final company recommendation invalidation trigger must exist");
+  assert.match(trigger.body,
+    /update public\\.graduate_profiles[\\s\\S]*?where profile_id is not null/i);
+  assert.doesNotMatch(trigger.body,
+    /update public\\.graduate_profiles\\s+set[^;]*;/i,
+    "the local PostgREST safe-update guard rejects unrestricted updates");
+});

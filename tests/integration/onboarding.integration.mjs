@@ -54,8 +54,9 @@ let invitationId = null;
 let companyId = null;
 let companyJobId = null;
 let passed = 0;
-const pass = (name, condition) => {
-  assert.equal(Boolean(condition), true, name);
+const pass = (name, condition, details = undefined) => {
+  const message = details === undefined ? name : name + "; diagnostics=" + JSON.stringify(details);
+  assert.equal(Boolean(condition), true, message);
   passed++;
   console.log("PASS " + name);
 };
@@ -326,7 +327,8 @@ try {
   });
   const verificationRow = firstRow(verification.json);
   pass("platform admin can verify a pending company through the audited review RPC",
-    verification.status === 200 && verificationRow?.verification_status === "VERIFIED");
+    verification.status === 200 && verificationRow?.verification_status === "VERIFIED",
+    { status: verification.status, body: verification.json ?? verification.text });
 
   const verificationHistory = await request(
     "/rest/v1/company_verification_history?select=company_id,actor_user_id,old_status,new_status,note&company_id=eq." + companyId,

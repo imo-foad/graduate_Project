@@ -54,7 +54,7 @@ export interface AvailabilityCheckable extends OpenCheckable {
   registered_count?: number | null;
   waitlist_enabled?: boolean | null;
   company_id?: string | null;
-  company?: { verification_status?: string | null } | null;
+  company_verification_status?: string | null;
 }
 export type AvailabilityStatus = "OPEN" | "UPCOMING" | "WAITLIST_ONLY" | "FULL" | "CLOSED";
 
@@ -86,9 +86,9 @@ export function filterAvailableRecommendations<T extends { opportunity?: (Availa
     // Parity with the SQL candidate projection: only the active allow-list may be surfaced. This also
     // catches legacy cached rows for cancelled/excluded lines, unknown types and malformed type values.
     if (r.opportunity && !isActiveOpportunityType(r.opportunity.type)) return false;
-    // Cached rows are joined to the current company verification state. Missing or suspended
-    // companies are not actionable even when their old opportunity row is still marked ACTIVE.
-    if (r.opportunity?.company_id && r.opportunity.company?.verification_status !== "VERIFIED") return false;
+    // The opportunity exposes a safe, denormalized company status because the companies table itself
+    // is intentionally member/admin-only under RLS. Missing or suspended companies are not actionable.
+    if (r.opportunity?.company_id && r.opportunity.company_verification_status !== "VERIFIED") return false;
     const status = registrationAvailability(r.opportunity, now);
     return status !== "CLOSED" && status !== "FULL";
   });

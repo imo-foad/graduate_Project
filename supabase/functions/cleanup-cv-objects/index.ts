@@ -47,8 +47,9 @@ Deno.serve(async (req) => {
         failed++;
         const { error: markError } = await admin.rpc("fail_cv_cleanup", {
           p_id: item.id,
-          // Storage error text is operational metadata, never national ID or file contents.
-          p_error: `STORAGE_DELETE_FAILED:${storageError.message ?? "unknown"}`.slice(0, 500),
+          // Do not persist provider error text: it can echo a private object key/path.
+          // The durable queue stores a stable code; operators can correlate provider logs by request time.
+          p_error: "STORAGE_DELETE_FAILED",
         });
         if (markError) console.error("CV cleanup failure could not be recorded", { code: markError.code });
         continue;

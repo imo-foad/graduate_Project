@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> all versioned migrations through 0028 -> seeds -> pgTAP (17 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> every discovered versioned migration -> seeds -> pgTAP (18 files) -> concurrency. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -37,9 +37,17 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 22 ] || fail "expected at least 22 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -gt 0 ] || fail "no versioned SQL migration files were discovered"
+PREVIOUS_VERSION=""
 for f in "${MIGRATIONS[@]}"; do
-  grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
+  name="$(basename "$f")"
+  [[ "$name" =~ ^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$ ]] || fail "migration filename is not four-digit versioned: $name"
+  version="${BASH_REMATCH[1]}"
+  if [[ -n "$PREVIOUS_VERSION" ]] && [[ ! "$version" > "$PREVIOUS_VERSION" ]]; then
+    fail "migration versions must be unique and increasing: $name follows version $PREVIOUS_VERSION"
+  fi
+  PREVIOUS_VERSION="$version"
+  grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $name as applied"
 done
 WANT="$(for f in "${MIGRATIONS[@]}"; do basename "$f" | sed -E 's/^([0-9]+)_.*/\1/'; done | sort | paste -sd, -)"
 GOT="$(q "select coalesce(string_agg(version, ',' order by version), '') from supabase_migrations.schema_migrations")"
@@ -61,13 +69,23 @@ WANT_OPPS="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("fixture
 [ "$(q 'select count(*) from public.opportunity_skills os left join public.skills s on s.id = os.skill_id where s.id is null')" = "0" ] || fail "opportunity_skills reference unknown skills"
 echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on second load)"
 
-# ---- D. pgTAP: all seventeen files must run and pass
+# ---- D. pgTAP: all eighteen files must run and pass
 echo "=== D. supabase test db"
 EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
+# Run Test 15 by itself first so its auth/catalogue TAP plan is independently observable.
+echo "=== D1. focused Test 15"
+supabase test db supabase/tests/database/15_three_type_scope.test.sql 2>&1 | tee "$LOG_DIR/pgtap-15-focused.log"
+if grep -Eq "^(not ok|Result: FAIL)|Failed [0-9]+" "$LOG_DIR/pgtap-15-focused.log"; then fail "focused Test 15 reported failures"; fi
+grep -Fq "supabase/tests/database/15_three_type_scope.test.sql" "$LOG_DIR/pgtap-15-focused.log" || fail "focused pgTAP output does not show Test 15 execution"
+grep -Eq "^Files=1, Tests=[1-9][0-9]*," "$LOG_DIR/pgtap-15-focused.log" || fail "focused Test 15 did not execute a non-empty TAP plan"
+grep -Fxq "Result: PASS" "$LOG_DIR/pgtap-15-focused.log" || fail "focused Test 15 TAP plan did not pass"
+echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done
-if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi
+if grep -Eq "^(not ok|Result: FAIL)|Failed [0-9]+" "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi
+grep -Eq "^Files=18, Tests=[1-9][0-9]*," "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 18 files with a non-empty TAP plan"
+grep -Fxq "Result: PASS" "$LOG_DIR/pgtap.log" || fail "full pgTAP TAP plan did not pass"
 
 # ---- E. real concurrent sessions
 echo "=== E. concurrency"

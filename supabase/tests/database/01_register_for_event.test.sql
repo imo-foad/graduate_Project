@@ -98,11 +98,43 @@ select is((public.register_for_event(tests.id('e_wait'))).status, 'WAITLISTED', 
 reset role;
 select is((select count(*)::int from public.event_registrations where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 1, 'single row for re-registered user');
 
--- freeing a seat lets a NEW user register (no auto-promotion is specified in the source)
+-- A confirmed cancellation atomically promotes the oldest FIFO entry before a new user can claim the seat.
 select tests.login('u1');
-select public.cancel_event_registration(tests.id('e_wait'));
+select is((public.cancel_event_registration(tests.id('e_wait'))).status, 'CANCELLED',
+  'confirmed participant cancellation succeeds');
+reset role;
+select is((select status from public.event_registrations
+  where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 'REGISTERED',
+  'the oldest eligible waitlisted participant is automatically promoted');
+select is((select registered_count from public.opportunities where id = tests.id('e_wait')), 1,
+  'FIFO promotion restores the confirmed registration counter');
 select tests.login('u3');
-select is((public.register_for_event(tests.id('e_wait'))).status, 'REGISTERED', 'seat freed by cancellation can be taken');
+select is((public.register_for_event(tests.id('e_wait'))).status, 'WAITLISTED',
+  'a later new participant cannot steal the seat already promoted to FIFO');
+select is((public.cancel_event_registration(tests.id('e_wait'))).status, 'CANCELLED',
+  'a later waitlisted participant can cancel their queue entry');
+reset role;
+select is((select registered_count from public.opportunities where id = tests.id('e_wait')), 1,
+  'cancelling a WAITLISTED participant does not free the confirmed seat');
+select is((select status from public.event_registrations
+  where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 'REGISTERED',
+  'the promoted FIFO participant keeps the confirmed seat');
+select is((select count(*)::int
+  from public.event_registration_status_history h
+  join public.event_registrations r on r.id = h.registration_id
+  where r.opportunity_id = tests.id('e_wait')
+    and r.graduate_id = tests.id('u1')
+    and h.old_status = 'REGISTERED' and h.new_status = 'CANCELLED'
+    and h.actor_user_id = tests.id('u1') and h.source_type = 'CANDIDATE'),
+  1, 'confirmed cancellation is recorded in candidate status history');
+select is((select count(*)::int
+  from public.event_registration_status_history h
+  join public.event_registrations r on r.id = h.registration_id
+  where r.opportunity_id = tests.id('e_wait')
+    and r.graduate_id = tests.id('u2')
+    and h.old_status = 'WAITLISTED' and h.new_status = 'REGISTERED'
+    and h.actor_user_id is null and h.source_type = 'SYSTEM'),
+  1, 'FIFO promotion is recorded separately as a system status-history event');
 
 -- 5. rule violations
 select tests.login('u1');

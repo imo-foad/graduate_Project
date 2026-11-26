@@ -21,13 +21,14 @@ end $f$;
 create function tests.mk_opp(p_key text, p_type text, p_props jsonb default '{}') returns uuid language plpgsql as $f$
 declare v uuid;
 begin
+  -- Test-created rows must not be counted as synthetic catalogue seed rows.
   insert into public.opportunities (seed_key, type, title, status, deadline, capacity, waitlist_enabled,
-    registration_opens_at, attendance_mode)
+    registration_opens_at, attendance_mode, is_sample)
   values ('t-' || p_key, p_type, 'Test ' || p_key, coalesce(p_props ->> 'status', 'ACTIVE'),
     now() + make_interval(days => coalesce((p_props ->> 'deadline_days')::int, 5)),
     (p_props ->> 'capacity')::int, coalesce((p_props ->> 'waitlist')::boolean, false),
     case when p_props ? 'opens_in_days' then now() + make_interval(days => (p_props ->> 'opens_in_days')::int) end,
-    'ONLINE')
+    'ONLINE', false)
   returning id into v;
   insert into tests.ids values (p_key, v);
   return v;
@@ -110,10 +111,27 @@ select is(
   0,
   'no non-cancelled row exists outside the three active types'
 );
+-- The fixture currently contains seven seeded TRAINING catalogue rows. This test
+-- contributes four isolated TRAINING fixtures (including one CLOSED row): keep the historical
+-- total of eleven rows while measuring the seeded catalogue independently.
 select is(
-  (select count(*)::int from public.opportunities where type = 'TRAINING' and status = 'ACTIVE'),
   (select count(*)::int from public.opportunities where type = 'TRAINING'),
-  'all seeded TRAINING rows stay active (they are part of the approved scope)'
+  11,
+  'seven seeded TRAINING rows plus four test-owned TRAINING fixtures remain present'
+);
+select is(
+  (select count(*)::int from public.opportunities where type = 'TRAINING' and is_sample is true),
+  7,
+  'the seven seeded TRAINING catalogue rows retain the sample-data marker'
+);
+-- Seed rows are marked is_sample=true by build-seed.mjs. Test-only fixtures above are
+-- deliberately excluded because t_closed is a valid CLOSED TRAINING used by this test.
+select is(
+  (select count(*)::int from public.opportunities
+    where type = 'TRAINING' and is_sample is true and status = 'ACTIVE'),
+  (select count(*)::int from public.opportunities
+    where type = 'TRAINING' and is_sample is true),
+  'all seeded TRAINING catalogue rows stay active (they are part of the approved scope)'
 );
 
 select * from finish();

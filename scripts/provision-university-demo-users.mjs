@@ -6,6 +6,94 @@ import { fileURLToPath } from "node:url";
 
 export const LOCAL_SUPABASE_API_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
+// Keep the client and database rule identical: E.164 '+' followed by 8..15 digits,
+// with a non-zero first digit. Never log a complete synthetic phone number.
+export function isValidE164Phone(value) {
+  return typeof value === "string" && /^\+[1-9][0-9]{7,14}$/.test(value);
+}
+
+function splitPostgresTuple(value) {
+  const fields = [];
+  let current = "";
+  let quote = null;
+  for (let i = 0; i < value.length; i += 1) {
+    const ch = value[i];
+    if (quote) {
+      current += ch;
+      if (ch === quote) {
+        if (value[i + 1] === quote) {
+          current += value[i + 1];
+          i += 1;
+        } else {
+          quote = null;
+        }
+      }
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+    } else if (ch === ",") {
+      fields.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current.trim());
+  return fields;
+}
+
+function maskedPhoneShape(value, requestedPhone) {
+  if (typeof value !== "string" || value.trim() === "" || value === "null") {
+    return { present: false };
+  }
+  const phone = value.trim();
+  const digits = phone.replace(/[^0-9]/g, "");
+  return {
+    present: true,
+    length: phone.length,
+    leadingPlus: phone.startsWith("+"),
+    digitsOnlyAfterPlus: /^\+[0-9]+$/.test(phone),
+    validE164: isValidE164Phone(phone),
+    matchesRequested: phone === requestedPhone,
+    lastTwoDigits: digits.slice(-2),
+  };
+}
+
+function extractProfilePhoneFromDetail(detail) {
+  const start = detail.indexOf("Failing row contains (");
+  if (start < 0) return null;
+  const rowStart = start + "Failing row contains (".length;
+  const end = detail.indexOf(").", rowStart);
+  if (end < 0) return null;
+  const fields = splitPostgresTuple(detail.slice(rowStart, end));
+  // profiles declares id, full_name, email, avatar_url, account_status, created_at,
+  // updated_at, then phone. Fall back to a phone-shaped field if earlier columns evolve.
+  const phoneAtCurrentSchema = fields[7];
+  const looksLikePhone = (value) => /^\+?[0-9][0-9 ().-]{7,22}$/.test(value ?? "");
+  if (looksLikePhone(phoneAtCurrentSchema)) return phoneAtCurrentSchema;
+  return fields.find(looksLikePhone) ?? null;
+}
+
+/**
+ * Returns only sanitized diagnostics. The raw Auth/Postgres error detail can include a full
+ * failing database row; never forward that row to public Actions logs.
+ */
+export function summarizeAuthCreateFailure(responseText, requestedPhone) {
+  let body = {};
+  try { body = JSON.parse(responseText); } catch { /* keep only generic diagnostics */ }
+  const detail = typeof body.detail === "string" ? body.detail : "";
+  const message = typeof body.message === "string" ? body.message : "";
+  const constraint = message.match(/constraint ["']([^"']+)["']/i)?.[1] ?? null;
+  const profilePhone = extractProfilePhoneFromDetail(detail);
+  return JSON.stringify({
+    errorCode: body.code ?? body.error_code ?? null,
+    constraint,
+    requestedPhone: maskedPhoneShape(requestedPhone, requestedPhone),
+    profilePhone: maskedPhoneShape(profilePhone, requestedPhone),
+    postgresDetailLength: detail.length,
+  });
+}
+
 export function assertLocalSupabaseApiUrl(raw) {
   if (typeof raw !== "string" || raw.trim() === "" || raw !== raw.trim() || [...raw].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127)) {
     throw new Error("SUPABASE_URL must be an explicit local URL");
@@ -21,6 +109,7 @@ export function assertLocalSupabaseApiUrl(raw) {
 
 export function buildCreatePhoneUserRequest(supabaseUrl, serviceRoleKey, account, password) {
   const base = assertLocalSupabaseApiUrl(supabaseUrl);
+  if (!isValidE164Phone(account?.phone)) throw new Error("Invalid E.164 phone for synthetic seed account");
   return {
     url: `${base}/auth/v1/admin/users`,
     init: {
@@ -82,7 +171,11 @@ export async function provisionUniversityAccounts({ supabaseUrl, serviceRoleKey,
     }
     const req = buildCreatePhoneUserRequest(base, serviceRoleKey, account, password);
     const res = await fetchImpl(req.url, req.init);
-    if (!res.ok) throw new Error(`Local Auth create failed for ${account.seed_key}: HTTP ${res.status} ${(await res.text()).slice(0,240)}`);
+    if (!res.ok) {
+      const responseText = await res.text();
+      const diagnostics = summarizeAuthCreateFailure(responseText, account.phone);
+      throw new Error("Local Auth create failed for " + account.seed_key + ": HTTP " + res.status + " " + diagnostics);
+    }
     const body = await res.json();
     const user = body?.user ?? body;
     if (!user?.id || user.phone !== account.phone || user.email) {

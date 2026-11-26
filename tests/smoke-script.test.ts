@@ -124,3 +124,17 @@ test("CV parsing and rate-limit integration use independent per-user quota bucke
   assert.equal(new Set([...cvUsers, benchmarkUser, rateLimitUser]).size, cvUsers.length + 2,
     "focused parser integration, parser benchmark and quota test must not share per-user CV_PARSE buckets");
 });
+
+
+test("first-admin onboarding runs before the synthetic university seed creates platform admins", () => {
+  const script = readFileSync(join(ROOT, "scripts/run-local-integrations.sh"), "utf8");
+  const serve = script.indexOf("supabase functions serve --env-file");
+  const ready = script.indexOf('[ "$READY" = "1" ]');
+  const onboarding = script.indexOf("node tests/integration/onboarding.integration.mjs");
+  const universitySeed = script.indexOf("node scripts/seed-university-demo.mjs");
+  const universityIntegration = script.indexOf("node tests/integration/university-dataset.integration.mjs");
+  assert.ok(serve >= 0 && ready > serve && onboarding > ready,
+    "onboarding must run after Edge Functions are ready");
+  assert.ok(universitySeed > onboarding && universityIntegration > universitySeed,
+    "one-time bootstrap must run before synthetic university admins are provisioned");
+});

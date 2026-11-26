@@ -23,6 +23,15 @@ const env = (key: string) => Deno.env.get(key) ?? "";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALLOWED_KEYS = new Set(["national_id", "phone", "password", "full_name"]);
 
+function isLocalSupabaseUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return ["localhost", "127.0.0.1", "kong", "supabase_kong"].includes(host) && value.startsWith("http://");
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
   const url = env("SUPABASE_URL");
@@ -100,6 +109,9 @@ Deno.serve(async (req) => {
   if (!provider) {
     // BLOCKED_EXTERNAL: no approved institutional provider/credentials were supplied.
     return json({ error: "IDENTITY_PROVIDER_UNAVAILABLE" }, 503);
+  }
+  if (provider.name === "mock-institutional-identity" && !isLocalSupabaseUrl(url)) {
+    return json({ error: "MOCK_IDENTITY_LOCAL_ONLY" }, 503);
   }
   const verification = await provider.verify({ nationalId, phone });
   if (!verification.verified) {

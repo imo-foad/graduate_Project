@@ -304,9 +304,13 @@ class SecurityAndAuthContract(unittest.TestCase):
 
     def test_authenticated_operations_inherit_global_security(self):
         for path, ops in API["paths"].items():
-            if path == self.TOKEN: continue
+            if path in (self.TOKEN, "/functions/v1/register"): continue
             for method, op in ops.items():
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
+
+    def test_public_registration_still_requires_project_api_key(self):
+        self.assertEqual(API["paths"]["/functions/v1/register"]["post"]["security"], [{"apiKeyAuth": []}])
+        self.assertEqual(API["paths"]["/functions/v1/finalize-registration"]["post"].get("security"), None)
 
     def test_grant_types_and_bodies(self):
         op = API["paths"][self.TOKEN]["post"]
@@ -316,7 +320,7 @@ class SecurityAndAuthContract(unittest.TestCase):
         self.assertEqual(sorted(refs), ["PasswordGrantRequest", "RefreshTokenGrantRequest"])
         sch = API["components"]["schemas"]
         pw, rf = sch["PasswordGrantRequest"], sch["RefreshTokenGrantRequest"]
-        self.assertEqual(set(pw["required"]), {"email", "password"})
+        self.assertEqual(set(pw["required"]), {"phone", "password"})
         self.assertEqual(set(rf["required"]), {"refresh_token"})
         for s in (pw, rf): self.assertIs(s["additionalProperties"], False)
         self.assertFalse(set(pw["properties"]) & set(rf["properties"]), "bodies must be mutually exclusive")

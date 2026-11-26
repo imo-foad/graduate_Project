@@ -13,6 +13,7 @@
     "test:workflow": "python3 -m unittest tests/workflow_lint.py -v",
     "provision:university:local": "node scripts/provision-university-demo-users.mjs",
     "seed:university:local": "node scripts/seed-university-demo.mjs",
-    "evaluate:cv:local": "node scripts/evaluate-cv-parser-local.mjs"
+    "evaluate:cv:local": "node scripts/evaluate-cv-parser-local.mjs",
+    "verify:university-seed:local": "bash scripts/run-university-seed-smoke.sh"
   }
 }

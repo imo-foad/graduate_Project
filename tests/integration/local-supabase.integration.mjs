@@ -17,8 +17,11 @@ const demoData = demos.find((item) => item.email === "graduate.data@alumni.test"
 const demoCyber = demos.find((item) => item.email === "graduate.cyber@alumni.test");
 assert.ok(demoData && demoCyber, "data and cybersecurity demo graduates are required");
 let passed = 0;
-const pass = (name, condition = true) => {
-  assert.equal(Boolean(condition), true, name);
+const pass = (name, condition = true, details = undefined) => {
+  const message = details === undefined
+    ? name
+    : `${name}; diagnostics=${JSON.stringify(details)}`;
+  assert.equal(Boolean(condition), true, message);
   passed++;
   console.log(`PASS ${name}`);
 };
@@ -144,7 +147,14 @@ try {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   pass("recommend endpoint serves user A cache on second request", second.status === 200 &&
-    second.json?.source === "cache" && Array.isArray(second.json?.items));
+    second.json?.source === "cache" && Array.isArray(second.json?.items), {
+      status: second.status,
+      source: second.json?.source ?? null,
+      error: second.json?.error ?? null,
+      code: second.json?.code ?? null,
+      items_count: Array.isArray(second.json?.items) ? second.json.items.length : null,
+      body: second.json ?? second.text,
+    });
   pass("career profile is recalculated from the caller's own skills on cache hits", hasCareerPath(second, "DATA_ANALYTICS"));
   const forced = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: JSON.stringify({ force: true }),

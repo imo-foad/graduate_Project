@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> all versioned migrations through 0033 -> seeds -> pgTAP (18 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> every discovered versioned migration -> seeds -> pgTAP (18 files) -> concurrency. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -37,9 +37,17 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 22 ] || fail "expected at least 22 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -gt 0 ] || fail "no versioned SQL migration files were discovered"
+PREVIOUS_VERSION=""
 for f in "${MIGRATIONS[@]}"; do
-  grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
+  name="$(basename "$f")"
+  [[ "$name" =~ ^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$ ]] || fail "migration filename is not four-digit versioned: $name"
+  version="${BASH_REMATCH[1]}"
+  if [[ -n "$PREVIOUS_VERSION" && "$version" <= "$PREVIOUS_VERSION" ]]; then
+    fail "migration versions must be unique and increasing: $name follows version $PREVIOUS_VERSION"
+  fi
+  PREVIOUS_VERSION="$version"
+  grep -q "$name" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $name as applied"
 done
 WANT="$(for f in "${MIGRATIONS[@]}"; do basename "$f" | sed -E 's/^([0-9]+)_.*/\1/'; done | sort | paste -sd, -)"
 GOT="$(q "select coalesce(string_agg(version, ',' order by version), '') from supabase_migrations.schema_migrations")"

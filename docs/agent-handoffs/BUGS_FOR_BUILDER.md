@@ -2,7 +2,7 @@
 
 ## 1. P1 — E.164 registration retry lookup
 
-**Status:** Original defect reproduced; current Builder code corrected; final local-DB runtime proof still pending.  
+**Status:** RESOLVED in Builder code and verified by the latest completed pgTAP run (test 19 passed). No remaining code handoff is required; retain as audit history.  
 **Original affected functions:**
 - public.find_pending_registration_retry(text,text) in migration 0030
 - public.find_unlinked_pending_registration_retry(text) in migration 0031
@@ -12,7 +12,7 @@ At Builder commit a522b01d6b0e7f27ed1a82e8ae1680aa05ccb1a2, both SQL functions u
 
 **Current Builder code:** Commit ec7c62e94aa4ec6e24160f72dafe9bf5ff9e6593 rewrote the functions in migrations 0030/0031 and now uses ^[+][1-9][0-9]{7,14}$ in both. The function delimiters and validation blocks are now structurally well formed. Intermediate commit 4c923fef115e70666c7cd5fd720e98151e0be1a0 briefly contained a malformed SQL rewrite and failed the static SQL structure check; that version was superseded by ec7c.
 
-CI 45830300439 on ec7c passed npm/static SQL structure checks but its local database job was cancelled after a newer push, before test 19 runtime verification. The current Builder Edge Function also enforces that the synthetic identity provider can only be used when ALLOW_MOCK_IDENTITY=true and SUPABASE_URL is an HTTP local Supabase host.
+CI 45830300439 on ec7c passed npm/static SQL structure checks but its local database job was cancelled after a newer push. The subsequent latest Builder CI run 45831195333 completed its database job: the official runner executed all 18 pgTAP files / 651 assertions and reported 19_product_lifecycle.test.sql ok. This proves the fixed E.164 lookup assertions pass on the current migrations. The current Builder Edge Function also enforces that the synthetic identity provider can only be used when ALLOW_MOCK_IDENTITY=true and SUPABASE_URL is an HTTP local Supabase host.
 
 **Reproduction against the original defect** (disposable local Supabase with matching pending fixtures; service_role):
 
@@ -23,7 +23,7 @@ select public.find_unlinked_pending_registration_retry('+201011110002');
 
 Expected on current code: valid E.164 values pass validation and exact eligible lookups return the pending profile UUID (or NULL if no matching eligible row exists). Historical actual: PT422 INVALID_INPUT.
 
-**Closure evidence still required:** Complete the official disposable-local-Supabase runner on the latest Builder code and confirm test 19 is visibly executed with its positive valid-phone assertions passing. The latest observed Builder database job has not completed at the time of this report. QA did not modify migrations 0030/0031, register/index.ts, or test 19.
+**Closure evidence:** Satisfied by run 45831195333. The pgtap.log artifact lists 19_product_lifecycle.test.sql as ok, and the summary records 18 files / 651 tests. QA did not modify migrations 0030/0031, register/index.ts, or test 19.
 
 ## 2. P2 — Workflow lint hard-codes obsolete migration count
 

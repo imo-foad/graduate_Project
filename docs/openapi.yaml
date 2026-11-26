@@ -1277,31 +1277,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecommendError'
-  /auth/v1/verify:
-    post:
-      summary: Verify the mandatory phone SMS OTP. This is a Supabase Auth endpoint and returns a session/access token.
-      security:
-      - apiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [type, phone, token]
-              properties:
-                type: { type: string, enum: [sms] }
-                phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
-                token: { type: string, minLength: 6, maxLength: 10 }
-      responses:
-        '200':
-          description: Phone verified; returns an authenticated session
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/TokenResponse' }
-        '400': { description: Invalid or expired OTP }
-        '401': { description: Missing or invalid API key }
   /auth/v1/token:
     post:
       summary: Sign in (password grant) or renew the session (refresh_token grant). No pre-existing JWT is needed; the apikey

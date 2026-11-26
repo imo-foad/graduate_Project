@@ -1,9 +1,10 @@
 // Phone-first registration (Phase 2).
 //
 // Request: { national_id, phone, password, full_name }
-// Flow: institutional identity verification -> create a phone Auth user -> record the keyed digest and
-// verified identities -> send the mandatory phone OTP. The account stays PENDING_VERIFICATION until the
-// client confirms the OTP (Supabase Auth) and calls /functions/v1/finalize-registration.
+// Flow: institutional identity verification -> create or safely resume the exact pending phone account ->
+// record the keyed digest and verified identities -> send the mandatory phone OTP. Re-submitting the same
+// phone + National-ID pair can resend OTP after a partial failure without creating an account alias. The
+// account stays PENDING_VERIFICATION until Auth confirms OTP and /functions/v1/finalize-registration runs.
 //
 // The National ID is never logged, echoed, stored in plaintext, or used as a credential. The institutional
 // provider is external: when it is not configured this endpoint returns 503 IDENTITY_PROVIDER_UNAVAILABLE
@@ -79,12 +80,32 @@ Deno.serve(async (req) => {
     phone_confirm: false,
     user_metadata: { full_name: (verification.display_name?.trim() || input.full_name.trim()).slice(0, 200) },
   });
-  if (created.error || !created.data.user) {
-    // Do not echo the provider/Auth error message: it can contain the phone number.
+
+  let userId: string;
+  let createdNewUser = false;
+  if (!created.error && created.data.user) {
+    userId = created.data.user.id;
+    createdNewUser = true;
+  } else {
+    // A prior request may have created the pending phone account but lost the OTP response, or OTP
+    // delivery may have failed. Only the exact phone + keyed National-ID pair may resume that account.
+    // Active accounts, phone collisions and identities linked elsewhere remain non-recoverable here.
     const already = /already|registered|exists/i.test(created.error?.message ?? "");
-    return json({ error: already ? "PHONE_ALREADY_REGISTERED" : "AUTH_USER_CREATE_FAILED" }, already ? 409 : 500);
+    if (!already) return json({ error: "AUTH_USER_CREATE_FAILED" }, 500);
+
+    const pending = await admin.rpc("find_pending_registration_retry", {
+      p_phone: phone,
+      p_national_id_digest: digest,
+    });
+    if (pending.error) {
+      return json({ error: "REGISTRATION_RETRY_UNAVAILABLE" }, 503);
+    }
+    if (typeof pending.data !== "string" || !UUID_RE.test(pending.data)) {
+      return json({ error: "PHONE_ALREADY_REGISTERED" }, 409);
+    }
+    userId = pending.data;
   }
-  const userId = created.data.user.id;
+
   if (!UUID_RE.test(userId)) {
     return json({ error: "AUTH_USER_CREATE_FAILED" }, 500);
   }
@@ -101,8 +122,8 @@ Deno.serve(async (req) => {
     p_attributes: { display_name_verified: true },
   });
   if (recorded.error) {
-    // Roll back the Auth user so the phone can be registered again once the conflict is resolved.
-    await admin.auth.admin.deleteUser(userId).catch(() => undefined);
+    // Delete only an Auth user created in this request. Never destroy a prior pending account on retry.
+    if (createdNewUser) await admin.auth.admin.deleteUser(userId).catch(() => undefined);
     const linked = /IDENTITY_ALREADY_LINKED/.test(recorded.error.message ?? "");
     return json({ error: linked ? "IDENTITY_ALREADY_LINKED" : "IDENTITY_RECORD_FAILED" }, linked ? 409 : 500);
   }

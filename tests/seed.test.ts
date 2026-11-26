@@ -68,7 +68,13 @@ test("synthetic phone fixtures match the exact SQL E.164 constraint", () => {
 
 test("university fixture validation requires at least five distinct approved tracks", () => {
   const invalid = structuredClone(university);
-  for (const student of invalid.students.slice(4)) student.academic_track = invalid.students[0].academic_track;
+  const keepTracks = new Set([
+    "Software Engineering", "Artificial Intelligence",
+    "Data Science and Analytics", "Cybersecurity",
+  ]);
+  for (const student of invalid.students) {
+    if (!keepTracks.has(student.academic_track)) student.academic_track = "Software Engineering";
+  }
   assert.equal(new Set(invalid.students.map((student: any) => student.academic_track)).size, 4);
   assert.ok(validateUniversityFixtures(invalid).some((error: string) => error.includes("at least five")));
 });

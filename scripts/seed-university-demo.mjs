@@ -40,7 +40,7 @@ select concat_ws('|',
  (select count(*) from auth.users u join public.profiles p on p.id=u.id
    where u.raw_user_meta_data->>'synthetic_seed'='true'
      and u.phone between '+12125550100' and '+12125550139'
-     and p.phone is distinct from u.phone)
+     and p.phone is distinct from private.normalize_auth_phone(u.phone))
 );
 `;
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { assertLocalSupabaseApiUrl } from "../../scripts/provision-university-demo-users.mjs";
+import { assertLocalSupabaseApiUrl, canonicalAuthPhone } from "../../scripts/provision-university-demo-users.mjs";
 import { assertLocalUniversitySeedTargets } from "../../scripts/seed-university-demo.mjs";
 
 const base = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -118,6 +118,7 @@ try {
     assert.equal(profile.json?.length, 1, "missing/duplicate profile: " + account.seed_key);
     const row = profile.json[0];
     assert.equal(row.phone, account.phone, "Auth phone must be persisted unchanged to profiles.phone");
+    assert.equal(row.phone, account.phone, "profiles.phone must retain the canonical E.164 representation");
     assert.equal(row.email, null, "synthetic phone account must not have an email");
     assert.equal(row.account_status, "ACTIVE", "synthetic account must be active after local seed");
     ids.set(account.seed_key, row.id);
@@ -127,7 +128,7 @@ try {
     const authUser = auth.json?.user ?? auth.json;
     const metadata = authUser.user_metadata ?? authUser.raw_user_meta_data ?? {};
     pass(account.seed_key + " is phone-only, confirmed and explicitly synthetic",
-      authUser.phone === account.phone && !authUser.email &&
+      canonicalAuthPhone(authUser.phone) === account.phone && !authUser.email &&
         Boolean(authUser.phone_confirmed_at) && metadata.synthetic_seed === true &&
         metadata.seed_key === account.seed_key);
 

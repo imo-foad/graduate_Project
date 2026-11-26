@@ -2,7 +2,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildSeed, validateFixtures, validateUniversityFixtures, q } from "../scripts/build-seed.mjs";
-import { assertLocalSupabaseApiUrl, buildCreatePhoneUserRequest, isValidE164Phone, provisionUniversityAccounts, summarizeAuthCreateFailure } from "../scripts/provision-university-demo-users.mjs";
+import { assertLocalSupabaseApiUrl, buildCreatePhoneUserRequest, canonicalAuthPhone, isValidE164Phone, provisionUniversityAccounts, summarizeAuthCreateFailure } from "../scripts/provision-university-demo-users.mjs";
 import { assertLocalUniversitySeedTargets } from "../scripts/seed-university-demo.mjs";
 import { buildCreateUserRequest } from "../scripts/provision-demo-users.mjs";
 import { demo, opportunities, skills } from "./helpers.ts";
@@ -54,7 +54,7 @@ test("provisioning request targets Auth admin API and carries no hard-coded secr
 
 const university = JSON.parse(readFileSync(new URL("../fixtures/university-accounts.json", import.meta.url), "utf8"));
 const migrationSql = readFileSync(new URL("../supabase/migrations/0034_synthetic_university_dataset.sql", import.meta.url), "utf8");
-const identityMigrationSql = readFileSync(new URL("../supabase/migrations/0028_identity_and_organizations.sql", import.meta.url), "utf8");
+const phoneMigrationSql = readFileSync(new URL("../supabase/migrations/0035_restore_e164_auth_phone.sql", import.meta.url), "utf8");
 const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
 test("all 40 synthetic phone values satisfy the exact database E.164 constraint and are unique", () => {
@@ -68,8 +68,9 @@ test("all 40 synthetic phone values satisfy the exact database E.164 constraint 
     "exactly one phone-format constraint is added");
   assert.ok(migrationSql.includes("left(phone, 1) = '+'"), "database requires a literal leading plus");
   assert.ok(migrationSql.includes("length(phone) between 9 and 16"), "database length bounds must be explicit");
-  assert.ok(migrationSql.includes("substring(phone from 2) ~ '^[1-9][0-9]{7,14}
-
+  assert.ok(migrationSql.includes("substring(phone from 2) ~ '^[1-9][0-9]{7,14}$'"),
+    "database requires 8..15 digits after plus, beginning with a non-zero digit");
+});
 test("migration 0034 defines each academic structure exactly once", () => {
   assert.equal(count(migrationSql, "create table public.student_academic_records"), 1);
   assert.equal(count(migrationSql, "create table public.faculty_academic_records"), 1);
@@ -188,9 +189,6 @@ test("both synthetic seed targets reject hosted endpoints before any external op
     ),
     {apiBase:"http://127.0.0.1:54321",dbTarget:{host:"127.0.0.1",port:54322}}
   );
-});
-"),
-    "database requires 8..15 digits after plus, beginning with a non-zero digit");
 });
 
 test("E.164 accepts 8- and 15-digit international numbers and rejects invalid boundaries", () => {
@@ -216,11 +214,72 @@ test("Auth phone request and the Auth trigger preserve the same normalized E.164
     assert.equal(body.phone, account.phone);
     assert.equal(body.phone_confirm, true);
   }
-  assert.ok(identityMigrationSql.includes(
-    "insert into public.profiles (id, full_name, email, phone, account_status)"),
-    "Auth users are provisioned into profiles.phone");
-  assert.ok(identityMigrationSql.includes("nullif(btrim(new.phone), '')"),
-    "the Auth trigger persists the trimmed Auth phone unchanged rather than stripping its plus prefix");
+  assert.ok(phoneMigrationSql.includes("private.normalize_auth_phone(new.phone)"),
+    "the Auth trigger restores GoTrue's stripped leading plus before writing profiles.phone");
+  assert.ok(phoneMigrationSql.includes("private.normalize_auth_phone(v_phone_number)"),
+    "registration finalization uses the same canonical phone normalizer");
+});
+
+test("Auth phone canonicalization accepts both GoTrue storage and application E.164 forms", () => {
+  for (const account of [...university.students, ...university.faculty, ...university.administrators]) {
+    assert.equal(canonicalAuthPhone(account.phone), account.phone);
+    assert.equal(canonicalAuthPhone(account.phone.slice(1)), account.phone);
+  }
+  for (const invalid of ["", "0123456789", "+0123456789", "+123-456-7890", "1234567", "1234567890123456", null]) {
+    assert.equal(canonicalAuthPhone(invalid as any), null, String(invalid));
+  }
+});
+
+test("Auth provisioning second pass reuses all 40 users whose stored phone omits the plus", async () => {
+  const users = [...university.students, ...university.faculty, ...university.administrators].map((account: any) => ({
+    id: `auth-${account.seed_key}`,
+    phone: account.phone.slice(1),
+    email: null,
+    user_metadata: { synthetic_seed: true, seed_key: account.seed_key },
+  }));
+  const result = await provisionUniversityAccounts({
+    supabaseUrl: "http://127.0.0.1:54321",
+    serviceRoleKey: "local-test-key",
+    password: "synthetic-test-password",
+    accounts: university,
+    fetchImpl: async () => ({ ok: true, json: async () => ({ users }) }) as any,
+  });
+  assert.deepEqual(result, { created: 0, reused: 40, total: 40 });
+});
+
+test("Auth provisioning accepts the provider's plus-stripped create response for all 40 users", async () => {
+  let createCalls = 0;
+  const result = await provisionUniversityAccounts({
+    supabaseUrl: "http://127.0.0.1:54321",
+    serviceRoleKey: "local-test-key",
+    password: "synthetic-test-password",
+    accounts: university,
+    fetchImpl: async (url: string, init?: any) => {
+      if (url.includes("/admin/users?page=")) return { ok: true, json: async () => ({ users: [] }) } as any;
+      const request = JSON.parse(init.body);
+      createCalls += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          id: `created-${createCalls}`,
+          phone: request.phone.slice(1),
+          email: null,
+          user_metadata: request.user_metadata,
+        }),
+      } as any;
+    },
+  });
+  assert.equal(createCalls, 40);
+  assert.deepEqual(result, { created: 40, reused: 0, total: 40 });
+});
+
+test("migration 0035 restores E.164 profile phones without weakening the database constraint", () => {
+  assert.ok(phoneMigrationSql.includes("create or replace function private.normalize_auth_phone"));
+  assert.ok(phoneMigrationSql.includes("btrim(p_phone) ~ '^[1-9][0-9]{7,14}$'"));
+  assert.ok(phoneMigrationSql.includes("'+' || btrim(p_phone)"));
+  assert.ok(phoneMigrationSql.includes("private.normalize_auth_phone(new.phone)"));
+  assert.ok(phoneMigrationSql.includes("private.normalize_auth_phone(v_phone_number)"));
+  assert.doesNotMatch(phoneMigrationSql, /drop constraint if exists profiles_phone_format_check/i);
 });
 
 test("Auth phone constraint failures reveal only masked requested/profile phone diagnostics", () => {
@@ -237,124 +296,4 @@ test("Auth phone constraint failures reveal only masked requested/profile phone 
   assert.match(diagnostic, /"validE164":false/);
   assert.match(diagnostic, /"matchesRequested":false/);
   assert.doesNotMatch(diagnostic, /\+12345678901|12345678901|11111111-1111/);
-});
-
-test("migration 0034 defines each academic structure exactly once", () => {
-  assert.equal(count(migrationSql, "create table public.student_academic_records"), 1);
-  assert.equal(count(migrationSql, "create table public.faculty_academic_records"), 1);
-  assert.equal(count(migrationSql, "drop constraint if exists human_identities_verification_source_check"), 1);
-  assert.equal(count(migrationSql, "add constraint human_identities_verification_source_check"), 1);
-  assert.equal(count(migrationSql, "create trigger student_academic_identity_guard"), 1);
-  assert.equal(count(migrationSql, "create trigger faculty_academic_identity_guard"), 1);
-  assert.equal(count(migrationSql, "create policy student_academic_records_select_own"), 1);
-  assert.equal(count(migrationSql, "create policy faculty_academic_records_select_own"), 1);
-  assert.equal(count(migrationSql, "alter table public.student_academic_records enable row level security"), 1);
-  assert.equal(count(migrationSql, "alter table public.faculty_academic_records enable row level security"), 1);
-});
-
-test("migration 0034 declares the synthetic source marker and student/faculty fields", () => {
-  assert.ok(migrationSql.includes("'INSTITUTION_PROVIDER','MANUAL_ADMIN','LEGACY_INVITATION','SYNTHETIC_SEED'"),
-    "the verification-source constraint must include the explicit synthetic marker");
-  assert.ok(migrationSql.includes("academic_track text not null check (academic_track in ("));
-  assert.ok(migrationSql.includes("gpa numeric(3,2) not null check (gpa between 0.00 and 4.00)"));
-  assert.ok(migrationSql.includes("gpa_scale numeric(2,1) not null default 4.0 check (gpa_scale = 4.0)"));
-  assert.ok(migrationSql.includes("specialization text not null"));
-  assert.ok(migrationSql.includes("academic_title text not null check (academic_title in ("));
-});
-
-test("migration 0034 restricts academic reads to the owning profile", () => {
-  assert.ok(migrationSql.includes(
-    "create policy student_academic_records_select_own on public.student_academic_records\n" +
-    "  for select to authenticated using (profile_id = (select auth.uid()));"));
-  assert.ok(migrationSql.includes(
-    "create policy faculty_academic_records_select_own on public.faculty_academic_records\n" +
-    "  for select to authenticated using (profile_id = (select auth.uid()));"));
-  assert.ok(migrationSql.includes("revoke all on public.student_academic_records, public.faculty_academic_records from public, anon, authenticated"));
-});
-
-test("university fixture has 20 students, 10 faculty, 10 admins and 20 distinct GPA values", () => {
-  assert.deepEqual(validateUniversityFixtures(university), []);
-  assert.equal(university.students.length,20);
-  assert.equal(university.faculty.length,10);
-  assert.equal(university.administrators.length,10);
-  assert.equal(new Set(university.students.map((s: any)=>s.gpa)).size,20);
-  assert.ok(university.students.every((s: any)=>s.gpa_scale===4.0 && s.gpa>=0 && s.gpa<=4));
-  assert.equal(new Set(university.students.map((s: any)=>s.academic_track)).size,7);
-});
-
-test("university fixture validation requires at least five distinct approved tracks", () => {
-  const invalid = structuredClone(university);
-  const keepTracks = new Set([
-    "Software Engineering", "Artificial Intelligence",
-    "Data Science and Analytics", "Cybersecurity",
-  ]);
-  for (const student of invalid.students) {
-    if (!keepTracks.has(student.academic_track)) student.academic_track = "Software Engineering";
-  }
-  assert.equal(new Set(invalid.students.map((student: any) => student.academic_track)).size, 4);
-  assert.ok(validateUniversityFixtures(invalid).some((error: string) => error.includes("at least five")));
-});
-
-test("university fixture validation rejects invalid GPA, track and duplicate reference", () => {
-  const invalid=structuredClone(university);
-  invalid.students[0].gpa=4.25;
-  invalid.students[1].academic_track="Cancelled Track";
-  invalid.students[2].institution_ref=invalid.students[0].institution_ref;
-  const errors=validateUniversityFixtures(invalid);
-  assert.ok(errors.some((e: string)=>e.includes("GPA")));
-  assert.ok(errors.some((e: string)=>e.includes("academic track")));
-  assert.ok(errors.some((e: string)=>e.includes("institution_ref")));
-});
-
-test("new synthetic Auth request creates phone-only accounts without SMS delivery", () => {
-  const req=buildCreatePhoneUserRequest("http://127.0.0.1:54321","local-key",university.students[0],"demo-password-123");
-  assert.equal(req.url,"http://127.0.0.1:54321/auth/v1/admin/users");
-  const body=JSON.parse(req.init.body as string);
-  assert.equal(body.phone,university.students[0].phone);
-  assert.equal(body.phone_confirm,true);
-  assert.equal(body.user_metadata.synthetic_seed,true);
-  assert.equal(Object.hasOwn(body,"email"),false);
-});
-
-test("non-local university Auth URL is rejected before the first network request", async () => {
-  let requests=0;
-  await assert.rejects(provisionUniversityAccounts({
-    supabaseUrl:"https://demo-project.supabase.co",serviceRoleKey:"not-real",
-    password:"synthetic-demo-password",accounts:university,
-    fetchImpl:async()=>{requests+=1;throw new Error("network call must not happen");},
-  }),/REFUSING non-local/);
-  assert.equal(requests,0);
-  assert.throws(()=>assertLocalSupabaseApiUrl("http://10.0.0.12:54321"),/REFUSING non-local/);
-  assert.throws(()=>assertLocalSupabaseApiUrl("https://127.0.0.1:54321"),/REFUSING non-local/);
-  assert.equal(assertLocalSupabaseApiUrl("http://localhost:54321"),"http://localhost:54321");
-});
-
-test("university seed SQL is guarded, transactional, deterministic and credential-free", () => {
-  const sql=buildSeed()["04_university_accounts.sql"];
-  assert.match(sql,/^begin;$/m);
-  assert.match(sql,/^commit;$/m);
-  assert.match(sql,/SYNTHETIC_UNIVERSITY_SEED_REQUIRES_LOCAL_GUARD/);
-  assert.match(sql,/SYNTHETIC_SEED/);
-  assert.match(sql,/private\.platform_admins/);
-  assert.match(sql,/student_academic_records/);
-  assert.match(sql,/faculty_academic_records/);
-  assert.match(sql,/raw_user_meta_data.*synthetic_seed/);
-  assert.match(sql,/raw_user_meta_data.*seed_key/);
-  assert.doesNotMatch(sql,/DEMO_PASSWORD|service_role_key|national_id/i);
-  assert.equal(buildSeed()["04_university_accounts.sql"],sql);
-});
-
-test("both synthetic seed targets reject hosted endpoints before any external operation", () => {
-  assert.throws(() => assertLocalUniversitySeedTargets(
-    "http://localhost:54321", "postgresql://postgres:secret@db.example.supabase.co:5432/postgres", {}
-  ), /not local/);
-  assert.throws(() => assertLocalUniversitySeedTargets(
-    "https://localhost:54321", "postgresql://postgres:postgres@127.0.0.1:54322/postgres", {}
-  ), /REFUSING non-local/);
-  assert.deepEqual(
-    assertLocalUniversitySeedTargets(
-      "http://127.0.0.1:54321","postgresql://postgres:postgres@127.0.0.1:54322/postgres",{}
-    ),
-    {apiBase:"http://127.0.0.1:54321",dbTarget:{host:"127.0.0.1",port:54322}}
-  );
 });

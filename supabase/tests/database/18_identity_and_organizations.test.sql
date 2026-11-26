@@ -44,6 +44,15 @@ select is((select email from public.profiles where id = tests.id('pending_u')), 
   'a phone-only account gets no fabricated email');
 select is((select account_status from public.profiles where id = tests.id('pending_u')), 'PENDING_VERIFICATION',
   'a phone-only account starts PENDING_VERIFICATION');
+
+-- GoTrue accepts E.164 input but stores auth.users.phone without its leading plus.
+-- The profile trigger must restore the canonical representation without weakening the DB constraint.
+select tests.mk_phone_user('auth_normalized_u', '201000000005', false);
+select is((select phone from public.profiles where id = tests.id('auth_normalized_u')), '+201000000005',
+  'Auth phone stored without plus is normalized back to E.164 in profiles');
+select tests.mk_phone_user('auth_canonical_u', '+201000000006', false);
+select is((select phone from public.profiles where id = tests.id('auth_canonical_u')), '+201000000006',
+  'an Auth phone that already has plus is preserved without double-prefixing');
 select throws_ok(
   format($$ update public.profiles set phone = 'not-e164' where id = %L $$, tests.id('pending_u')),
   '23514', null, 'an invalid phone number is rejected by the profile constraint'

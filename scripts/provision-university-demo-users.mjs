@@ -12,6 +12,17 @@ export function isValidE164Phone(value) {
   return typeof value === "string" && /^\+[1-9][0-9]{7,14}$/.test(value);
 }
 
+/**
+ * GoTrue validates E.164 input but stores the phone in auth.users without the leading '+'.
+ * Convert that storage representation back to the application's E.164 key.
+ * Reject every other shape rather than guessing or silently rewriting malformed values.
+ */
+export function canonicalAuthPhone(value) {
+  if (isValidE164Phone(value)) return value;
+  if (typeof value === "string" && /^[1-9][0-9]{7,14}$/.test(value)) return `+${value}`;
+  return null;
+}
+
 function splitPostgresTuple(value) {
   const fields = [];
   let current = "";
@@ -153,9 +164,10 @@ export async function provisionUniversityAccounts({ supabaseUrl, serviceRoleKey,
 
   const existing = new Map();
   for (const user of await listLocalAuthUsers(base, serviceRoleKey, fetchImpl)) {
-    if (!user.phone) continue;
-    if (existing.has(user.phone)) throw new Error(`Duplicate local Auth phone ${user.phone}`);
-    existing.set(user.phone, user);
+    const canonicalPhone = canonicalAuthPhone(user.phone);
+    if (!canonicalPhone) continue;
+    if (existing.has(canonicalPhone)) throw new Error("Duplicate local Auth phone for synthetic seed account");
+    existing.set(canonicalPhone, user);
   }
 
   let created = 0, reused = 0;
@@ -178,10 +190,11 @@ export async function provisionUniversityAccounts({ supabaseUrl, serviceRoleKey,
     }
     const body = await res.json();
     const user = body?.user ?? body;
-    if (!user?.id || user.phone !== account.phone || user.email) {
-      throw new Error(`Auth Admin did not create a phone-only account for ${account.seed_key}`);
+    const canonicalPhone = canonicalAuthPhone(user?.phone);
+    if (!user?.id || canonicalPhone !== account.phone || user.email) {
+      throw new Error(`Auth Admin did not create the expected phone-only account for ${account.seed_key}`);
     }
-    existing.set(account.phone, user);
+    existing.set(canonicalPhone, user);
     created += 1;
   }
   return { created, reused, total: desired.length };

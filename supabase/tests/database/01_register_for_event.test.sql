@@ -47,8 +47,11 @@ do $$ begin
   perform tests.mk_opp('e_skip',   'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
   insert into public.opportunity_eligibility (opportunity_id, required_certifications)
     values (tests.id('e_skip'), array['Security+']);
+  -- The seat holder and both queued candidates must be eligible at entry time.
+  -- u2 loses the certification only after waitlisting, so the FIFO scan must skip u2 and promote u3.
   insert into public.certifications (graduate_id, title)
-    values (tests.id('u2'), 'Security+'),
+    values (tests.id('u1'), 'Security+'),
+           (tests.id('u2'), 'Security+'),
            (tests.id('u3'), 'Security+');
 end $$;
 

@@ -65,6 +65,11 @@ echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on seco
 echo "=== D. supabase test db"
 EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
+# A focused run makes the high-risk three-type catalogue/auth fixture independently observable.
+echo "=== D1. focused Test 15"
+supabase test db database/15_three_type_scope.test.sql 2>&1 | tee "$LOG_DIR/pgtap-15-focused.log"
+if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap-15-focused.log"; then fail "focused Test 15 reported failures"; fi
+echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi

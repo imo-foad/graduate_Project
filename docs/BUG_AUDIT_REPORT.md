@@ -6,8 +6,9 @@
 **QA PR:** https://github.com/imo-foad/graduate_Project/pull/43  
 **Builder PR:** #41 — `fix/complete-foundation-and-training-rules-20261126`  
 **Builder base SHA:** `6a135b1b8704f09f4a59c1d1f08baf5972939c63`  
-**QA head SHA:** `658f5b1d0260766a67f679103a82dae2d805edbf`  
-**Latest QA Actions run:** https://github.com/imo-foad/graduate_Project/actions/runs/45859652000
+**QA head SHA:** `ff2bab6c7986327086d4f48a0787dc77350e9fa8`  
+**Latest QA Actions run:** https://github.com/imo-foad/graduate_Project/actions/runs/45861269500  
+**Latest run conclusion:** failure in all three jobs; job logs/artifacts were not available from this run. Detailed reproducible failure evidence is from run 45859652000.
 
 ## 1. Current conclusion
 
@@ -58,7 +59,7 @@ QA now sets `is_sample=false` in `tests.mk_opp`. The expected total remains 11 (
 
 The QA runner adds a focused Test 15 invocation with the repository-root-relative path `supabase/tests/database/15_three_type_scope.test.sql`, and requires an actual non-empty TAP plan (`Files=1, Tests>0`) plus `Result: PASS` before the full 18-file suite. The full suite must report `Files=18, Tests>0` and `Result: PASS` before concurrency/HTTP steps. This focused invocation has **not yet reached execution** because migration 0034 fails first.
 
-## 4. Latest QA CI evidence — run 45859652000
+## 4. Latest detailed QA CI evidence — run 45859652000
 
 Run: https://github.com/imo-foad/graduate_Project/actions/runs/45859652000  
 Head: `658f5b1d0260766a67f679103a82dae2d805edbf`.
@@ -168,3 +169,8 @@ Real institutional identity API and SMS delivery remain `BLOCKED_EXTERNAL`; mock
 ## 9. Delivery status
 
 PR #43 remains open, unmerged and targets Builder PR #41. QA-owned changes are pushed on `658f5b1...`. **Not ready to merge:** Builder must fix migration 0034, the malformed TypeScript test regex and the smoke exit-status trap; then a fresh synchronized run must pass focused Test 15, all 18 pgTAP files, concurrency, local HTTP, university authorization/idempotency, CV parser, onboarding, rate limits and both cohort rounds. Any stage not reached must remain explicitly NOT RUN.
+
+
+## 10. Latest head/run after final Test02 addition
+
+QA head is now `ff2bab6c7986327086d4f48a0787dc77350e9fa8`; compare is 46 ahead / 0 behind Builder `6a135b1...`. Test02 now explicitly exercises the shared Internship application path as described above. The follow-up Actions run `45861269500` completed with all three jobs marked failure; GitHub did not provide downloadable artifacts or retrievable logs for that run, so no additional failure detail is claimed. The detailed diagnosis remains run `45859652000` and its downloaded artifact.

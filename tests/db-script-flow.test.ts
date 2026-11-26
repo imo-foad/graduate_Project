@@ -25,11 +25,16 @@ case "$q" in
   "select 1") echo 1;; "show server_version") echo "17.12";;
   *string_agg*) echo "$FAKE_MIGRATIONS";; *"from public.skills"*) echo "$FAKE_SKILLS";;
   *"from public.opportunities"*) echo "$FAKE_OPPS";; *"opportunity_skills os left join"*) echo 0;; *) echo "";; esac`);
-  put("supabase", `case "$1 $2" in
+  put("supabase", `if [[ "$1 $2 $3" == "test db database/15_three_type_scope.test.sql" ]]; then
+  echo "supabase/tests/database/15_three_type_scope.test.sql .. ok"
+  echo "Result: PASS"
+  exit ${FAKE_TEST15_EXIT:-0}
+fi
+case "$1 $2" in
   "--version "*) echo "2.0.0";;
   "start "*) echo "Started supabase local development setup.";;
   "db reset") for f in ${MIGS.map((m) => `"${m}"`).join(" ")}; do [ "$f" = "$FAKE_MISSING" ] || echo "Applying migration $f..."; done;;
-  "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Result: PASS"; exit \${FAKE_TEST_EXIT:-0};;
+  "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Result: PASS"; exit ${FAKE_TEST_EXIT:-0};;
 esac`);
   put("bash", `case "$1" in *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \${FAKE_CONC_EXIT:-0};; *run-local-integrations.sh) echo "LOCAL HTTP INTEGRATION PASSED: 20 checks"; exit \${FAKE_INTEGRATION_EXIT:-0};; esac\nexec /bin/bash "$@"`);
   return dir;
@@ -46,6 +51,13 @@ test("happy path (fake tools): every phase runs and the script reports success",
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
   assert.ok(MIGS.length >= 22, `expected all 22 checked migrations, found ${MIGS.length}`);
+});
+test("focused Test 15 runs independently and fails the DB runner when it fails", () => {
+  const r = run({ FAKE_TEST15_EXIT: "1" });
+  assert.equal(r.status, 1, out(r));
+  assert.ok(out(r).includes("=== D1. focused Test 15"));
+  assert.ok(out(r).includes("database/15_three_type_scope.test.sql"));
+  assert.ok(!out(r).includes("=== D2. full pgTAP suite"), "full suite must not hide the focused failure");
 });
 test("the Social Feed migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0017_social_feed.sql" });

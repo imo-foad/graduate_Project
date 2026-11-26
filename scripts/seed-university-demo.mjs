@@ -36,12 +36,16 @@ select concat_ws('|',
  (select count(*) from private.platform_admins a join public.profiles p on p.id=a.user_id join auth.users u on u.id=p.id where a.is_active and p.phone between '+12125550130' and '+12125550139' and u.raw_user_meta_data->>'synthetic_seed'='true'),
  (select count(*) from public.profiles p join public.graduate_profiles gp on gp.profile_id=p.id where p.phone between '+12125550100' and '+12125550139'),
  (select count(*) from public.human_identities h join public.profiles p on p.id=h.profile_id where p.phone between '+12125550100' and '+12125550139' and h.identity_type='GRADUATE'),
- (select count(*) from public.profiles p join public.graduate_profiles gp on gp.profile_id=p.id where p.email in ('graduate.demo@alumni.test','graduate.android@alumni.test','graduate.data@alumni.test','graduate.cyber@alumni.test'))
+ (select count(*) from public.profiles p join public.graduate_profiles gp on gp.profile_id=p.id where p.email in ('graduate.demo@alumni.test','graduate.android@alumni.test','graduate.data@alumni.test','graduate.cyber@alumni.test')),
+ (select count(*) from auth.users u join public.profiles p on p.id=u.id
+   where u.raw_user_meta_data->>'synthetic_seed'='true'
+     and u.phone between '+12125550100' and '+12125550139'
+     and p.phone is distinct from u.phone)
 );
 `;
 
 function assertCounts(actual) {
-  const expected = "20|20|20|7|10|10|10|0|0|4";
+  const expected = "20|20|20|7|10|10|10|0|0|4|0";
   if (actual !== expected) throw new Error(`University synthetic invariants failed: got ${actual}, expected ${expected}`);
   return actual;
 }

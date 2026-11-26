@@ -37,7 +37,7 @@ end $f$;
 
 do $$ begin
   perform tests.mk_user('u1'); perform tests.mk_user('u2'); perform tests.mk_user('u3');
-  -- u2 will be the older but ineligible waiter; u3 is eligible for the later promotion.
+  -- Both waiters start eligible; u2's certification is revoked after queueing to test promotion skip.
 
   perform tests.mk_opp('e_cap',    'TRAINING', '{"capacity":2,"deadline_days":5}');
   perform tests.mk_opp('e_wait',   'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
@@ -48,7 +48,8 @@ do $$ begin
   insert into public.opportunity_eligibility (opportunity_id, required_certifications)
     values (tests.id('e_skip'), array['Security+']);
   insert into public.certifications (graduate_id, title)
-    values (tests.id('u3'), 'Security+');
+    values (tests.id('u2'), 'Security+'),
+           (tests.id('u3'), 'Security+');
 end $$;
 
 -- 1. NEW user, capacity available (regression for the FOUND bug: the row used to be never inserted)
@@ -151,16 +152,16 @@ select is((select count(*)::int
     and n.type = 'TRAINING_WAITLIST_PROMOTED'),
   1, 'FIFO promotion sends the promoted participant a TRAINING_WAITLIST_PROMOTED notification');
 
--- A waitlisted candidate who fails eligibility is skipped; the next eligible FIFO candidate is promoted.
+-- A queued candidate whose eligibility is revoked is skipped; the next eligible FIFO candidate is promoted.
 select tests.login('u1');
 select is((public.register_for_event(tests.id('e_skip'))).status, 'REGISTERED',
   'eligibility-skip fixture fills its confirmed seat');
 select tests.login('u2');
 select is((public.register_for_event(tests.id('e_skip'))).status, 'WAITLISTED',
-  'older candidate enters the waitlist but lacks the required certification');
+  'older candidate enters the waitlist while eligible');
 select tests.login('u3');
 select is((public.register_for_event(tests.id('e_skip'))).status, 'WAITLISTED',
-  'later candidate enters the waitlist with the required certification');
+  'later candidate also enters the waitlist while eligible');
 reset role;
 -- now() is transaction-stable in pgTAP; assign distinct registered_at values to model real FIFO arrivals.
 update public.event_registrations
@@ -169,6 +170,8 @@ update public.event_registrations
      when graduate_id = tests.id('u3') then now() - interval '1 minute'
      else registered_at end
  where opportunity_id = tests.id('e_skip') and status = 'WAITLISTED';
+delete from public.certifications
+ where graduate_id = tests.id('u2') and lower(title) = 'security+';
 select tests.login('u1');
 select is((public.cancel_event_registration(tests.id('e_skip'))).status, 'CANCELLED',
   'confirmed cancellation starts the eligibility-aware FIFO promotion scan');

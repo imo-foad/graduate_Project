@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read-only Issue #44 audit. Raw logs, archives and reports stay private in RUNNER_TEMP."""
-import io, json, os, subprocess, sys, time, urllib.error, urllib.request, zipfile
+import io, json, os, secrets, string, subprocess, sys, time, urllib.error, urllib.request, zipfile
 from pathlib import Path, PurePosixPath
 
 REPO=os.environ["GITHUB_REPOSITORY"]
@@ -282,7 +282,7 @@ def self_test():
     clean_dir=test_root/"clean"
     canary_dir.mkdir(mode=0o700,parents=True,exist_ok=True)
     clean_dir.mkdir(mode=0o700,parents=True,exist_ok=True)
-    canary="ghp_"+"A"*36
+    canary="ghp_"+"".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(36))
     (canary_dir/"synthetic-github-token.txt").write_text("GITHUB_TOKEN="+canary+"\n",encoding="utf-8")
     (clean_dir/"clean.txt").write_text("Temporary fixture; no credentials are present.\n",encoding="utf-8")
     rc,found,_=scan("canary",["dir",str(canary_dir)])

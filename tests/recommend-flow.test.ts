@@ -71,3 +71,18 @@ test("response drops expired/closed cached rows", async () => {
   const r = await runRecommend(d);
   assert.equal((r.body.items as unknown[]).length, 1);
 });
+test("cached rows are filtered by current availability and report their status", async () => {
+  const { d } = deps({
+    cacheState: async () => ({ dirty: false, count: 4 }),
+    readCached: async () => ({ data: [
+      { id: "open", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 1 } },
+      { id: "waitlist", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10, waitlist_enabled: true } },
+      { id: "full", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10 } },
+      { id: "upcoming", opportunity: { status: "ACTIVE", registration_opens_at: new Date(NOW + 1e6).toISOString() } },
+    ] }),
+  });
+  const r = await runRecommend(d);
+  const items = r.body.items as { id: string; availability_status: string | null }[];
+  assert.deepEqual(items.map((item) => [item.id, item.availability_status]),
+    [["open", "OPEN"], ["waitlist", "WAITLIST_ONLY"], ["upcoming", "UPCOMING"]]);
+});

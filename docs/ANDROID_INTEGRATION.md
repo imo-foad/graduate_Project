@@ -30,6 +30,12 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
    (`status_source = SEED_SAMPLE`) are demo history: label them as sample data in the UI (BR-011/BR-023).
 8. **Recommendations**: `POST /functions/v1/recommend` (cached unless profile inputs changed). Show `score` as
    "Match Score" with the band, reasons and gaps, plus the disclaimer. It is not a hiring probability.
+   **Availability (v0.4):** every item carries `availability_status`. `OPEN` = register now; `UPCOMING` =
+   `opportunity.registration_opens_at` is in the future (score is 0, so it ranks low but stays discoverable);
+   `WAITLIST_ONLY` = capacity is reached but `waitlist_enabled`, so label the action "Join waitlist"; `null` =
+   the opportunity has no registration window/capacity (jobs, internships). Closed opportunities and full
+   events without a waitlist are never returned, cached or fresh, so the app cannot offer a registration that
+   the backend would reject with `EVENT_FULL`/`REGISTRATION_CLOSED`.
    **New in v0.2:** it can answer `409 {"error":"STALE_SNAPSHOT","retryable":true}` when the profile kept changing during
    the calculation; the previous cache is intact, so show it (or a spinner) and call again later. `ai_mode` is
    `deterministic`; if the call fails, keep manual search/filter working (BR-021).

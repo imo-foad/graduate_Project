@@ -69,6 +69,7 @@ let competitionOpportunityId = null;
 let socialPostId = null;
 let socialSecondPostId = null;
 let socialCommentId = null;
+const availabilityOpportunityIds = [];
 const injectedSkillRows = [];
 const careerPathIds = (response) => response.json?.career_profile?.paths?.map((item) => item.id) ?? [];
 const hasCareerPath = (response, id) => careerPathIds(response).includes(id);
@@ -206,6 +207,62 @@ try {
   const recB = await request("/rest/v1/recommendations?select=graduate_id", { headers: headers(b.token) });
   pass("recommendations query for user B exposes only B rows", recB.status === 200 &&
     Array.isArray(recB.json) && recB.json.every((x) => x.graduate_id === b.id));
+
+  // Availability (issue #16): a full event without a waitlist must never be recommended, a full event with a
+  // waitlist must be labelled WAITLIST_ONLY, and a future registration window must be labelled UPCOMING.
+  const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const inOneDay = new Date(Date.now() + 86_400_000).toISOString();
+  const inOneWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
+  const availabilityEvents = [
+    { key: "full", body: { title: "CI full event (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "waitlist", body: { title: "CI waitlist event", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
+    { key: "upcoming", body: { title: "CI upcoming registration event", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+  ];
+  for (const event of availabilityEvents) {
+    const created = await request("/rest/v1/opportunities", {
+      method: "POST",
+      headers: headers(service, { "Content-Type": "application/json", Prefer: "return=representation" }),
+      body: JSON.stringify({
+        seed_key: `ci-availability-${event.key}-${randomUUID()}`,
+        type: "EVENT",
+        title: event.body.title,
+        description: "Temporary event created by the local HTTP integration test.",
+        location: "Cairo",
+        attendance_mode: "ONSITE",
+        status: "ACTIVE",
+        deadline: inOneWeek,
+        start_at: inOneWeek,
+        end_at: inOneWeek,
+        registration_opens_at: event.body.registration_opens_at,
+        capacity: event.body.capacity,
+        registered_count: event.body.registered_count,
+        waitlist_enabled: event.body.waitlist_enabled,
+        target_fields: ["Computer Science"],
+      }),
+    });
+    pass(`availability fixture ${event.key} created`, created.status === 201 && Boolean(created.json?.[0]?.id));
+    event.id = created.json?.[0]?.id;
+    if (event.id) availabilityOpportunityIds.push(event.id);
+  }
+  const availability = await request("/functions/v1/recommend", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: JSON.stringify({ force: true }),
+  });
+  const availabilityItems = Array.isArray(availability.json?.items) ? availability.json.items : [];
+  const itemFor = (key) => availabilityItems.find((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === key)?.id);
+  pass("recommendations exclude a full event without a waitlist", availability.status === 200 && !itemFor("full"));
+  pass("recommendations label a full event with a waitlist as WAITLIST_ONLY",
+    itemFor("waitlist")?.availability_status === "WAITLIST_ONLY");
+  pass("recommendations keep a future registration window as UPCOMING",
+    itemFor("upcoming")?.availability_status === "UPCOMING");
+  const cachedAvailability = await request("/functions/v1/recommend", {
+    method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
+  });
+  const cachedItems = Array.isArray(cachedAvailability.json?.items) ? cachedAvailability.json.items : [];
+  pass("cached recommendations apply the same availability filter",
+    cachedAvailability.status === 200 && cachedAvailability.json?.source === "cache" &&
+    !cachedItems.some((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === "full")?.id) &&
+    cachedItems.some((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === "waitlist")?.id &&
+      item.availability_status === "WAITLIST_ONLY"));
 
   // Storage API upload as A, then prove that B cannot read, upload into, or delete A's object.
   const uploadA = await request(`/storage/v1/object/${bucket}/${encodePath(objectPath)}`, {
@@ -974,6 +1031,16 @@ try {
   }
   if (adminId) {
     await request("/auth/v1/admin/users/" + adminId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+  }
+
+  // Remove the temporary availability fixtures (recommendations cascade with the opportunity).
+  for (const opportunityId of availabilityOpportunityIds) {
+    await request("/rest/v1/recommendations?opportunity_id=eq." + opportunityId, {
+      method: "DELETE", headers: headers(service),
+    }).catch(() => {});
+    await request("/rest/v1/opportunities?id=eq." + opportunityId, {
       method: "DELETE", headers: headers(service),
     }).catch(() => {});
   }

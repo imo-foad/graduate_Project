@@ -76,6 +76,50 @@ test("ranking is deterministic and sorted descending", () => {
   for (let i = 1; i < a.length; i++) assert.ok(a[i - 1].score >= a[i].score);
 });
 
+const NOW = new Date("2026-11-23T12:00:00Z");
+const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
+const event = (over: Record<string, unknown> = {}) => ({
+  id: "e", type: "EVENT", title: "Event", status: "ACTIVE", target_fields: [], skills: [], eligibility_failures: [],
+  capacity: 10, registered_count: 0, waitlist_enabled: false, registration_opens_at: null, ...over,
+});
+const bareGraduate = { career_interests: [], experience_years: 0, skills: [] };
+
+test("availability (issue #16): an upcoming registration window is kept but scores 0", () => {
+  const r = scoreOpportunity(bareGraduate, event({ registration_opens_at: iso(60_000) }), NOW)!;
+  assert.equal(r.availability_status, "UPCOMING");
+  assert.equal(r.score_breakdown.availability, 0);
+  assert.equal(r.score, 0);
+});
+
+test("availability: an open event with free capacity scores 1, waitlist-only scores 0.5", () => {
+  const open = scoreOpportunity(bareGraduate, event(), NOW)!;
+  assert.equal(open.availability_status, "OPEN");
+  assert.equal(open.score_breakdown.availability, 100);
+  assert.equal(open.score, 100);
+  const wait = scoreOpportunity(bareGraduate, event({ registered_count: 10, waitlist_enabled: true }), NOW)!;
+  assert.equal(wait.availability_status, "WAITLIST_ONLY");
+  assert.equal(wait.score_breakdown.availability, 50);
+  assert.equal(wait.score, 50);
+});
+
+test("availability: a full event without a waitlist is never recommended", () => {
+  assert.equal(scoreOpportunity(bareGraduate, event({ registered_count: 10 }), NOW), null);
+  const ranked = rankOpportunities(bareGraduate, [event({ id: "full", registered_count: 12 })], NOW);
+  assert.deepEqual(ranked, []);
+});
+
+test("availability: opportunities without registration data keep the previous behaviour (null criterion)", () => {
+  const job = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", skills: [], eligibility_failures: [] };
+  const r = scoreOpportunity(bareGraduate, job, NOW)!;
+  assert.equal(r.availability_status, null);
+  assert.equal(r.score_breakdown.availability, undefined);
+});
+
+test("availability: a registration window that opened exactly now counts as open", () => {
+  const r = scoreOpportunity(bareGraduate, event({ registration_opens_at: iso(0) }), NOW)!;
+  assert.equal(r.availability_status, "OPEN");
+});
+
 test("training suggests skills the graduate lacks (gap_fill)", () => {
   const r = rankOpportunities(graduate(SARA), opps()).find((x) => x.opportunity_id === "trn-python-data")!;
   assert.ok(r.missing_skill_ids.includes("PYTHON"));

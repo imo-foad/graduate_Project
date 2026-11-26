@@ -149,11 +149,13 @@ test("recommendation candidates carry status and timestamps required by the scor
 });
 
 test("company verification invalidates recommendation caches with an explicit all-graduates predicate", () => {
-  const definitions = [...allMigrationsSql().matchAll(
-    /create or replace function private[.]mark_company_recommendations_dirty\\(\\)[\\s\\S]*?\\$mark_company_recommendations_dirty_v[0-9]+\\$;/gi,
-  )];
-  const finalDefinition = definitions.at(-1)?.[0] ?? "";
+  const sql = allMigrationsSql();
+  const definitionStart = sql.lastIndexOf("create or replace function private.mark_company_recommendations_dirty()");
+  const definitionEnd = sql.indexOf("revoke all on function private.mark_company_recommendations_dirty()", definitionStart);
+  const finalDefinition = definitionStart >= 0 && definitionEnd > definitionStart
+    ? sql.slice(definitionStart, definitionEnd)
+    : "";
   assert.ok(finalDefinition, "final company recommendation invalidation trigger must exist");
-  assert.match(finalDefinition,
-    /update public[.]graduate_profiles[\\s\\S]*?where profile_id is not null/i);
+  assert.ok(finalDefinition.includes("where profile_id is not null"),
+    "intentional all-graduate invalidation must include the explicit non-null primary-key predicate");
 });

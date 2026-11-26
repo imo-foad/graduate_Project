@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       return { error };
     },
     readCached: () => userClient.from("recommendations")
-      .select("*, opportunity:opportunities(id,type,title,company_id,company:companies(verification_status),company_name,location,attendance_mode,status,deadline,start_at,end_at,registration_opens_at,capacity,registered_count,waitlist_enabled)")
+      .select("*, opportunity:opportunities(id,type,title,company_id,company_verification_status,company_name,location,attendance_mode,status,deadline,start_at,end_at,registration_opens_at,capacity,registered_count,waitlist_enabled)")
       .order("score", { ascending: false }),
   }, { force });
   return json({ ...result.body, career_profile: careerProfile }, result.status);

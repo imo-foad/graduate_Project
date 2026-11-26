@@ -12,6 +12,7 @@ const MIGS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.ends
 const VERSIONS = MIGS.map((m) => m.split("_")[0]).join(",");
 const SKILLS = JSON.parse(readFileSync(join(ROOT, "fixtures/skills.json"), "utf8")).length;
 const OPPS = JSON.parse(readFileSync(join(ROOT, "fixtures/opportunities.json"), "utf8")).length;
+const UNIVERSITY = JSON.parse(readFileSync(join(ROOT, "fixtures/university-accounts.json"), "utf8"));
 const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "19_product_lifecycle"];
 
 function fakeBin() {
@@ -51,6 +52,33 @@ test("happy path (fake tools): every phase runs and the script reports success",
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
   assert.ok(MIGS.length > 0, "at least one dynamically discovered migration must be present");
+});
+test("synthetic university fixture meets independent QA counts, GPA and track invariants", () => {
+  assert.equal(UNIVERSITY.meta.source_marker, "SYNTHETIC_SEED");
+  assert.equal(UNIVERSITY.meta.gpa_scale, 4.0);
+  assert.equal(UNIVERSITY.students.length, 20);
+  assert.equal(UNIVERSITY.faculty.length, 10);
+  assert.equal(UNIVERSITY.administrators.length, 10);
+  const gpas = UNIVERSITY.students.map((s: any) => s.gpa);
+  assert.equal(new Set(gpas).size, 20, "all 20 GPAs must be unique");
+  assert.ok(UNIVERSITY.students.every((s: any) => s.gpa_scale === 4.0 &&
+    Number.isFinite(s.gpa) && s.gpa >= 0 && s.gpa <= 4 &&
+    Math.round(s.gpa * 100) === s.gpa * 100), "GPA values must fit 0.00..4.00 scale");
+  const tracks = new Set(UNIVERSITY.students.map((s: any) => s.academic_track));
+  assert.ok(tracks.size >= 5, "at least five distinct academic tracks are required");
+  assert.ok([...tracks].every((track) => UNIVERSITY.meta.approved_tracks.includes(track)));
+  const accounts = [...UNIVERSITY.students, ...UNIVERSITY.faculty, ...UNIVERSITY.administrators];
+  assert.equal(new Set(accounts.map((x: any) => x.phone)).size, 40);
+  assert.ok(accounts.every((x: any) => !("email" in x) && !("national_id" in x) && !("password" in x)));
+  assert.ok(UNIVERSITY.students.every((s: any) => s.identity_type === "STUDENT"));
+  assert.ok(UNIVERSITY.faculty.every((f: any) => f.identity_type === "FACULTY"));
+  assert.ok(UNIVERSITY.administrators.every((a: any) =>
+    !("identity_type" in a) && a.admin_role === "PLATFORM_ADMIN"));
+});
+test("local HTTP runner executes the seeded-university authorization integration", () => {
+  const runner = readFileSync(join(ROOT, "scripts/run-local-integrations.sh"), "utf8");
+  assert.match(runner, /node scripts\/seed-university-demo\.mjs/);
+  assert.match(runner, /node tests\/integration\/university-dataset\.integration\.mjs/);
 });
 test("migration discovery validates dynamic unique/increasing versions without a fixed total", () => {
   const runner = readFileSync(join(ROOT, "scripts/run-db-tests.sh"), "utf8");

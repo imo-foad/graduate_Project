@@ -92,7 +92,7 @@ class Scripts(unittest.TestCase):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migration_dir = os.path.join(ROOT, "supabase/migrations")
-        migration_name = re.compile(r"^(\\d{4})_[A-Za-z0-9][A-Za-z0-9_.-]*\\.sql$")
+        migration_name = re.compile(r"^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$")
         migs = sorted(
             name for name in os.listdir(migration_dir)
             if migration_name.fullmatch(name)

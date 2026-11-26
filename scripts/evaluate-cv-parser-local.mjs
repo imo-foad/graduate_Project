@@ -205,7 +205,7 @@ async function cleanup(_token,_path,id) {
   // Delete metadata first so migration 0027 enqueues the object, then drain it through the worker.
   if (id) {
     const metadata = await request("/rest/v1/cv_documents?id=eq."+id,{
-      method:"DELETE",headers:headers(service,null,{Prefer:"return=minimal"}),
+      method:"DELETE",headers:headers(service,service,{Prefer:"return=minimal"}),
     });
     if (![200,204].includes(metadata.status)) throw new Error("CV metadata cleanup failed: "+metadata.raw);
   }

@@ -18,10 +18,10 @@ redact_ci_file() {
   sed -E -i \
     -e 's/sb_secret_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_SECRET]/g' \
     -e 's/sb_publishable_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_PUBLISHABLE]/g' \
-    -e 's/eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}/[REDACTED_LOCAL_JWT]/g' \
-    -e 's/((SERVICE_ROLE_KEY|ANON_KEY|JWT_SECRET|DB_PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY)[[:space:]]*=[[:space:]]*)[^[:space:]]+/\\1[REDACTED]/Ig' \
-    -e 's/(Authorization: Bearer )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' \
-    -e 's/(apikey: )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' "$1"
+    -e 's/eyJ[A-Za-z0-9_-]{20,}[.][A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}/[REDACTED_LOCAL_JWT]/g' \
+    -e 's/(SERVICE_ROLE_KEY|ANON_KEY|JWT_SECRET|DB_PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY)[[:space:]]*=[[:space:]]*[^[:space:]]+/[REDACTED_CREDENTIAL_ASSIGNMENT]/Ig' \
+    -e 's/Authorization: Bearer [A-Za-z0-9._-]{20,}/Authorization: Bearer [REDACTED]/Ig' \
+    -e 's/apikey: [A-Za-z0-9._-]{20,}/apikey: [REDACTED]/Ig' "$1"
 }
 redact_ci_logs_on_exit() {
   local status=$?

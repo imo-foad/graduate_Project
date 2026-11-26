@@ -112,7 +112,7 @@ The institution provider determines the identities; the user cannot self-select 
 
 A `graduate_profiles` career profile is provisioned only for an institution-verified `GRADUATE` identity (legacy invitation/demo accounts remain compatible). A student/faculty-only identity must not be treated as a graduate just because it has an app account.
 
-Companies are separate entities, not human account types. Company memberships use `OWNER`, `RECRUITER`, and `VIEWER`. Only `OWNER` and `RECRUITER` may manage opportunities or applications; `VIEWER` is read-only. Publishing requires a platform-verified company. Platform admin access is provisioned out-of-band and cannot be self-selected.
+Companies are separate entities, not human account types. Company memberships use `OWNER`, `RECRUITER`, and `VIEWER`. Only `OWNER` and `RECRUITER` may manage opportunities or applications; `VIEWER` is read-only. Publishing, new applications and recommendation discovery require a platform-verified company. A transition to `SUSPENDED` or `REJECTED` invalidates cached recommendations and removes that company's listings from fresh candidate results. While unverified, members cannot edit an `ACTIVE` listing; they may close it as a safe deactivation action. DRAFT editing is allowed, but publishing still requires verification. Platform admin access is provisioned out-of-band and cannot be self-selected.
 
 ## 5. Opportunity catalogue
 

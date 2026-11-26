@@ -122,9 +122,11 @@ Real institutional identity-provider and SMS credentials remain BLOCKED_EXTERNAL
 ## 7. Delivery
 
 - QA branch: qa/independent-bug-hunt-20261126
-- Target: fix/complete-foundation-and-training-rules-20261126
+- Latest QA commit: d099f981b95ce991350eef94dcf02bd63cd780e2
+- PR: https://github.com/imo-foad/graduate_Project/pull/43 (OPEN; base is fix/complete-foundation-and-training-rules-20261126)
+- PR #42 was closed during an intermediate rebase; PR #43 is the active replacement.
 - QA did not merge.
 - QA-owned files: tests/contract_openapi.py, database tests 01/02/15/16, scripts/run-db-tests.sh, and the two audit/handoff docs.
-- PR #42 closed when source temporarily equalled target during rebase; this final branch head is for a replacement PR.
+- Workflow run 45832073673 was queued/pending for the final PR head when this report was updated; no QA-PR-specific CI result is claimed.
 
 No bug-free claim is made.

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export const LOCAL_SUPABASE_API_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 export function assertLocalSupabaseApiUrl(raw) {
-  if (typeof raw !== "string" || raw.trim() === "" || raw !== raw.trim() || /[\\s\\u0000-\\u001f]/.test(raw)) {
+  if (typeof raw !== "string" || raw.trim() === "" || raw !== raw.trim() || [...raw].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127)) {
     throw new Error("SUPABASE_URL must be an explicit local URL");
   }
   let u;

@@ -79,6 +79,11 @@ alter table public.student_academic_records enable row level security;
 alter table public.faculty_academic_records enable row level security;
 revoke all on public.student_academic_records, public.faculty_academic_records from public, anon, authenticated;
 grant select, insert, update, delete on public.student_academic_records, public.faculty_academic_records to service_role;
+grant select on public.student_academic_records, public.faculty_academic_records to authenticated;
+create policy student_academic_records_select_own on public.student_academic_records
+  for select to authenticated using (profile_id = (select auth.uid()));
+create policy faculty_academic_records_select_own on public.faculty_academic_records
+  for select to authenticated using (profile_id = (select auth.uid()));
 
 create trigger student_academic_records_updated_at
   before update on public.student_academic_records for each row execute function public.set_updated_at();

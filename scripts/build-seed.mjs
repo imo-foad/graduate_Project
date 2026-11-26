@@ -39,7 +39,7 @@ export function validateUniversityFixtures(d) {
     if (!u.seed_key || keys.has(u.seed_key)) errors.push(`missing/duplicate seed_key: ${u.seed_key}`);
     keys.add(u.seed_key);
     if (!/synthetic/i.test(u.full_name ?? "")) errors.push(`${u.seed_key}: name must be explicitly synthetic`);
-    if (!/^\\+121255501(?:[0-3][0-9])$/.test(u.phone ?? "")) errors.push(`${u.seed_key}: phone outside fictional reserved block`);
+    if (!(typeof u.phone === "string" && u.phone.length === 12 && u.phone.startsWith("+121255501") && Number(u.phone.slice(-2)) <= 39)) errors.push(`${u.seed_key}: phone outside fictional reserved block`);
     if (phones.has(u.phone)) errors.push(`duplicate synthetic phone ${u.phone}`);
     phones.add(u.phone);
     if (["email","national_id","password"].some(k=>Object.hasOwn(u,k))) errors.push(`${u.seed_key}: forbidden email, National ID or password in fixture`);

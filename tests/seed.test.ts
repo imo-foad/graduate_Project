@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildSeed, validateFixtures, validateUniversityFixtures, q } from "../scripts/build-seed.mjs";
 import { assertLocalSupabaseApiUrl, buildCreatePhoneUserRequest, provisionUniversityAccounts } from "../scripts/provision-university-demo-users.mjs";
+import { assertLocalUniversitySeedTargets } from "../scripts/seed-university-demo.mjs";
 import { buildCreateUserRequest } from "../scripts/provision-demo-users.mjs";
 import { demo, opportunities, skills } from "./helpers.ts";
 
@@ -108,4 +109,19 @@ test("university seed SQL is guarded, transactional, deterministic and credentia
   assert.match(sql,/faculty_academic_records/);
   assert.doesNotMatch(sql,/DEMO_PASSWORD|service_role_key|national_id/i);
   assert.equal(buildSeed()["04_university_accounts.sql"],sql);
+});
+
+test("both synthetic seed targets reject hosted endpoints before any external operation", () => {
+  assert.throws(() => assertLocalUniversitySeedTargets(
+    "http://localhost:54321", "postgresql://postgres:secret@db.example.supabase.co:5432/postgres", {}
+  ), /not local/);
+  assert.throws(() => assertLocalUniversitySeedTargets(
+    "https://localhost:54321", "postgresql://postgres:postgres@127.0.0.1:54322/postgres", {}
+  ), /REFUSING non-local/);
+  assert.deepEqual(
+    assertLocalUniversitySeedTargets(
+      "http://127.0.0.1:54321","postgresql://postgres:postgres@127.0.0.1:54322/postgres",{}
+    ),
+    {apiBase:"http://127.0.0.1:54321",dbTarget:{host:"127.0.0.1",port:54322}}
+  );
 });

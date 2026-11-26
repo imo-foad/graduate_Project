@@ -325,14 +325,15 @@ select is((select status_source from public.applications where id = tests.id('jo
   'COMPANY_ACTION', 'company decisions are recorded with COMPANY_ACTION source');
 
 -- ---- Registration retry: only the exact pending phone + keyed National-ID pair may resume ----------
-do $
+do $pending_retry$
 declare v uuid := gen_random_uuid();
 begin
   insert into auth.users (id, aud, role, phone, raw_user_meta_data)
   values (v, 'authenticated', 'authenticated', '+201011110001',
           jsonb_build_object('full_name', 'Pending retry synthetic'));
   insert into tests.ids values ('pending_retry', v);
-end $;
+end
+$pending_retry$;
 set role service_role;
 select public.record_identity_verification(
   tests.id('pending_retry'), 'synthetic-test-provider', 'synthetic:retry',
@@ -366,14 +367,15 @@ select ok(
 reset role;
 
 -- ---- Partial Auth signup recovery: only unlinked PENDING phone profiles can be claimed -----------
-do $
+do $orphan_retry$
 declare v uuid := gen_random_uuid();
 begin
   insert into auth.users (id, aud, role, phone, raw_user_meta_data)
   values (v, 'authenticated', 'authenticated', '+201011110002',
           jsonb_build_object('full_name', 'Orphaned pending synthetic'));
   insert into tests.ids values ('orphan_retry', v);
-end $;
+end
+$orphan_retry$;
 set role service_role;
 select is(
   public.find_unlinked_pending_registration_retry('+201011110002'),
@@ -449,6 +451,38 @@ select is(
   'successful retry leaves a durable DONE record'
 );
 reset role;
+
+-- ---- Company verification changes invalidate recommendations and hide suspended listings --------
+update public.graduate_profiles
+   set recommendations_dirty = false
+ where profile_id = tests.id('candidate');
+update public.companies
+   set verification_status = 'SUSPENDED'
+ where id = tests.id('company');
+select is(
+  (select recommendations_dirty from public.graduate_profiles where profile_id = tests.id('candidate')),
+  true,
+  'suspending a company invalidates the recommendation cache'
+);
+set role service_role;
+select is(
+  (select count(*)::int
+     from jsonb_array_elements(
+       public.get_recommendation_candidates(tests.id('candidate')) -> 'opportunities'
+     ) item
+    where item ->> 'id' in (tests.id('job')::text, tests.id('internship')::text)),
+  0,
+  'suspended company opportunities are excluded from fresh recommendation candidates'
+);
+reset role;
+select throws_ok(
+  tests.as_user(tests.id('owner'), format(
+    'select public.update_company_job(%L, %L, %L)',
+    tests.id('job'), 'Blocked while suspended', 'A sufficiently long description for this test'
+  )),
+  'PT422', 'COMPANY_NOT_VERIFIED',
+  'company members cannot edit an ACTIVE listing while the company is suspended'
+);
 
 select * from finish();
 rollback;

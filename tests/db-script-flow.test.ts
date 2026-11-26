@@ -28,7 +28,7 @@ case "$q" in
   put("supabase", `if [[ "$1 $2 $3" == "test db database/15_three_type_scope.test.sql" ]]; then
   echo "supabase/tests/database/15_three_type_scope.test.sql .. ok"
   echo "Result: PASS"
-  exit ${FAKE_TEST15_EXIT:-0}
+  exit \${FAKE_TEST15_EXIT:-0}
 fi
 case "$1 $2" in
   "--version "*) echo "2.0.0";;

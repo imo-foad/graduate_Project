@@ -31,6 +31,15 @@ begin
   insert into tests.ids values (p_key, v);
   return v;
 end $f$;
+
+-- pgTAP's throws_ok executes in a subtransaction; set the PostgREST-style claims inside the same
+-- statement string so an expected error is asserted against the intended identity, not an empty JWT.
+create function tests.as_user(p_uid uuid, p_sql text) returns text language sql immutable as $f$
+  select format('select set_config(%L, %L, true); select set_config(%L, %L, true); ',
+                'request.jwt.claims', jsonb_build_object('sub', p_uid, 'role', 'authenticated')::text,
+                'role', 'authenticated') || p_sql
+$f$;
+
 create function tests.cand(p_candidates jsonb, p_key text) returns jsonb language sql stable as $f$
   select item from jsonb_array_elements(coalesce(p_candidates -> 'opportunities', '[]'::jsonb)) item
    where (item ->> 'id')::uuid = tests.id(p_key) $f$;
@@ -70,22 +79,22 @@ select is((public.register_for_event(tests.id('t_open'))).status, 'REGISTERED',
 select is((select registered_count from public.opportunities where id = tests.id('t_open')), 1,
   'training registration increments the authoritative counter');
 select throws_ok(
-  format('select public.register_for_event(%L)', tests.id('t_full')),
+  tests.as_user(tests.id('u1'), format('select public.register_for_event(%L)', tests.id('t_full'))),
   'PT409', 'EVENT_FULL',
   'a full TRAINING without a waitlist rejects registration'
 );
 select throws_ok(
-  format('select public.register_for_event(%L)', tests.id('j_job')),
+  tests.as_user(tests.id('u1'), format('select public.register_for_event(%L)', tests.id('j_job'))),
   'PT422', 'NOT_REGISTRABLE',
   'JOB cannot be registered through the training registration path'
 );
 select throws_ok(
-  format('select public.register_for_event(%L)', tests.id('j_internship')),
+  tests.as_user(tests.id('u1'), format('select public.register_for_event(%L)', tests.id('j_internship'))),
   'PT422', 'NOT_REGISTRABLE',
   'INTERNSHIP cannot be registered through the training registration path'
 );
 select throws_ok(
-  format('select public.register_for_event(%L)', tests.id('t_upcoming')),
+  tests.as_user(tests.id('u1'), format('select public.register_for_event(%L)', tests.id('t_upcoming'))),
   'PT422', 'REGISTRATION_CLOSED',
   'TRAINING registration is rejected before the window opens'
 );

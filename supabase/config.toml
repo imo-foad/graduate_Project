@@ -27,3 +27,12 @@ verify_jwt = true
 # Operator/cron-only worker: drains private.cv_cleanup_queue through the Storage API.
 [functions.cleanup-cv-objects]
 verify_jwt = true
+
+# Public registration: the caller has no JWT yet. The handler uses the service role internally and
+# never returns the National ID. Rate limiting belongs at the gateway/host level.
+[functions.register]
+verify_jwt = false
+
+# Requires the phone-user JWT issued after OTP confirmation.
+[functions.finalize-registration]
+verify_jwt = true

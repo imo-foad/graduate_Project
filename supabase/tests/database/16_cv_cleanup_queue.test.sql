@@ -32,7 +32,7 @@ select tests.mk_user('cv_other');
 select tests.add_cv('cv1', tests.id('cv_owner'), tests.id('cv_owner')::text || '/cv1.pdf');
 select tests.add_cv('cv2', tests.id('cv_owner'), tests.id('cv_owner')::text || '/cv2.pdf');
 select tests.add_cv('cv3', tests.id('cv_owner'), tests.id('cv_owner')::text || '/cv3.pdf');
-select tests.add_cv('cv_other', tests.id('cv_other'), tests.id('cv_other')::text || '/other.pdf');
+select tests.add_cv('cv_doc_other', tests.id('cv_other'), tests.id('cv_other')::text || '/other.pdf');
 
 -- ---- Direct DELETE is closed; the RPC is the single client path --------------------------------------
 select is(has_table_privilege('authenticated', 'public.cv_documents', 'delete'), false,

@@ -26,7 +26,7 @@ case "$q" in
   "select 1") echo 1;; "show server_version") echo "17.12";;
   *string_agg*) echo "$FAKE_MIGRATIONS";; *"from public.skills"*) echo "$FAKE_SKILLS";;
   *"from public.opportunities"*) echo "$FAKE_OPPS";; *"opportunity_skills os left join"*) echo 0;; *) echo "";; esac`);
-  put("supabase", `if [[ "$1 $2 $3 $4" == "test db supabase/tests/database/15_three_type_scope.test.sql" ]]; then
+  put("supabase", `if [[ "$1 $2 $3" == "test db supabase/tests/database/15_three_type_scope.test.sql" ]]; then
   echo "supabase/tests/database/15_three_type_scope.test.sql .. ok"
   echo "Files=1, Tests=120, 0 wallclock secs"
   echo "Result: PASS"

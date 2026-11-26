@@ -121,3 +121,15 @@ test("pgTAP failure exit code fails the run", () => assert.notEqual(run({ FAKE_T
 test("concurrency failure fails the run", () => assert.notEqual(run({ FAKE_CONC_EXIT: "1" }).status, 0));
 
 test("local HTTP integration failure fails the database runner", () => assert.notEqual(run({ FAKE_INTEGRATION_EXIT: "1" }).status, 0));
+
+test("concurrency harness creates only active TRAINING opportunities and fails fast on setup errors", () => {
+  const harness = readFileSync(join(ROOT, "tests/db/concurrency.sh"), "utf8");
+  assert.ok(harness.includes("set -euo pipefail"));
+  assert.ok(harness.includes("('${TAG}-nowait', 'TRAINING'"));
+  assert.ok(harness.includes("('${TAG}-wait',   'TRAINING'"));
+  assert.doesNotMatch(harness, /'EVENT'/);
+  assert.ok(harness.includes('[ -n "$NOWAIT" ]'));
+  assert.ok(harness.includes('[ -n "$WAIT" ]'));
+  assert.ok(harness.includes('[ -n "$JOB" ]'));
+  assert.ok(harness.includes("|| true ) & PIDS+=($!)"));
+});

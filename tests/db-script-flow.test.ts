@@ -29,7 +29,7 @@ case "$q" in
   echo "supabase/tests/database/15_three_type_scope.test.sql .. ok"
   echo "Files=1, Tests=120, 0 wallclock secs"
   echo "Result: PASS"
-  exit ${FAKE_TEST15_EXIT:-0}
+  exit \${FAKE_TEST15_EXIT:-0}
 fi
 case "$1 $2" in
   "--version "*) echo "2.0.0";;

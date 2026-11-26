@@ -40,11 +40,13 @@ Deno.serve(async (req) => {
     }
     const items = (Array.isArray(claimed) ? claimed : []) as CleanupItem[];
     if (items.length === 0) break;
+    let failedThisBatch = false;
     for (const item of items) {
       processed++;
       const { error: storageError } = await admin.storage.from("cv-documents").remove([item.storage_path]);
       if (storageError) {
         failed++;
+        failedThisBatch = true;
         const { error: markError } = await admin.rpc("fail_cv_cleanup", {
           p_id: item.id,
           // Do not persist provider error text: it can echo a private object key/path.
@@ -57,12 +59,15 @@ Deno.serve(async (req) => {
       const { data: completed, error: completeError } = await admin.rpc("complete_cv_cleanup", { p_id: item.id });
       if (completeError || completed !== true) {
         failed++;
+        failedThisBatch = true;
         console.error("CV cleanup completion could not be recorded", { code: completeError?.code ?? "NO_ROW" });
         continue;
       }
       done++;
     }
-    if (items.length < 50) break;
+    // Never reclaim a just-failed item again in the same invocation. It becomes eligible on the
+    // next worker run, and an unrecorded completion is recovered after its lease expires.
+    if (items.length < 50 || failedThisBatch) break;
   }
   return json({ processed, done, failed }, 200);
 });

@@ -290,6 +290,8 @@ class Contract(unittest.TestCase):
 
 class SecurityAndAuthContract(unittest.TestCase):
     TOKEN = "/auth/v1/token"
+    VERIFY = "/auth/v1/verify"
+    AUTH_PATHS = {TOKEN, VERIFY}
 
     def test_security_schemes(self):
         ss = API["components"]["securitySchemes"]
@@ -304,7 +306,7 @@ class SecurityAndAuthContract(unittest.TestCase):
 
     def test_authenticated_operations_inherit_global_security(self):
         for path, ops in API["paths"].items():
-            if path in (self.TOKEN, "/auth/v1/verify", "/functions/v1/register"): continue
+            if path in self.AUTH_PATHS or path == "/functions/v1/register": continue
             for method, op in ops.items():
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
 
@@ -333,10 +335,15 @@ class SecurityAndAuthContract(unittest.TestCase):
 
     def test_no_nonexistent_operations_documented(self):
         for path in API["paths"]:
-            if path == self.TOKEN or path.startswith("/rest/v1/"): continue
+            if path in self.AUTH_PATHS or path.startswith("/rest/v1/"): continue
             self.assertTrue(path.startswith("/functions/v1/"), f"unexpected path {path}")
             fn = path.rsplit("/", 1)[1]
             self.assertTrue(os.path.exists(os.path.join(ROOT, "supabase/functions", fn, "index.ts")), f"{path}: no such Edge Function")
+
+    def test_only_explicit_supabase_auth_paths_are_documented(self):
+        auth_paths = {path for path in API["paths"] if path.startswith("/auth/v1/")}
+        self.assertTrue(auth_paths <= self.AUTH_PATHS)
+        self.assertIn(self.TOKEN, auth_paths)
 
     def test_recommend_documents_its_real_error_responses(self):
         r = API["paths"]["/functions/v1/recommend"]["post"]["responses"]

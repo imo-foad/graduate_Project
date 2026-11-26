@@ -39,6 +39,7 @@ Expected outcomes:
 - `422`: invalid input or the provider rejected the identity.
 - `503 IDENTITY_PROVIDER_UNAVAILABLE`: no approved provider/configuration is available. This is a real blocker, not a successful verification. Do not bypass it or fabricate an identity.
 - `503 OTP_DELIVERY_FAILED`: the account remains pending and OTP delivery must be retried.
+- **Safe OTP resend:** resubmit the same registration request using the same phone number and National ID. The server compares the normalized phone with the keyed National-ID digest and resumes only that exact `PENDING_VERIFICATION` account; it sends a new OTP without creating a second Auth user. A different identity, a different phone, or an already-active account is not eligible for this retry and receives the normal conflict response. This retry does not change the password already stored for the pending Auth account; use password recovery if it must be changed.
 
 The mock identity provider is allowed only in explicitly configured disposable local tests. It must not silently replace an unavailable institutional provider in any shared or production environment.
 
@@ -174,7 +175,7 @@ Upload CV files only to the private `cv-documents` bucket under `<uid>/<filename
 
 Call `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<uuid>" }`. Digital-text PDF and DOCX parsing is supported. Scanned/image-only PDFs requiring OCR are not supported in the current scope. Extracted suggestions stay `PENDING` until the graduate explicitly reviews/accepts/rejects them; never treat extraction as verified profile data automatically. Review/adjust/reject pending suggestions using `POST /rest/v1/rpc/review_cv_suggestions` where available. The legacy skill-only `POST /rest/v1/rpc/confirm_cv_suggestions` accepts `p_confirm` and `p_reject` arrays; only confirmed suggestions become graduate profile skills.
 
-Delete CV metadata using `POST /rest/v1/rpc/delete_cv_document`, not a direct table DELETE. This queues a durable server-side Storage-object cleanup. The operator-only `cleanup-cv-objects` worker removes bytes through the Storage API and records DONE/FAILED for retry/reconciliation. Never call the worker with a user token and never grant the app service-role access.
+Delete CV metadata using `POST /rest/v1/rpc/delete_cv_document`, not a direct table DELETE. This queues a durable server-side Storage-object cleanup. The operator-only `cleanup-cv-objects` worker removes bytes through the Storage API and records DONE/FAILED for retry/reconciliation. Transient failures use exponential backoff capped at six hours; abandoned 15-minute worker leases are recovered. The reconciliation report separates retry-ready, retry-scheduled and exhausted rows. Exhausted rows stay visible until an operator explicitly requeues them. Never call the worker with a user token and never grant the app service-role access.
 
 ## 9. Recommendations and career insights
 

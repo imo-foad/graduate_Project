@@ -444,7 +444,7 @@ async function testCareerAndRecommendations(user) {
   record(user, "recommendations", "recommend endpoint returns deterministic recommendations with the current model",
     first.status === 200 && first.json?.source === "computed" &&
     first.json?.ai_mode === "deterministic" &&
-    first.json?.model_version === "deterministic-v5-scope-aligned" && // must match MODEL_VERSION in supabase/functions/_shared/scoring.ts
+    first.json?.model_version === "deterministic-v6-three-type-scope" && // must match MODEL_VERSION in supabase/functions/_shared/scoring.ts
     Array.isArray(first.json?.items),
     { status: first.status, source: first.json?.source, model_version: first.json?.model_version });
   const validRecommendations = user.recommendationItems.every((item) =>
@@ -487,10 +487,10 @@ async function testGraduateWorkflows(user) {
     return;
   }
   const jobId = await opportunityId(user, "job-grad-2024-only");
-  const eventId = await opportunityId(user, "evt-tech-conf");
-  record(user, "graduate_workflows", "open graduate job and conference exist in the read-only catalogue",
-    Boolean(jobId && eventId), { jobId, eventId });
-  if (!jobId || !eventId) return;
+  const trainingId = await opportunityId(user, "trn-rest-api");
+  record(user, "graduate_workflows", "open graduate job and training exist in the read-only catalogue",
+    Boolean(jobId && trainingId), { jobId, trainingId });
+  if (!jobId || !trainingId) return;
 
   const saved = await request("/rest/v1/saved_opportunities", {
     method: "POST",
@@ -545,25 +545,27 @@ async function testGraduateWorkflows(user) {
       { status: appHistory.status, body: appHistory.json ?? appHistory.text });
   }
 
-  const registered = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: eventId });
-  record(user, "graduate_workflows", "graduate registers for the open conference",
+  // The SQL RPC keeps the historical name register_for_event for client compatibility; its contract is
+  // direct TRAINING registration only.
+  const registered = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: trainingId });
+  record(user, "graduate_workflows", "graduate registers directly for the open training",
     registered.status === 200 && registered.json?.status === "REGISTERED",
     { status: registered.status, body: registered.json ?? registered.text });
-  const duplicateRegistration = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: eventId });
-  record(user, "graduate_workflows", "duplicate event registration is rejected",
+  const duplicateRegistration = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: trainingId });
+  record(user, "graduate_workflows", "duplicate training registration is rejected",
     duplicateRegistration.status === 409 &&
     (duplicateRegistration.json?.message === "ALREADY_REGISTERED" || duplicateRegistration.json?.code === "ALREADY_REGISTERED"),
     { status: duplicateRegistration.status, body: duplicateRegistration.json ?? duplicateRegistration.text });
-  const cancelled = await post("/rest/v1/rpc/cancel_event_registration", user.token, { p_opportunity_id: eventId });
-  record(user, "graduate_workflows", "graduate can cancel their event registration",
+  const cancelled = await post("/rest/v1/rpc/cancel_event_registration", user.token, { p_opportunity_id: trainingId });
+  record(user, "graduate_workflows", "graduate can cancel their training registration",
     cancelled.status === 200 && cancelled.json?.status === "CANCELLED",
     { status: cancelled.status, body: cancelled.json ?? cancelled.text });
-  const reRegistered = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: eventId });
+  const reRegistered = await post("/rest/v1/rpc/register_for_event", user.token, { p_opportunity_id: trainingId });
   record(user, "graduate_workflows", "graduate can register again after cancellation",
     reRegistered.status === 200 && reRegistered.json?.status === "REGISTERED",
     { status: reRegistered.status, body: reRegistered.json ?? reRegistered.text });
   if (reRegistered.status === 200) {
-    await post("/rest/v1/rpc/cancel_event_registration", user.token, { p_opportunity_id: eventId });
+    await post("/rest/v1/rpc/cancel_event_registration", user.token, { p_opportunity_id: trainingId });
   }
 }
 async function testInsightsAndFeedback(user) {
@@ -625,7 +627,7 @@ async function testInsightsAndFeedback(user) {
   record(user, "insights_feedback", "application and event workflows create this graduate's notifications",
     notifications.status === 200 &&
     notifications.json?.some((row) => row.type === "APPLICATION_SUBMITTED") &&
-    notifications.json?.some((row) => row.type === "EVENT_REGISTERED"),
+    notifications.json?.some((row) => row.type === "TRAINING_REGISTERED"),
     { status: notifications.status, types: (notifications.json ?? []).map((row) => row.type) });
 }
 async function testPrivacy(users) {

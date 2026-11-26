@@ -156,7 +156,7 @@
   ],
   "registrations": [
    {
-    "event": "evt-full-nowait",
+    "event": "trn-full-nowait",
     "status": "REGISTERED",
     "days_ago": 2
    }
@@ -205,7 +205,7 @@
   "applications": [],
   "registrations": [
    {
-    "event": "evt-full-event",
+    "event": "trn-full-waitlist",
     "status": "REGISTERED",
     "days_ago": 3
    }

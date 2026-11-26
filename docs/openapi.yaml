@@ -23,6 +23,15 @@ components:
       bearerFormat: JWT
       description: User access_token from /auth/v1/token. Required on every operation except the token endpoint itself.
   schemas:
+    OpportunityType:
+      type: string
+      description: 'Active opportunity types. Final product decision 2026-11-26: only JOB, INTERNSHIP and TRAINING are
+        active. Every other value is rejected by the database and is never returned as actionable. Matching is exact
+        and case-sensitive.'
+      enum:
+      - JOB
+      - INTERNSHIP
+      - TRAINING
     Error:
       type: object
       properties:
@@ -500,7 +509,8 @@ paths:
   /rest/v1/opportunities:
     get:
       summary: Read-only catalogue. Only open opportunities (ACTIVE, not expired) plus ones you applied/registered/saved.
-        Use PostgREST filters, e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
+        The active scope is exactly JOB, INTERNSHIP and TRAINING (schema OpportunityType). Use PostgREST filters,
+        e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
       responses:
         '200':
           description: OK
@@ -576,6 +586,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/delete_cv_document:
+    post:
+      summary: Delete own CV metadata and enqueue cleanup of the private Storage object (owner only)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_cv_document_id
+              properties:
+                p_cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: '{deleted: true, cv_document_id, cleanup_queued: true}. The object is removed by the
+            service-role worker through the Storage API; retry is idempotent.'
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/get_social_feed:
@@ -1246,11 +1276,8 @@ paths:
       responses:
         '204':
           description: Updated
-    delete:
-      summary: Delete CV record (storage object must be removed separately)
-      responses:
-        '204':
-          description: Deleted
+    # Direct DELETE is revoked: deletion must go through /rest/v1/rpc/delete_cv_document so the
+    # private Storage object is recorded in the durable cleanup ledger.
   /rest/v1/cv_suggestions:
     get:
       summary: Pending/decided CV skill suggestions (confirm via RPC)

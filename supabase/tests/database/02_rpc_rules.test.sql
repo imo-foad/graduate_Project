@@ -87,9 +87,18 @@ select is((select count(*)::int from public.notifications
 
 select is(public.get_opportunity_eligibility(tests.id('j_cert')), array['MISSING_CERTIFICATION:Security+'], 'eligibility failures are reported');
 reset role;
-insert into public.certifications (graduate_id, title) values (tests.id('a1'), 'security+');
+insert into public.certifications (graduate_id, title) values (tests.id('a2'), 'CompTIA Network+');
+select tests.login('a2');
+select is(public.get_opportunity_eligibility(tests.id('j_cert')),
+  array['MISSING_CERTIFICATION:Security+'],
+  'a different CompTIA certification does not satisfy the Security+ requirement');
+reset role;
+insert into public.certifications (graduate_id, title) values (tests.id('a1'), 'COMPtia   SECURITY +');
 select tests.login('a1');
-select is((public.apply_for_job(tests.id('j_cert'))).status, 'SUBMITTED', 'eligible once certification exists (case-insensitive)');
+select is(public.get_opportunity_eligibility(tests.id('j_cert')), '{}'::text[],
+  'CompTIA-prefixed Security+ satisfies the shorthand requirement');
+select is((public.apply_for_job(tests.id('j_cert'))).status, 'SUBMITTED',
+  'application succeeds when the equivalent CompTIA Security+ certification exists');
 select throws_ok($q$select public.apply_for_job(tests.id('j_ok'), '00000000-0000-0000-0000-0000000000c2')$q$, 'PT404', 'CV_NOT_FOUND', 'cannot attach another graduate''s CV (and duplicate check is not reached first)');
 
 -- withdraw_application

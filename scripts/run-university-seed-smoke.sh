@@ -154,6 +154,11 @@ union all select 'graduate_leakage', count(*)::text from public.profiles p join 
   where p.phone between '+12125550100' and '+12125550139';
 SQL
 
+# Provisioning is not considered healthy until existing phone-only accounts can authenticate and
+# the role/RLS boundary checks pass through the real local HTTP API.
+echo "=== verifying phone/password Auth, academic-record RLS and platform-admin boundaries"
+node tests/integration/university-dataset.integration.mjs 2>&1 | tee "$LOG_DIR/university-dataset-integration.log"
+
 # Also run the synthetic PDF/DOCX CV field-accuracy harness against the actual local Edge Function.
 supabase functions serve --env-file "$LOCAL_ENV" > "$LOG_DIR/university-seed-functions-serve.log" 2>&1 &
 FUNCTION_PID=$!

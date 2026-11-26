@@ -50,6 +50,13 @@ const q = (path, token) => request(path, { token });
 const serviceGet = (path) => request(path, {}, true);
 const encode = (v) => encodeURIComponent(String(v));
 
+const authSettings = await request("/auth/v1/settings");
+assert.equal(authSettings.status, 200,
+  "GoTrue settings endpoint failed: HTTP " + authSettings.status + " " + authSettings.text);
+assert.equal(authSettings.json?.external?.phone, true,
+  "GoTrue has disabled phone login; verify auth.sms.enabled and an enabled auth.sms.<provider>");
+pass("GoTrue advertises phone/password Auth as enabled", true);
+
 async function login(account) {
   const r = await request("/auth/v1/token?grant_type=password", {
     method: "POST",

@@ -126,3 +126,15 @@ test("Edge Functions use trusted per-user rate limits and fail closed", async ()
   assert.match(parseCv, /RATE_LIMIT_UNAVAILABLE/);
   assert.match(parseCv, /Retry-After/);
 });
+
+
+test("certification matching accepts a CompTIA prefix but remains an exact normalized match", () => {
+  const sql = allMigrationsSql();
+  const eligibility = finalFunctions(sql).get("eligibility_failures");
+  assert.ok(eligibility, "final eligibility_failures definition must exist");
+  assert.match(sql, /create or replace function private\.normalize_certification_title\(/);
+  assert.match(eligibility.body,
+    /private\.normalize_certification_title\(c\.title\)\s*=\s*private\.normalize_certification_title\(cert\)/);
+  assert.ok(sql.includes("'^comptia[[:space:]:-]+'"));
+  assert.ok(sql.includes("'[[:space:]]+'"));
+});

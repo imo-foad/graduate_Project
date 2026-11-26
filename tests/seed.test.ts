@@ -313,11 +313,13 @@ test("local CV evaluation cleanup authenticates metadata DELETE as service_role"
   assert.match(cleanup, /headers:headers\(service,service,/);
 });
 
-test("local phone/password Auth is enabled without enabling public account signup", () => {
+test("local phone/password Auth has an SMS transport without enabling public signup", () => {
   const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
   assert.match(config, /^\[auth\]\s*\nenable_signup = false/m);
-  assert.match(config, /\[auth\.sms\][\s\S]*?\nenabled = true\s*\nenable_signup = true\s*\nenable_confirmations = true/);
-  assert.ok(config.includes("CLI v3.3.0 maps enable_signup to GOTRUE_EXTERNAL_PHONE_ENABLED"));
-  assert.ok(config.includes("Global [auth].enable_signup remains false"),
-    "global signup disable must remain explicit while the existing phone provider is enabled");
+  assert.match(config, /\[auth\.sms\][\s\S]*?\nenabled = true\s*\nenable_confirmations = true/);
+  assert.match(config, /\[auth\.sms\.twilio\][\s\S]*?\nenabled = true\s*\naccount_sid = "AC_LOCAL_TEST_ONLY"\s*\nmessage_service_sid = "MG_LOCAL_TEST_ONLY"\s*\nauth_token = "LOCAL_TEST_ONLY_NOT_A_SECRET"/);
+  assert.ok(config.includes("credentials are deliberately fake"),
+    "the local provider must never contain real SMS credentials");
+  assert.doesNotMatch(config, /\[auth\.sms\][\s\S]*?\nenable_signup\s*=/,
+    "use the current auth.sms.enabled provider switch, not the deprecated alias");
 });

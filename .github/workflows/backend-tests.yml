@@ -79,6 +79,7 @@ jobs:
           grep -q "Auth first pass:" .ci-logs/university-seed-apply.log
           grep -q "First-pass counts:" .ci-logs/university-seed-apply.log
           grep -q "Second-pass counts:" .ci-logs/university-seed-apply.log
+          grep -q "^UNIVERSITY DATASET HTTP INTEGRATION PASSED:" .ci-logs/university-dataset-integration.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -91,6 +92,7 @@ jobs:
             .ci-logs/graduate-demo-provision.log
             .ci-logs/university-seed-apply.log
             .ci-logs/university-seed-verification.log
+            .ci-logs/university-dataset-integration.log
             .ci-logs/university-seed-functions-serve.log
             .ci-logs/cv-parser-evaluation.log
             .ci-logs/cv-parser-evaluation.json

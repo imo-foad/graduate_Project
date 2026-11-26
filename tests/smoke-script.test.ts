@@ -63,6 +63,8 @@ test("GitHub Actions propagates the university smoke exit code and requires its 
   assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
   assert.match(workflow, /grep -q "First-pass counts:" \.ci-logs\/university-seed-apply\.log/);
   assert.match(workflow, /grep -q "Second-pass counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "\^UNIVERSITY DATASET HTTP INTEGRATION PASSED:" \.ci-logs\/university-dataset-integration\.log/);
+  assert.match(workflow, /university-dataset-integration\.log/);
 });
 
 test("the smoke workflow does not hide script failures behind an outer tee pipeline", () => {
@@ -73,6 +75,8 @@ test("the smoke workflow does not hide script failures behind an outer tee pipel
   assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
   assert.match(workflow, /grep -q "First-pass counts:" \.ci-logs\/university-seed-apply\.log/);
   assert.match(workflow, /grep -q "Second-pass counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "\^UNIVERSITY DATASET HTTP INTEGRATION PASSED:" \.ci-logs\/university-dataset-integration\.log/);
+  assert.match(workflow, /university-dataset-integration\.log/);
 });
 
 test("the smoke script writes its terminal result after closing and joining tee", () => {
@@ -82,4 +86,17 @@ test("the smoke script writes its terminal result after closing and joining tee"
   const appendMarker = script.indexOf('printf \'%s\\n\' "$marker" >> "$LOG_FILE"', joinTee);
   assert.ok(closeOutput >= 0 && joinTee > closeOutput && appendMarker > joinTee,
     "tee must exit before the terminal result is appended to the artifact");
+});
+
+
+test("the university smoke proves phone/password Auth and RLS over the local HTTP API", () => {
+  const script = readFileSync(join(ROOT, "scripts/run-university-seed-smoke.sh"), "utf8");
+  const integration = readFileSync(join(ROOT, "tests/integration/university-dataset.integration.mjs"), "utf8");
+  const seed = script.indexOf("node scripts/seed-university-demo.mjs");
+  const httpIntegration = script.indexOf("node tests/integration/university-dataset.integration.mjs");
+  assert.ok(seed >= 0 && httpIntegration > seed, "HTTP integration must run after the 40-account seed");
+  assert.match(script, /university-dataset-integration\.log/);
+  assert.match(integration, /auth\/v1\/settings/);
+  assert.match(integration, /external\?\.phone/);
+  assert.match(integration, /phone\/password login failed/);
 });

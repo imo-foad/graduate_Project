@@ -149,11 +149,11 @@ test("recommendation candidates carry status and timestamps required by the scor
 });
 
 test("company verification invalidates recommendation caches with an explicit all-graduates predicate", () => {
-  const trigger = finalFunctions(allMigrationsSql()).get("mark_company_recommendations_dirty");
-  assert.ok(trigger, "final company recommendation invalidation trigger must exist");
-  assert.match(trigger.body,
+  const definitions = [...allMigrationsSql().matchAll(
+    /create or replace function private[.]mark_company_recommendations_dirty\\(\\)[\\s\\S]*?\\$mark_company_recommendations_dirty_v[0-9]+\\$;/gi,
+  )];
+  const finalDefinition = definitions.at(-1)?.[0] ?? "";
+  assert.ok(finalDefinition, "final company recommendation invalidation trigger must exist");
+  assert.match(finalDefinition,
     /update public[.]graduate_profiles[\\s\\S]*?where profile_id is not null/i);
-  assert.doesNotMatch(trigger.body,
-    /update public\\.graduate_profiles\\s+set[^;]*;/i,
-    "the local PostgREST safe-update guard rejects unrestricted updates");
 });

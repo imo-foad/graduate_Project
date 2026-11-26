@@ -3,8 +3,8 @@
 import { isActiveOpportunityType, registrationAvailability } from "./opportunity-state.ts";
 import type { AvailabilityStatus } from "./opportunity-state.ts";
 
-// v5: Scholarship and Competition were cancelled, so every cached ranking must be recomputed.
-export const MODEL_VERSION = "deterministic-v5-scope-aligned";
+// v6: the active scope is JOB/INTERNSHIP/TRAINING only, so every cached ranking must be recomputed.
+export const MODEL_VERSION = "deterministic-v6-three-type-scope";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }
@@ -41,13 +41,15 @@ type Criterion = "semantic" | "skills" | "major" | "experience" | "interests" | 
   | "relevance" | "audience" | "availability" | "gap_fill" | "interaction";
 const WEIGHTS: Record<string, Partial<Record<Criterion, number>>> = {
   JOB: { semantic: 30, skills: 30, major: 10, experience: 15, interests: 5, interaction: 5, location: 5 },
-  EVENT: { interests: 25, semantic: 20, relevance: 15, audience: 10, location: 10, availability: 10, interaction: 10 },
-  TRAINING: { semantic: 25, gap_fill: 35, interests: 10, major: 10, location: 10, interaction: 10 },
+  // TRAINING is registrable: availability (window/capacity/waitlist) is part of its ranking, because a
+  // full programme without a waitlist is excluded and an upcoming/waitlisted seat is less actionable.
+  TRAINING: { semantic: 20, gap_fill: 30, interests: 10, major: 10, location: 10, interaction: 10, availability: 10 },
 };
+/** Weight profiles exist only for the active scope. Excluded/unknown types get no criteria and are rejected before scoring. */
 export function weightProfile(type: string): Partial<Record<Criterion, number>> {
   if (type === "JOB" || type === "INTERNSHIP") return WEIGHTS.JOB;
   if (type === "TRAINING") return WEIGHTS.TRAINING;
-  return WEIGHTS.EVENT;
+  return {};
 }
 // ASSUMPTION B3: minimum years implied by each experience level.
 const LEVEL_YEARS: Record<string, number> = { FRESH_GRADUATE: 0, JUNIOR: 1, MID: 3, SENIOR: 5 };
@@ -167,7 +169,7 @@ export function scoreOpportunity(g: GraduateInput, o: OpportunityInput, now: Dat
   // always end in EVENT_FULL. Closed opportunities are already excluded by the SQL predicate and by the
   // cached-read filter, so scoring keeps them scoreable and only drops capacity failures here.
   const availability = registrationAvailability(o, now);
-  if (availability === "FULL") return null;
+  if (availability === "FULL" || availability === "CLOSED") return null;
   if (o.minimum_experience_required && o.minimum_experience_years !== null
       && o.minimum_experience_years !== undefined && g.experience_years < o.minimum_experience_years) return null;
   const sa = skillAnalysis(g, o);

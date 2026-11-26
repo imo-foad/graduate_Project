@@ -220,6 +220,35 @@ class Contract(unittest.TestCase):
         self.assertIn("is_opportunity_type_active", SQL)
         self.assertIn("CANCELLED_OPPORTUNITY_TYPE", SQL)
 
+    def test_active_opportunity_scope_is_identical_in_sql_typescript_seed_and_openapi(self):
+        # One allow-list, four representations. A drift here is the exact class of bug this contract guards.
+        expected = ["JOB", "INTERNSHIP", "TRAINING"]
+
+        sql_predicate = re.findall(
+            r"function public\.is_opportunity_type_active\(p_type text\)[\s\S]*?p_type in \(([^)]*)\)",
+            SQL, re.I,
+        )
+        self.assertTrue(sql_predicate, "is_opportunity_type_active(p_type) must define an allow-list")
+        sql_types = re.findall(r"'([A-Z_]+)'", sql_predicate[-1])
+        self.assertEqual(sql_types, expected, "SQL active types drifted")
+
+        ts = open(os.path.join(ROOT, "supabase/functions/_shared/opportunity-state.ts")).read()
+        ts_list = re.search(r"ACTIVE_OPPORTUNITY_TYPES[^=]*=\s*\[([^\]]*)\]", ts)
+        self.assertIsNotNone(ts_list)
+        self.assertEqual(re.findall(r'"([A-Z_]+)"', ts_list.group(1)), expected, "TypeScript active types drifted")
+
+        api_types = API["components"]["schemas"]["OpportunityType"]["enum"]
+        self.assertEqual(api_types, expected, "OpenAPI active types drifted")
+
+        seed = json.load(open(os.path.join(ROOT, "fixtures/opportunities.json")))
+        seeded = sorted({item["type"] for item in seed})
+        self.assertEqual(seeded, sorted(expected), "seed catalogue ships a non-active opportunity type")
+
+        # Nothing in the API contract may advertise an inactive type value.
+        blob = json.dumps(API)
+        for token in ("EVENT", "CONFERENCE", "VOLUNTEER"):
+            self.assertNotRegex(blob, rf'"{token}"', f"inactive type advertised: {token}")
+
     def test_social_feed_read_models_match_privacy_projection(self):
         schemas = API["components"]["schemas"]
         self.assertNotIn("author_id", schemas["SocialFeedItem"]["properties"])

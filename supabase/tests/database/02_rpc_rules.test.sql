@@ -42,7 +42,7 @@ do $$ begin
   perform tests.mk_opp('j_closed', 'JOB',   '{"deadline_days":5,"status":"CLOSED"}');
   perform tests.mk_opp('j_cert',   'JOB',   '{"deadline_days":5}');
   perform tests.mk_opp('j_sample', 'JOB',   '{"deadline_days":5}');
-  perform tests.mk_opp('e_evt',    'EVENT', '{"deadline_days":5}');
+  perform tests.mk_opp('e_evt',    'TRAINING', '{"deadline_days":5}');
   insert into public.opportunity_eligibility (opportunity_id, required_certifications) values (tests.id('j_cert'), array['Security+']);
   insert into public.skills (id, canonical_name, category) values ('T_SKILL_A','T Skill A','Test'), ('T_SKILL_B','T Skill B','Test');
   insert into public.cv_documents (id, graduate_id, storage_path, file_type, size_bytes)

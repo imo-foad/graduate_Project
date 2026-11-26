@@ -21,9 +21,10 @@ function deps(over: Partial<FlowDeps> & { versions?: number[]; saveErrors?: (str
       return { error: e ? { message: e } : null };
     }),
     readCached: over.readCached ?? (async () => { calls.read++; return { data: [
-      { opportunity: { status: "ACTIVE", deadline: new Date(NOW + 1e6).toISOString() } },
-      { opportunity: { status: "ACTIVE", deadline: new Date(NOW - 1e6).toISOString() } },
-      { opportunity: { status: "CLOSED" } }] }; }),
+      { opportunity: { type: "JOB", status: "ACTIVE", deadline: new Date(NOW + 1e6).toISOString() } },
+      { opportunity: { type: "JOB", status: "ACTIVE", deadline: new Date(NOW - 1e6).toISOString() } },
+      { opportunity: { type: "JOB", status: "CLOSED" } },
+      { opportunity: { type: "EVENT", status: "ACTIVE" } }] }; }),
   };
   return { d, calls };
 }
@@ -66,19 +67,21 @@ test("force=true recomputes even when the cache is fresh", async () => {
   await runRecommend(d, { force: true });
   assert.deepEqual(calls.save, [9]);
 });
-test("response drops expired/closed cached rows", async () => {
-  const { d } = deps({ cacheState: async () => ({ dirty: false, count: 3 }) });
+test("response drops expired/closed and out-of-scope cached rows", async () => {
+  const { d } = deps({ cacheState: async () => ({ dirty: false, count: 4 }) });
   const r = await runRecommend(d);
   assert.equal((r.body.items as unknown[]).length, 1);
+  assert.equal((r.body.items as { opportunity: { type: string } }[])[0].opportunity.type, "JOB");
 });
 test("cached rows are filtered by current availability and report their status", async () => {
   const { d } = deps({
     cacheState: async () => ({ dirty: false, count: 4 }),
     readCached: async () => ({ data: [
-      { id: "open", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 1 } },
-      { id: "waitlist", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10, waitlist_enabled: true } },
-      { id: "full", opportunity: { status: "ACTIVE", capacity: 10, registered_count: 10 } },
-      { id: "upcoming", opportunity: { status: "ACTIVE", registration_opens_at: new Date(NOW + 1e6).toISOString() } },
+      { id: "open", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 10, registered_count: 1 } },
+      { id: "waitlist", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 10, registered_count: 10, waitlist_enabled: true } },
+      { id: "full", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 10, registered_count: 10 } },
+      { id: "upcoming", opportunity: { type: "TRAINING", status: "ACTIVE", registration_opens_at: new Date(NOW + 1e6).toISOString() } },
+      { id: "event", opportunity: { type: "EVENT", status: "ACTIVE" } },
     ] }),
   });
   const r = await runRecommend(d);

@@ -97,6 +97,9 @@ select is((select last_error from private.cv_cleanup_queue where storage_path = 
   'STORAGE_DELETE_FAILED:timeout', 'the last error is retained for reconciliation');
 select is(((public.get_cv_cleanup_report()) ->> 'failed')::int, 1,
   'the reconciliation report exposes the failed backlog before retry');
+select ok((select next_attempt_at <= now() from private.cv_cleanup_queue
+  where storage_path = tests.id('cv_owner')::text || '/cv2.pdf'),
+  'a failed cleanup is immediately eligible for the next worker run');
 select is(jsonb_array_length(public.claim_cv_cleanup(10)), 1,
   'FAILED rows are retried by the next worker run');
 select is(((public.get_cv_cleanup_report()) ->> 'processing')::int, 1,

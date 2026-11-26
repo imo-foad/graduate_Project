@@ -110,10 +110,14 @@ select is(
   0,
   'no non-cancelled row exists outside the three active types'
 );
+-- Seed rows are marked is_sample=true by build-seed.mjs. Test-only fixtures above are
+-- deliberately excluded because t_closed is a valid CLOSED TRAINING used by this test.
 select is(
-  (select count(*)::int from public.opportunities where type = 'TRAINING' and status = 'ACTIVE'),
-  (select count(*)::int from public.opportunities where type = 'TRAINING'),
-  'all seeded TRAINING rows stay active (they are part of the approved scope)'
+  (select count(*)::int from public.opportunities
+    where type = 'TRAINING' and is_sample is true and status = 'ACTIVE'),
+  (select count(*)::int from public.opportunities
+    where type = 'TRAINING' and is_sample is true),
+  'all seeded TRAINING catalogue rows stay active (they are part of the approved scope)'
 );
 
 select * from finish();

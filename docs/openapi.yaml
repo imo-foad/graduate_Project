@@ -37,6 +37,12 @@ components:
         type: { $ref: '#/components/schemas/OpportunityType' }
         title: { type: string }
         company_name: { type: string, nullable: true }
+        company_id: { type: string, format: uuid, nullable: true }
+        company_verification_status:
+          type: string
+          nullable: true
+          enum: [PENDING_REVIEW, VERIFIED, REJECTED, SUSPENDED]
+          description: Safe status projection; company details remain member/admin-only.
         description: { type: string }
         status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, EXPIRED, CANCELLED] }
         requires_cv:
@@ -1222,7 +1228,8 @@ paths:
           description: JSON
   /functions/v1/recommend:
     post:
-      summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Deterministic scoring;
+      summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Only active opportunity
+        types and verified-company listings are candidates; closed/full training availability is filtered. Deterministic scoring;
         no external AI call in v0.1.
       requestBody:
         content:

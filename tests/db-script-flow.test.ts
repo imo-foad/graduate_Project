@@ -50,7 +50,14 @@ test("happy path (fake tools): every phase runs and the script reports success",
   const r = run();
   assert.equal(r.status, 0, out(r));
   for (const m of ["=== A.", "=== B.", "=== C.", "=== D.", "=== E.", "=== F.", "LOCAL HTTP INTEGRATION PASSED", "DB TESTS PASSED", `migrations applied: ${VERSIONS}`]) assert.ok(out(r).includes(m), m);
-  assert.ok(MIGS.length >= 22, `expected all 22 checked migrations, found ${MIGS.length}`);
+  assert.ok(MIGS.length > 0, "at least one dynamically discovered migration must be present");
+});
+test("migration discovery validates dynamic unique/increasing versions without a fixed total", () => {
+  const runner = readFileSync(join(ROOT, "scripts/run-db-tests.sh"), "utf8");
+  assert.match(runner, /MIGRATIONS=\(supabase\/migrations\/\*\.sql\)/);
+  assert.match(runner, /PREVIOUS_VERSION/);
+  assert.doesNotMatch(runner, /-ge\s+\d+/);
+  assert.doesNotMatch(runner, /through\s+\d{4}/);
 });
 test("focused Test 15 runs independently and fails the DB runner when it fails", () => {
   const r = run({ FAKE_TEST15_EXIT: "1" });

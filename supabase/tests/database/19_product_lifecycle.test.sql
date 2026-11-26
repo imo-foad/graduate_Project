@@ -460,6 +460,11 @@ update public.companies
    set verification_status = 'SUSPENDED'
  where id = tests.id('company');
 select is(
+  (select company_verification_status from public.opportunities where id = tests.id('job')),
+  'SUSPENDED',
+  'company verification changes are projected onto its public opportunity rows'
+);
+select is(
   (select recommendations_dirty from public.graduate_profiles where profile_id = tests.id('candidate')),
   true,
   'suspending a company invalidates the recommendation cache'

@@ -323,5 +323,95 @@ select throws_ok(
 
 select is((select status_source from public.applications where id = tests.id('job_application')),
   'COMPANY_ACTION', 'company decisions are recorded with COMPANY_ACTION source');
+
+-- ---- Registration retry: only the exact pending phone + keyed National-ID pair may resume ----------
+do $
+declare v uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, aud, role, phone, raw_user_meta_data)
+  values (v, 'authenticated', 'authenticated', '+201011110001',
+          jsonb_build_object('full_name', 'Pending retry synthetic'));
+  insert into tests.ids values ('pending_retry', v);
+end $;
+set role service_role;
+select public.record_identity_verification(
+  tests.id('pending_retry'), 'synthetic-test-provider', 'synthetic:retry',
+  repeat('e', 64), '0001',
+  '[{"identity_type":"STUDENT","institution_ref":"SYNTHETIC_RETRY_INSTITUTION"}]'::jsonb,
+  'VERIFIED', null
+);
+select is(
+  public.find_pending_registration_retry('+201011110001', repeat('e', 64)),
+  tests.id('pending_retry'),
+  'service-role retry lookup resolves the exact matching pending account'
+);
+select ok(
+  public.find_pending_registration_retry('+201011110002', repeat('e', 64)) is null,
+  'retry lookup refuses a different phone'
+);
+select ok(
+  public.find_pending_registration_retry('+201011110001', repeat('f', 64)) is null,
+  'retry lookup refuses a different National-ID digest'
+);
+select is(
+  has_function_privilege('authenticated', 'public.find_pending_registration_retry(text,text)', 'execute'),
+  false,
+  'authenticated clients cannot enumerate pending registration identities'
+);
+update public.profiles set account_status = 'ACTIVE' where id = tests.id('pending_retry');
+select ok(
+  public.find_pending_registration_retry('+201011110001', repeat('e', 64)) is null,
+  'an already-active account cannot enter the pending OTP retry path'
+);
+reset role;
+
+-- ---- CV Storage cleanup: failure is delayed, observable and explicitly recoverable ----------------
+insert into private.cv_cleanup_queue (storage_path, graduate_id, reason, status, attempts, next_attempt_at)
+values ('synthetic-cleanup-retry/cv.pdf', tests.id('candidate'), 'METADATA_DELETE', 'PENDING', 0, now() - interval '1 minute');
+set role service_role;
+select is(
+  jsonb_array_length(public.claim_cv_cleanup(10)),
+  1,
+  'cleanup worker can claim a due item'
+);
+select is(
+  public.fail_cv_cleanup(
+    (select id from private.cv_cleanup_queue where storage_path = 'synthetic-cleanup-retry/cv.pdf'),
+    'STORAGE_DELETE_FAILED'
+  ),
+  true,
+  'failed Storage deletion is durably recorded'
+);
+select is(
+  jsonb_array_length(public.claim_cv_cleanup(10)),
+  0,
+  'a failed cleanup is not reclaimed immediately before its backoff expires'
+);
+select is(
+  public.retry_cv_cleanup(
+    (select id from private.cv_cleanup_queue where storage_path = 'synthetic-cleanup-retry/cv.pdf')
+  ),
+  true,
+  'an operator can explicitly requeue a failed cleanup item'
+);
+select is(
+  jsonb_array_length(public.claim_cv_cleanup(10)),
+  1,
+  'an explicitly requeued cleanup item is claimable again'
+);
+select is(
+  public.complete_cv_cleanup(
+    (select id from private.cv_cleanup_queue where storage_path = 'synthetic-cleanup-retry/cv.pdf')
+  ),
+  true,
+  'a retried cleanup item can be completed'
+);
+select is(
+  (select status from private.cv_cleanup_queue where storage_path = 'synthetic-cleanup-retry/cv.pdf'),
+  'DONE',
+  'successful retry leaves a durable DONE record'
+);
+reset role;
+
 select * from finish();
 rollback;

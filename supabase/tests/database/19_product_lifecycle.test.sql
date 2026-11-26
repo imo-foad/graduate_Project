@@ -354,6 +354,64 @@ select ok(
   public.find_pending_registration_retry('+201011110001', repeat('f', 64)) is null,
   'retry lookup refuses a different National-ID digest'
 );
+-- A second pending account proves the lookup returns the identity matching the exact pair.
+reset role;
+do $second_pending$
+declare v uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, aud, role, phone, raw_user_meta_data)
+  values (v, 'authenticated', 'authenticated', '+201011110009',
+          jsonb_build_object('full_name', 'Pending retry synthetic two'));
+  insert into tests.ids values ('pending_retry_two', v);
+end
+$second_pending$;
+set role service_role;
+select public.record_identity_verification(
+  tests.id('pending_retry_two'), 'synthetic-test-provider', 'synthetic:retry-two',
+  repeat('a', 64), '0003',
+  '[{"identity_type":"STUDENT","institution_ref":"SYNTHETIC_RETRY_INSTITUTION_TWO"}]'::jsonb,
+  'VERIFIED', null
+);
+select is(
+  public.find_pending_registration_retry('+201011110009', repeat('a', 64)),
+  tests.id('pending_retry_two'),
+  'retry lookup resolves the correct pending identity when several exist'
+);
+select ok(
+  public.find_pending_registration_retry('+201011110009', repeat('e', 64)) is null,
+  'retry lookup never cross-matches another pending phone/digest pair'
+);
+-- E.164 boundary and malformed input must be rejected before any identity lookup.
+select throws_ok(
+  $q$select public.find_pending_registration_retry('201011110001', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a phone without the international plus');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('+0201011110001', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a leading zero after plus');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('+2010111', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a too-short number');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('+2010111100012345678', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a too-long number');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('+20101abc0001', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects malformed characters');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('', repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects an empty phone');
+select throws_ok(
+  $q$select public.find_pending_registration_retry(null, repeat('e', 64))$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a missing phone');
+select throws_ok(
+  $q$select public.find_pending_registration_retry('+201011110001', 'not-a-digest')$q$,
+  'PT422', 'INVALID_INPUT', 'retry lookup rejects a malformed National-ID digest');
+select ok(
+  public.find_pending_registration_retry('+12345678', repeat('e', 64)) is null,
+  'minimum-length 8-digit international number passes validation but matches nothing');
+select ok(
+  public.find_pending_registration_retry('+123456789012345', repeat('e', 64)) is null,
+  'maximum-length 15-digit international number passes validation but matches nothing');
 select is(
   has_function_privilege('authenticated', 'public.find_pending_registration_retry(text,text)', 'execute'),
   false,
@@ -391,6 +449,34 @@ select is(
   false,
   'authenticated clients cannot enumerate unlinked pending Auth accounts'
 );
+-- The unlinked recovery lookup enforces the same E.164 boundaries before any query.
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('201011110002')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects a phone without the international plus');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('+0201011110002')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects a leading zero after plus');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('+2010111')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects a too-short number');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('+2010111100021234567')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects a too-long number');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('+20101abc0002')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects malformed characters');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry('')$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects an empty phone');
+select throws_ok(
+  $q$select public.find_unlinked_pending_registration_retry(null)$q$,
+  'PT422', 'INVALID_INPUT', 'unlinked lookup rejects a missing phone');
+select ok(
+  public.find_unlinked_pending_registration_retry('+12345678') is null,
+  'unlinked lookup accepts the minimum 8-digit international boundary and matches nothing');
+select ok(
+  public.find_unlinked_pending_registration_retry('+123456789012345') is null,
+  'unlinked lookup accepts the maximum 15-digit international boundary and matches nothing');
 select public.record_identity_verification(
   tests.id('orphan_retry'), 'synthetic-test-provider', 'synthetic:orphan',
   repeat('f', 64), '0002',

@@ -1,9 +1,10 @@
 // Deterministic match scoring (BR-016/017/022). Pure TypeScript: no Deno/Node APIs, so it is unit-testable.
 // The LLM never produces the score. Weights come from the business doc (6.5) except where marked ASSUMPTION.
-import { registrationAvailability } from "./opportunity-state.ts";
+import { isActiveOpportunityType, registrationAvailability } from "./opportunity-state.ts";
 import type { AvailabilityStatus } from "./opportunity-state.ts";
 
-export const MODEL_VERSION = "deterministic-v4-availability";
+// v5: Scholarship and Competition were cancelled, so every cached ranking must be recomputed.
+export const MODEL_VERSION = "deterministic-v5-scope-aligned";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }
@@ -42,14 +43,10 @@ const WEIGHTS: Record<string, Partial<Record<Criterion, number>>> = {
   JOB: { semantic: 30, skills: 30, major: 10, experience: 15, interests: 5, interaction: 5, location: 5 },
   EVENT: { interests: 25, semantic: 20, relevance: 15, audience: 10, location: 10, availability: 10, interaction: 10 },
   TRAINING: { semantic: 25, gap_fill: 35, interests: 10, major: 10, location: 10, interaction: 10 },
-  SCHOLARSHIP: { semantic: 20, skills: 15, major: 15, experience: 5, interests: 15, audience: 20, interaction: 10 },
-  COMPETITION: { semantic: 20, skills: 25, experience: 10, interests: 15, interaction: 10, relevance: 10, location: 10 },
 };
 export function weightProfile(type: string): Partial<Record<Criterion, number>> {
   if (type === "JOB" || type === "INTERNSHIP") return WEIGHTS.JOB;
   if (type === "TRAINING") return WEIGHTS.TRAINING;
-  if (type === "SCHOLARSHIP") return WEIGHTS.SCHOLARSHIP;
-  if (type === "COMPETITION") return WEIGHTS.COMPETITION;
   return WEIGHTS.EVENT;
 }
 // ASSUMPTION B3: minimum years implied by each experience level.
@@ -163,6 +160,8 @@ const BAND_AR: Record<Band, string> = {
 
 /** Returns null when a hard eligibility requirement fails (BR-017): such items are never recommended. */
 export function scoreOpportunity(g: GraduateInput, o: OpportunityInput, now: Date = new Date()): ScoredItem | null {
+  // Cancelled product lines are never scored, even if a legacy row is still ACTIVE.
+  if (!isActiveOpportunityType(o.type)) return null;
   if (o.eligibility_failures.length > 0) return null;
   // Availability is a hard gate, not just a weight: recommending a full event without a waitlist would
   // always end in EVENT_FULL. Closed opportunities are already excluded by the SQL predicate and by the

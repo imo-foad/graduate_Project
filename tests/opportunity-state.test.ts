@@ -48,6 +48,14 @@ test("cached recommendations: full-without-waitlist and closed rows are dropped,
   ];
   assert.deepEqual(filterAvailableRecommendations(cached, NOW).map((r) => r.id), ["open", "waitlist", "upcoming"]);
 });
+test("cached recommendations: cancelled product lines are dropped even when still ACTIVE", () => {
+  const cached = [
+    { id: "job", opportunity: { type: "JOB", status: "ACTIVE" } },
+    { id: "scholarship", opportunity: { type: "SCHOLARSHIP", status: "ACTIVE" } },
+    { id: "competition", opportunity: { type: "COMPETITION", status: "ACTIVE" } },
+  ];
+  assert.deepEqual(filterAvailableRecommendations(cached, NOW).map((r) => r.id), ["job"]);
+});
 test("cached recommendations: expired / closed / ended rows are dropped, open rows kept", () => {
   const cached = [
     { id: "open", opportunity: { status: "ACTIVE", deadline: iso(1000), end_at: null } },

@@ -1,6 +1,6 @@
 """Static contract check: docs/openapi.yaml must match the REAL SQL grants/functions and the Edge Function.
 Reads migrations as text (no database). Needs PyYAML. Run: python3 -m unittest tests/contract_openapi.py -v"""
-import glob, os, re, unittest
+import glob, json, os, re, unittest
 import yaml
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -11,7 +11,7 @@ FLOW = open(os.path.join(ROOT, "supabase/functions/_shared/recommend-flow.ts")).
 EDGE = EDGE_INDEX + "\n" + FLOW  # the function = thin handler + orchestration module
 CV_EDGE = open(os.path.join(ROOT, "supabase/functions/parse-cv/index.ts")).read()
 CV_PARSER = open(os.path.join(ROOT, "supabase/functions/_shared/cv-file-parser.ts")).read()
-INTERNAL_OK = {"is_opportunity_open"}  # helper is private-schema only and must never be exposed as a public RPC
+INTERNAL_OK = {"is_opportunity_open", "is_opportunity_type_active"}  # scope predicates, never exposed as RPC endpoints
 # Existing Admin onboarding RPCs from the base branch are intentionally outside this Scholarship issue.
 # Their missing OpenAPI paths remain tracked with the onboarding work; do not silently change their behavior here.
 PREEXISTING_UNDOCUMENTED_ADMIN_RPCS = {
@@ -47,17 +47,26 @@ def functions():
 
 
 def exec_granted(role):
+    """Final EXECUTE state for a role: grants and revokes are applied in migration order."""
     names = set()
-    for m in re.finditer(r"grant execute on function\s+(.*?)\s+to\s+([^;]+);", SQL, re.S | re.I):
-        if role in [r.strip() for r in m.group(2).split(",")]:
-            names |= set(re.findall(r"public\.(\w+)\(", m.group(1)))
+    for m in re.finditer(r"(?i)\b(grant|revoke)\s+(?:all|execute)\s+on\s+function\s+(.*?)\s+(?:to|from)\s+([^;]+);", SQL, re.S):
+        action, fn_text, roles_text = m.group(1).lower(), m.group(2), m.group(3)
+        if role not in [r.strip() for r in roles_text.split(",")]:
+            continue
+        found = set(re.findall(r"public\.(\w+)\(", fn_text))
+        if action == "grant":
+            names |= found
+        else:
+            names -= found
     return names
 
 
 def table_grants(role="authenticated"):
+    """Final table privileges for a role: grants and revokes are applied in migration order."""
     grants = {}
-    for statement in re.finditer(r"(?im)^[ \t]*grant\b(.*?);", SQL, re.S):
-        parsed = re.match(r"(?is)\s*(.+?)\s+on\s+(?!function\b)(.+?)\s+to\s+(.+?)\s*$", statement.group(1))
+    for statement in re.finditer(r"(?im)^[ \t]*(grant|revoke)\b(.*?);", SQL, re.S):
+        action, body = statement.group(1).lower(), statement.group(2)
+        parsed = re.match(r"(?is)\s*(.+?)\s+on\s+(?!function\b)(.+?)\s+(?:to|from)\s+(.+?)\s*$", body)
         if not parsed: continue
         priv_text, object_text, roles_text = parsed.groups()
         if role not in [r.strip() for r in roles_text.split(",")]: continue
@@ -65,7 +74,13 @@ def table_grants(role="authenticated"):
         if not object_text.strip().lower().startswith("public."):
             continue
         for t in split_top(object_text):
-            grants.setdefault(t.replace("public.", "").strip(), set()).update(privs)
+            key = t.replace("public.", "").strip()
+            if action == "grant":
+                grants.setdefault(key, set()).update(privs)
+            elif "all" in privs:
+                grants.pop(key, None)
+            else:
+                grants.get(key, set()).difference_update(privs)
     return grants
 
 
@@ -173,66 +188,37 @@ class Contract(unittest.TestCase):
         self.assertIn("$ref", profile["properties"]["paths"]["items"])
         self.assertIn("career_profile", EDGE)
 
-    def test_scholarship_delivery_and_review_contract(self):
-        submit = API["paths"]["/functions/v1/submit-scholarship"]["post"]
-        schema = submit["requestBody"]["content"]["application/json"]["schema"]
-        self.assertEqual(set(schema["required"]), {"p_opportunity_id"})
-        self.assertEqual(
-            set(schema["properties"]),
-            {"p_opportunity_id", "p_cv_document_id", "p_personal_statement", "p_application_data"},
-        )
-        self.assertIs(schema["additionalProperties"], False)
-        self.assertTrue({"200", "202", "400", "401", "409", "422"} <= set(submit["responses"]))
-
-        sample_schema = API["components"]["schemas"]["ScholarshipApplication"]["properties"]
-        self.assertIn("SUBMITTED", sample_schema["status"]["enum"])
-        self.assertIn("UNDER_REVIEW", sample_schema["status"]["enum"])
-        self.assertIn("PENDING_DELIVERY", sample_schema["status"]["enum"])
-        self.assertIn("SUBMITTED_EXTERNALLY", sample_schema["status"]["enum"])
-        self.assertIn("INTERNAL_ONLY", sample_schema["status"]["enum"])
-        self.assertIn("delivery_status", sample_schema)
-
-        delivery = API["paths"]["/functions/v1/deliver-scholarship"]["post"]
-        self.assertTrue({"200", "400", "401", "403", "503"} <= set(delivery["responses"]))
-        reviewer_cv = API["paths"]["/functions/v1/get-scholarship-review-cv"]["post"]
-        reviewer_cv_schema = reviewer_cv["requestBody"]["content"]["application/json"]["schema"]
-        self.assertEqual(set(reviewer_cv_schema["required"]), {"application_id"})
-        self.assertTrue({"200", "400", "401", "403", "404", "409", "503"} <= set(reviewer_cv["responses"]))
-        reviewer_rpc_schema = API["paths"]["/rest/v1/rpc/get_scholarship_review_cv_path"]["post"]["requestBody"]["content"]["application/json"]["schema"]
-        self.assertEqual(set(reviewer_rpc_schema["required"]), {"p_application_id"})
-        callback = API["paths"]["/functions/v1/scholarship-provider-callback"]["post"]
-        self.assertEqual(callback["security"], [])
-        self.assertIn("X-Alumni-Timestamp", [p["name"] for p in callback["parameters"]])
-        self.assertIn("X-Alumni-Signature", [p["name"] for p in callback["parameters"]])
-        callback_schema = callback["requestBody"]["content"]["application/json"]["schema"]
-        self.assertEqual(set(callback_schema["required"]),
-            {"provider_key", "event_id", "application_reference", "status"})
-        self.assertIs(callback_schema["additionalProperties"], False)
-
-        from pathlib import Path
-        root = Path(ROOT)
-        submit_edge = (root / "supabase/functions/submit-scholarship/index.ts").read_text()
-        delivery_edge = (root / "supabase/functions/deliver-scholarship/index.ts").read_text()
-        callback_edge = (root / "supabase/functions/scholarship-provider-callback/index.ts").read_text()
-        reviewer_cv_edge = (root / "supabase/functions/get-scholarship-review-cv/index.ts").read_text()
-        provider = (root / "supabase/functions/_shared/scholarship-provider.ts").read_text()
-        self.assertIn('auth.getUser()', submit_edge)
-        self.assertRegex(submit_edge, r'rpc\(\s*"apply_for_scholarship"')
-        self.assertIn("INTERNAL_ONLY", submit_edge)
-        self.assertIn('application.status === "SUBMITTED"', submit_edge)
-        reviewer_rpc = API["paths"]["/rest/v1/rpc/review_scholarship_application"]["post"]
-        reviewer_schema = reviewer_rpc["requestBody"]["content"]["application/json"]["schema"]
-        self.assertEqual(set(reviewer_schema["required"]), {"p_application_id", "p_status"})
-        self.assertIn("UNDER_REVIEW", reviewer_schema["properties"]["p_status"]["enum"])
-        self.assertIn('rpc("assert_scholarship_admin"', delivery_edge)
-        self.assertIn('rpc("claim_scholarship_delivery"', (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
-        self.assertIn("verifyProviderWebhookSignature", callback_edge)
-        self.assertIn('rpc("process_scholarship_provider_event"', callback_edge)
-        self.assertRegex(reviewer_cv_edge, r'rpc\(\s*"get_scholarship_review_cv_path"')
-        self.assertIn("createSignedUrl", reviewer_cv_edge)
-        self.assertIn('redirect: "error"', provider)
-        self.assertIn("Idempotency-Key", provider)
-        self.assertIn("createSignedUrl", (root / "supabase/functions/_shared/scholarship-delivery.ts").read_text())
+    def test_cancelled_features_are_absent_from_the_api_contract(self):
+        # Product decision: Scholarship (#14) and Competition (#15) are cancelled, so no endpoint,
+        # schema, Edge Function or opportunity type may still be advertised.
+        cancelled_paths = {
+            "/functions/v1/submit-scholarship", "/functions/v1/deliver-scholarship",
+            "/functions/v1/get-scholarship-review-cv", "/functions/v1/scholarship-provider-callback",
+            "/rest/v1/rpc/apply_for_scholarship", "/rest/v1/rpc/withdraw_scholarship_application",
+            "/rest/v1/rpc/apply_for_competition", "/rest/v1/rpc/withdraw_competition_application",
+            "/rest/v1/rpc/create_admin_scholarship", "/rest/v1/rpc/update_admin_scholarship",
+            "/rest/v1/rpc/publish_admin_scholarship", "/rest/v1/rpc/close_admin_scholarship",
+            "/rest/v1/rpc/list_admin_scholarship_applications", "/rest/v1/rpc/get_admin_scholarship_application",
+            "/rest/v1/rpc/review_scholarship_application", "/rest/v1/rpc/configure_scholarship_provider_mapping",
+            "/rest/v1/rpc/set_scholarship_reviewer", "/rest/v1/rpc/get_scholarship_review_queue",
+            "/rest/v1/rpc/retry_scholarship_delivery", "/rest/v1/rpc/assert_scholarship_admin",
+            "/rest/v1/rpc/get_scholarship_review_cv_path",
+            "/rest/v1/scholarship_applications", "/rest/v1/scholarship_application_status_history",
+            "/rest/v1/competition_applications", "/rest/v1/competition_application_status_history",
+        }
+        self.assertEqual(cancelled_paths & set(API["paths"]), set())
+        cancelled_schemas = {"AdminScholarshipOpportunity", "AdminScholarshipApplicationDetails",
+                             "ScholarshipApplication", "ScholarshipApplicationHistory",
+                             "CompetitionApplication", "CompetitionApplicationHistory"}
+        self.assertEqual(cancelled_schemas & set(API["components"]["schemas"]), set())
+        blob = json.dumps(API)
+        for token in ('"SCHOLARSHIP"', '"COMPETITION"', "SCHOLARSHIP_", "COMPETITION_"):
+            self.assertNotIn(token, blob, f"cancelled scope still advertised: {token}")
+        for name in ("submit-scholarship", "deliver-scholarship", "get-scholarship-review-cv",
+                     "scholarship-provider-callback"):
+            self.assertFalse(os.path.exists(os.path.join(ROOT, "supabase/functions", name)), name)
+        self.assertIn("is_opportunity_type_active", SQL)
+        self.assertIn("CANCELLED_OPPORTUNITY_TYPE", SQL)
 
     def test_social_feed_read_models_match_privacy_projection(self):
         schemas = API["components"]["schemas"]
@@ -291,9 +277,6 @@ class SecurityAndAuthContract(unittest.TestCase):
         for path, ops in API["paths"].items():
             if path == self.TOKEN: continue
             for method, op in ops.items():
-                if path == "/functions/v1/scholarship-provider-callback":
-                    self.assertEqual(op.get("security"), [], "provider callback must use HMAC, not a Supabase JWT")
-                    continue
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
 
     def test_grant_types_and_bodies(self):

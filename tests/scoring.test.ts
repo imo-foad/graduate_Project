@@ -6,10 +6,25 @@ import { demo, graduate, opps } from "./helpers.ts";
 const AHMED = "graduate.android@alumni.test", SARA = "graduate.demo@alumni.test", OMAR = "graduate.cyber@alumni.test";
 
 test("every weight profile sums to 100", () => {
-  for (const t of ["JOB", "INTERNSHIP", "TRAINING", "EVENT", "CONFERENCE", "COMPETITION"]) {
+  for (const t of ["JOB", "INTERNSHIP", "TRAINING", "EVENT", "CONFERENCE", "VOLUNTEER"]) {
     const sum = Object.values(weightProfile(t)).reduce((a, b) => a + (b ?? 0), 0);
     assert.equal(sum, 100, t);
   }
+});
+
+test("cancelled product lines are never scored or ranked (scope alignment)", () => {
+  const profile = graduate(AHMED);
+  const base = { title: "Cancelled listing", description: "x", skills: [], eligibility_failures: [] };
+  for (const type of ["SCHOLARSHIP", "COMPETITION"]) {
+    const item = scoreOpportunity(profile, { ...base, id: `cancelled-${type}`, type });
+    assert.equal(item, null, type);
+  }
+  const ranked = rankOpportunities(profile, [
+    { ...base, id: "cancelled-scholarship", type: "SCHOLARSHIP" },
+    { ...base, id: "cancelled-competition", type: "COMPETITION" },
+    { ...base, id: "active-event", type: "EVENT" },
+  ]);
+  assert.deepEqual(ranked.map((r) => r.opportunity_id), ["active-event"]);
 });
 
 test("bands follow the documented thresholds (80/65/50)", () => {

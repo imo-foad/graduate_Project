@@ -80,13 +80,20 @@ export async function runUniversitySeed({ env = process.env, fetchImpl = fetch }
   apply();
   const second = assertCounts(runPsql(dbUrl, ["-A","-t","-c",COUNTS_SQL]));
   if (first !== second) throw new Error("SQL seed is not idempotent");
-  return { auth: { firstPass: pass1, secondPass: pass2 }, counts: { students:20, faculty:10, admins:10, distinctGpa:20, gpaScale:4.0, tracks:7, graduates:4 } };
+  return {
+    auth: { firstPass: pass1, secondPass: pass2 },
+    firstCounts: first,
+    secondCounts: second,
+    counts: { students:20, faculty:10, admins:10, distinctGpa:20, gpaScale:4.0, tracks:7, graduates:4 },
+  };
 }
 
 async function main() {
   const result = await runUniversitySeed();
   console.log("PASS: synthetic university seed applied twice to disposable local Supabase");
-  console.log(`Auth first pass: created=${result.auth.firstPass.created}, reused=${result.auth.firstPass.reused}; second pass reused=${result.auth.secondPass.reused}`);
+  console.log(`Auth first pass: created=${result.auth.firstPass.created}, reused=${result.auth.firstPass.reused}; second pass created=${result.auth.secondPass.created}, reused=${result.auth.secondPass.reused}`);
+  console.log(`First-pass counts: ${result.firstCounts}`);
+  console.log(`Second-pass counts: ${result.secondCounts}`);
   console.log("Counts: 20 students, 10 faculty, 10 local platform admins, 20 distinct GPA values / 4.0 scale / 7 tracks, 4 existing graduates unchanged");
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch((e) => { console.error(e.message); process.exit(1); });

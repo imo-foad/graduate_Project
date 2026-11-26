@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # Independent, disposable local Supabase proof for the 40-account university seed.
 # It deliberately does not depend on QA-owned pgTAP tests completing.
+#
+# Exit-status contract: the EXIT trap preserves the original failure status. Cleanup is
+# best-effort and can never turn a failed setup/migration/seed into a successful job.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 LOG_DIR=".ci-logs"
 mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/university-seed-smoke.log"
+: > "$LOG_FILE"
+
+# Mirror every later line into the downloadable artifact log. This happens before the first
+# tool check so startup and migration failures are always diagnosable.
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=== synthetic university smoke started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
 export DB_URL
 
@@ -23,15 +34,31 @@ docker info >/dev/null
 LOCAL_ENV="$(mktemp)"
 FUNCTION_PID=""
 cleanup() {
-  if [ -n "$FUNCTION_PID" ]; then kill "$FUNCTION_PID" >/dev/null 2>&1 || true; wait "$FUNCTION_PID" >/dev/null 2>&1 || true; fi
+  # Capture the real status first: everything below is best-effort and must not mask it.
+  local status=$?
+  trap - EXIT
+  set +e
+  echo "=== cleanup started (original exit status: $status)"
+  if [ -n "$FUNCTION_PID" ]; then
+    kill "$FUNCTION_PID" >/dev/null 2>&1 || true
+    wait "$FUNCTION_PID" >/dev/null 2>&1 || true
+  fi
   rm -f "$LOCAL_ENV"
-  timeout 120s supabase stop --no-backup >/dev/null 2>&1 || true
+  timeout 120s supabase stop --no-backup >>"$LOG_DIR/supabase-stop.log" 2>&1 || true
+  if [ "$status" -eq 0 ]; then
+    echo "SMOKE RESULT: PASS"
+  else
+    echo "SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
-echo "Starting disposable local Supabase stack"
-supabase start
-supabase db reset
+echo "=== starting disposable local Supabase stack"
+supabase start 2>&1 | tee "$LOG_DIR/university-seed-supabase-start.log"
+
+echo "=== applying a clean database reset (all migrations)"
+supabase db reset 2>&1 | tee "$LOG_DIR/university-seed-db-reset.log"
 
 supabase status -o env \
   --override-name api.url=SUPABASE_URL \
@@ -59,19 +86,40 @@ NODE
 
 # A fresh disposable password is supplied through the environment only and never printed.
 export DEMO_PASSWORD="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(24).toString("base64url"))')"
-npm run build:seed > "$LOG_DIR/university-seed-build.log"
+npm run build:seed 2>&1 | tee "$LOG_DIR/university-seed-build.log"
 
 # The legacy catalogue fixtures are retained and applied before the four graduate demo profiles.
 for seed_file in supabase/seed/01_skills.sql supabase/seed/02_catalogue.sql; do
   psql "$DB_URL" -X -v ON_ERROR_STOP=1 --single-transaction -q -f "$seed_file"
 done
 
-node scripts/provision-demo-users.mjs > "$LOG_DIR/graduate-demo-provision.log"
+echo "=== provisioning four existing graduate demo accounts"
+node scripts/provision-demo-users.mjs 2>&1 | tee "$LOG_DIR/graduate-demo-provision.log"
 psql "$DB_URL" -X -v ON_ERROR_STOP=1 --single-transaction -q -f supabase/seed/03_demo_profiles.sql
 
 # This provisions 40 phone-only Auth users, applies the typed rows/admin grants twice,
 # and asserts 20/10/10, 20 unique GPA values, seven tracks, zero graduate leakage, and four existing grads.
-node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed-apply.log"
+echo "=== provisioning synthetic university accounts and applying seed twice"
+node scripts/seed-university-demo.mjs 2>&1 | tee "$LOG_DIR/university-seed-apply.log"
+
+# Independent post-seed verification (independent of the JavaScript assertions above).
+echo "=== post-seed database verification"
+psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off <<'SQL' 2>&1 | tee "$LOG_DIR/university-seed-verification.log"
+select 'students' as metric, count(*)::text as value from public.student_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'faculty', count(*)::text from public.faculty_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'admins', count(*)::text from private.platform_admins a join public.profiles p on p.id = a.user_id
+  where a.is_active and p.phone between '+12125550130' and '+12125550139'
+union all select 'distinct_gpa', count(distinct gpa)::text from public.student_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'gpa_min', min(gpa)::text from public.student_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'gpa_max', max(gpa)::text from public.student_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'tracks', count(distinct academic_track)::text from public.student_academic_records where record_source = 'SYNTHETIC_SEED'
+union all select 'synthetic_phones', count(distinct phone)::text from public.profiles
+  where phone between '+12125550100' and '+12125550139'
+union all select 'graduate_demos', count(*)::text from public.profiles p join public.graduate_profiles gp on gp.profile_id = p.id
+  where p.email in ('graduate.demo@alumni.test','graduate.android@alumni.test','graduate.data@alumni.test','graduate.cyber@alumni.test')
+union all select 'graduate_leakage', count(*)::text from public.profiles p join public.graduate_profiles gp on gp.profile_id = p.id
+  where p.phone between '+12125550100' and '+12125550139';
+SQL
 
 # Also run the synthetic PDF/DOCX CV field-accuracy harness against the actual local Edge Function.
 supabase functions serve --env-file "$LOCAL_ENV" > "$LOG_DIR/university-seed-functions-serve.log" 2>&1 &
@@ -99,6 +147,9 @@ done
   tail -100 "$LOG_DIR/university-seed-functions-serve.log" >&2
   exit 1
 }
-node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
+node scripts/evaluate-cv-parser-local.mjs 2>&1 | tee "$LOG_DIR/cv-parser-evaluation.log"
 
+echo "PASS: synthetic university seed applied twice to disposable local Supabase"
+echo "PASS: Auth first and second pass counts and dataset invariants verified (see university-seed-apply.log)"
+echo "PASS: post-seed SQL counts verified (see university-seed-verification.log)"
 echo "UNIVERSITY SEED + CV EVALUATION PASSED: local Auth, identities, academic records, admin grants, idempotency and parser metrics"

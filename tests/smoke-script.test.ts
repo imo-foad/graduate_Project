@@ -61,7 +61,8 @@ test("GitHub Actions propagates the university smoke exit code and requires its 
   assert.doesNotMatch(workflow, /run: bash scripts\/run-university-seed-smoke\.sh[^\n]*\|\s*tee/);
   assert.match(workflow, /grep -Fxq "SMOKE RESULT: PASS" \.ci-logs\/university-seed-smoke\.log/);
   assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
-  assert.match(workflow, /grep -q "Counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "First-pass counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "Second-pass counts:" \.ci-logs\/university-seed-apply\.log/);
 });
 
 test("the smoke workflow does not hide script failures behind an outer tee pipeline", () => {
@@ -70,12 +71,15 @@ test("the smoke workflow does not hide script failures behind an outer tee pipel
   assert.doesNotMatch(workflow, /run: bash scripts\/run-university-seed-smoke\.sh[^\n]*\|\s*tee/);
   assert.match(workflow, /grep -Fxq "SMOKE RESULT: PASS" \.ci-logs\/university-seed-smoke\.log/);
   assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
-  assert.match(workflow, /grep -q "Counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "First-pass counts:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "Second-pass counts:" \.ci-logs\/university-seed-apply\.log/);
 });
 
-test("the smoke script waits for tee to flush its terminal result into the downloadable log", () => {
+test("the smoke script writes its terminal result after closing and joining tee", () => {
   const script = readFileSync(join(ROOT, "scripts/run-university-seed-smoke.sh"), "utf8");
-  assert.match(script, /exec 3>&1 4>&2/);
-  assert.match(script, /TEE_PID="\$!"/);
-  assert.match(script, /exec 1>&3 2>&4[\s\S]*wait "\$TEE_PID" \|\| true/);
+  const closeOutput = script.indexOf("exec 1>&3 2>&4");
+  const joinTee = script.indexOf('wait "$TEE_PID" || true', closeOutput);
+  const appendMarker = script.indexOf('printf \'%s\\n\' "$marker" >> "$LOG_FILE"', joinTee);
+  assert.ok(closeOutput >= 0 && joinTee > closeOutput && appendMarker > joinTee,
+    "tee must exit before the terminal result is appended to the artifact");
 });

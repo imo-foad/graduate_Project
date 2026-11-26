@@ -64,15 +64,18 @@ cleanup() {
   for log_file in "$LOG_DIR"/*; do
     [ -f "$log_file" ] && redact_ci_file "$log_file"
   done
-  if [ "$status" -eq 0 ]; then
-    echo "SMOKE RESULT: PASS"
-  else
-    echo "SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
-  fi
-  # Close the process-substitution pipe and wait for tee to flush the terminal marker
-  # into the artifact log before the shell returns its original status to Actions.
+  # Close the process-substitution pipe and wait for tee to flush all prior diagnostics.
   exec 1>&3 2>&4
   wait "$TEE_PID" || true
+  local marker
+  if [ "$status" -eq 0 ]; then
+    marker="SMOKE RESULT: PASS"
+  else
+    marker="SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
+  fi
+  # Append the terminal result only after tee exits, so artifact verification never races it.
+  printf '%s\n' "$marker" >> "$LOG_FILE"
+  printf '%s\n' "$marker"
   exec 3>&- 4>&-
   exit "$status"
 }

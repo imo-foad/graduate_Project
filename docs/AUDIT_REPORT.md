@@ -149,3 +149,36 @@ endpoint exposes them. Deleting them would destroy data and break foreign keys, 
 **Known limitations introduced by the product decision, not by this change:** Student/Faculty/Organization/
 Institution identities, national-ID registration and institutional database verification are still absent from
 the backend; `README.md` states this explicitly. They are not claimed as delivered.
+
+---
+
+## Addendum — 2026-11-26: Builder PR #41 current verification and synthetic university cohort
+
+**Branch:** `fix/complete-foundation-and-training-rules-20261126` (PR #41, Draft). **Base:** `main`; this work is unmerged and is not part of main. No Cloud Supabase link, reset, migration or write is permitted or performed.
+
+### Synthetic dataset implementation
+
+Forward-only migration `0034_synthetic_university_dataset.sql` adds typed student and faculty academic records. It permits `SYNTHETIC_SEED` as an explicit identity verification source, grants authenticated users read-only access to their own academic row, and reserves all writes for service_role. It does not add an ADMIN human identity type. Local seed execution grants the 10 demo administrators through `private.platform_admins` only.
+
+The fixture contains 20 students (20 distinct GPA values, scale 4.0, seven approved tracks), 10 faculty accounts and 10 local admin accounts. Existing four graduate demo profiles remain their own fixture and are preserved. All 40 new Auth accounts are phone-only, local-auth-admin provisioned and have phone confirmation set only in the disposable local stack; no SMS is sent, and credentials come only from `DEMO_PASSWORD`.
+
+### Local-only safety and idempotency
+
+The university provisioner accepts only explicit HTTP localhost aliases on Supabase API port 54321. The apply runner independently checks the database URL through `scripts/assert-local-db.mjs` and requires local DB port 54322 before any Auth request or SQL write. It provisions twice, applies the transaction twice, and asserts exact identity/record/admin/GPA/track/legacy-graduate counts. Generated SQL also requires an explicit session-local guard token. The legacy four-graduate provisioner is subject to the same local API URL guard.
+
+### Existing CI failure — do not mark green
+
+The latest verified pre-dataset Builder run was [run #765](https://github.com/imo-foad/graduate_Project/actions/runs/45846570698) on Builder HEAD `329a0be14d49f5c1c1f2efe5273495dda09f3b25`. Static Node tests, OpenAPI contract and workflow lint passed. The disposable DB job failed pgTAP tests:
+
+- `supabase/tests/database/01_register_for_event.test.sql`, test 23: assertion still expects a new registrant to take a seat instead of FIFO waitlisted promotion (QA-owned stale expectation).
+- `supabase/tests/database/02_rpc_rules.test.sql`, test 8: expected obsolete `NOT_A_JOB`, while the active product contract returns `NOT_APPLICATION_OPPORTUNITY` (QA-owned stale expectation).
+- `supabase/tests/database/15_three_type_scope.test.sql`, test 16: expected 11 active sample TRAINING rows, got 10 because the QA fixture helper creates test rows with the `is_sample=true` default. QA must mark helper-created opportunities `is_sample=false` and retain the 11 Seed-catalogue assertion.
+
+These database test files are QA-owned and were not edited by Builder. The failing pgTAP stage prevented concurrency and local HTTP integrations from running. A new Actions run is required after the dataset commit; no test pass is inferred from code generation alone.
+
+### Remaining verification and external blockers
+
+- Rebase PR #43 to the latest Builder head and repair the Test 15 fixture helper without weakening the Seed catalogue invariant.
+- Run the full disposable local database job through migrations, all pgTAP, concurrency and the full local HTTP integration suite.
+- Institutional identity provider and real SMS gateway credentials were not supplied; both remain `BLOCKED_EXTERNAL`. Synthetic identities are simulated, not real institution verification.
+- Scanned/image-only PDF OCR remains unsupported and is not covered by the free text-extraction evaluation.

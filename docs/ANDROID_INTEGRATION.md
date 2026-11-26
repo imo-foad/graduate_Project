@@ -204,3 +204,7 @@ Social Feed remains a core product capability and must not regress. Use the docu
 - Treat stable RPC error `message` values as user-facing business outcomes; use `details` only where the contract documents safe requirement information.
 - Distinguish seeded sample history (`status_source = SEED_SAMPLE`) from real applications.
 - Do not implement tuition/fees, instalments, financial assistance, lectures, exams or course-content features in this app scope.
+
+## Student and faculty academic records
+
+Migration 0034 adds typed `student_academic_records` and `faculty_academic_records`. Authenticated users may read only their own academic row under RLS; writes are service-role only. Student rows expose department, major, academic track, academic level, GPA and explicit `gpa_scale=4.0`. This is a synthetic local fixture convention, not an institutional grading policy. Synthetic identities have `verification_source=SYNTHETIC_SEED` and must never be presented as institution-verified. Administrators are represented only by `private.platform_admins`, not by a public human identity type.

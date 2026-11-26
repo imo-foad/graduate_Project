@@ -3,10 +3,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertLocalSupabaseApiUrl } from "./provision-university-demo-users.mjs";
 
 export function buildCreateUserRequest(url, serviceKey, user, password) {
+  const localUrl = assertLocalSupabaseApiUrl(url);
   return {
-    url: `${url.replace(/\/$/, "")}/auth/v1/admin/users`,
+    url: `${localUrl}/auth/v1/admin/users`,
     init: {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
@@ -17,7 +19,8 @@ export function buildCreateUserRequest(url, serviceKey, user, password) {
 
 async function main() {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEMO_PASSWORD } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+  assertLocalSupabaseApiUrl(SUPABASE_URL);
+  if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Set SUPABASE_SERVICE_ROLE_KEY");
   if (!DEMO_PASSWORD || DEMO_PASSWORD.length < 12) throw new Error("Set DEMO_PASSWORD (min 12 chars)");
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const users = JSON.parse(readFileSync(join(root, "fixtures", "demo-profiles.json"), "utf8"));

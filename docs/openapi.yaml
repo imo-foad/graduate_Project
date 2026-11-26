@@ -30,6 +30,47 @@ components:
       - JOB
       - INTERNSHIP
       - TRAINING
+    StudentAcademicRecord:
+      type: object
+      required: [profile_id, institution_ref, department, major, academic_track, academic_level, gpa, gpa_scale, record_source]
+      properties:
+        profile_id: { type: string, format: uuid }
+        institution_ref: { type: string, pattern: '^SYNTH-STU-[0-9]{4}$' }
+        department: { type: string }
+        major: { type: string }
+        academic_track:
+          type: string
+          enum:
+          - Software Engineering
+          - Artificial Intelligence
+          - Data Science and Analytics
+          - Cybersecurity
+          - Mobile Development
+          - Networks and Cloud
+          - Information Systems
+        academic_level: { type: integer, minimum: 1, maximum: 5 }
+        gpa: { type: number, minimum: 0, maximum: 4 }
+        gpa_scale:
+          type: number
+          enum: [4.0]
+          description: Synthetic demo convention only; not a statement of the university grading policy.
+        record_source:
+          type: string
+          enum: [SYNTHETIC_SEED, INSTITUTION_PROVIDER, MANUAL_ADMIN]
+    FacultyAcademicRecord:
+      type: object
+      required: [profile_id, institution_ref, department, specialization, academic_title, record_source]
+      properties:
+        profile_id: { type: string, format: uuid }
+        institution_ref: { type: string, pattern: '^SYNTH-FAC-[0-9]{4}$' }
+        department: { type: string }
+        specialization: { type: string }
+        academic_title:
+          type: string
+          enum: [PROFESSOR, ASSOCIATE_PROFESSOR, ASSISTANT_PROFESSOR, LECTURER, ASSISTANT_LECTURER, TEACHING_ASSISTANT]
+        record_source:
+          type: string
+          enum: [SYNTHETIC_SEED, INSTITUTION_PROVIDER, MANUAL_ADMIN]
     Opportunity:
       type: object
       properties:
@@ -451,6 +492,32 @@ paths:
       responses:
         '204':
           description: Deleted
+  /rest/v1/student_academic_records:
+    get:
+      summary: Read the authenticated student's own typed academic record; RLS returns only the caller's row.
+      description: Read-only to clients. Insert, update and delete are service-role only. Synthetic GPA scale is a demo convention.
+      responses:
+        '200':
+          description: Own student academic record (zero or one row).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentAcademicRecord'
+  /rest/v1/faculty_academic_records:
+    get:
+      summary: Read the authenticated faculty member's own typed academic record; RLS returns only the caller's row.
+      description: Read-only to clients. Insert, update and delete are service-role only. Synthetic records are simulated, not institution verification.
+      responses:
+        '200':
+          description: Own faculty academic record (zero or one row).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacultyAcademicRecord'
   /rest/v1/skills:
     get:
       summary: Skills dictionary (read-only)

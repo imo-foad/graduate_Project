@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> all versioned migrations through 0028 -> seeds -> pgTAP (17 files) -> concurrency. LOCAL ONLY.
+# Real database proof: clean local DB -> every discovered migration -> idempotent seeds -> 18 pgTAP files -> concurrency + local HTTP. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -14,6 +14,25 @@ ACTUAL_PORT="$(node -e 'console.log(new URL(process.argv[1]).port)' "$DB_URL")"
 [ "$ACTUAL_PORT" = "$EXPECTED_PORT" ] || { echo "REFUSING: DB_URL port $ACTUAL_PORT != local Supabase DB port $EXPECTED_PORT" >&2; exit 2; }
 
 LOG_DIR=".ci-logs"; mkdir -p "$LOG_DIR"
+redact_ci_file() {
+  sed -E -i \
+    -e 's/sb_secret_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_SECRET]/g' \
+    -e 's/sb_publishable_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_PUBLISHABLE]/g' \
+    -e 's/eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}/[REDACTED_LOCAL_JWT]/g' \
+    -e 's/((SERVICE_ROLE_KEY|ANON_KEY|JWT_SECRET|DB_PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY)[[:space:]]*=[[:space:]]*)[^[:space:]]+/\\1[REDACTED]/Ig' \
+    -e 's/(Authorization: Bearer )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' \
+    -e 's/(apikey: )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' "$1"
+}
+redact_ci_logs_on_exit() {
+  local status=$?
+  trap - EXIT
+  set +e
+  if [ -d "$LOG_DIR" ]; then
+    while IFS= read -r -d '' file; do redact_ci_file "$file"; done < <(find "$LOG_DIR" -type f -print0)
+  fi
+  exit "$status"
+}
+trap redact_ci_logs_on_exit EXIT
 fail() { echo "FAILED: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || { echo "MISSING TOOL: $1" >&2; exit 3; }; }
 q() { psql "$DB_URL" -X -At -v ON_ERROR_STOP=1 -c "$1"; }
@@ -28,7 +47,13 @@ docker info >/dev/null 2>&1 || fail "Docker daemon is not reachable"
 
 # ---- A. start local stack and wait for PostgreSQL
 echo "=== A. supabase start"
-supabase start 2>&1 | tee "$LOG_DIR/supabase-start.log"
+START_LOG="$(mktemp)"
+START_STATUS=0
+supabase start >"$START_LOG" 2>&1 || START_STATUS=$?
+redact_ci_file "$START_LOG"
+tee "$LOG_DIR/supabase-start.log" < "$START_LOG"
+rm -f "$START_LOG"
+[ "$START_STATUS" -eq 0 ] || fail "supabase start failed (exit $START_STATUS)"
 ready=0; for _ in $(seq 1 30); do q "select 1" >/dev/null 2>&1 && { ready=1; break; }; sleep 2; done
 [ "$ready" = 1 ] || fail "PostgreSQL did not become ready on $ACTUAL_PORT"
 echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/environment.txt"
@@ -37,11 +62,19 @@ echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
 shopt -s nullglob; MIGRATIONS=(supabase/migrations/*.sql); shopt -u nullglob
-[ "${#MIGRATIONS[@]}" -ge 22 ] || fail "expected at least 22 migration files, found ${#MIGRATIONS[@]}"
+[ "${#MIGRATIONS[@]}" -gt 0 ] || fail "no SQL migrations were dynamically discovered"
+PREVIOUS_VERSION=""
 for f in "${MIGRATIONS[@]}"; do
-  grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $(basename "$f") as applied"
+  name="$(basename "$f")"
+  [[ "$name" =~ ^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$ ]] || fail "migration filename is not four-digit versioned: $name"
+  version="${BASH_REMATCH[1]}"
+  if [[ -n "$PREVIOUS_VERSION" ]] && [[ ! "$version" > "$PREVIOUS_VERSION" ]]; then
+    fail "migration versions must be unique and increasing: $name follows $PREVIOUS_VERSION"
+  fi
+  PREVIOUS_VERSION="$version"
+  grep -q "$name" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $name as applied"
 done
-WANT="$(for f in "${MIGRATIONS[@]}"; do basename "$f" | sed -E 's/^([0-9]+)_.*/\1/'; done | sort | paste -sd, -)"
+WANT="$(for f in "${MIGRATIONS[@]}"; do basename "$f" | sed -E 's/^([0-9]{4})_.*/\1/'; done | paste -sd, -)"
 GOT="$(q "select coalesce(string_agg(version, ',' order by version), '') from supabase_migrations.schema_migrations")"
 [ "$WANT" = "$GOT" ] || fail "migration table has [$GOT], expected [$WANT]"
 echo "migrations applied: $GOT"

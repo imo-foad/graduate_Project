@@ -35,7 +35,7 @@ create function tests.cand(p_candidates jsonb, p_key text) returns jsonb languag
 
 do $$ begin
   perform tests.mk_user('u1');
-  perform tests.mk_opp('e_open', 'TRAINING', '{"capacity":10,"deadline_days":5}');
+  perform tests.mk_opp('e_open', 'TRAINING', '{"capacity":10,"deadline_days":5,"end_days":6}');
   perform tests.mk_opp('e_upcoming', 'TRAINING', '{"capacity":10,"deadline_days":5}');
   perform tests.mk_opp('e_wait', 'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
   perform tests.mk_opp('e_full', 'TRAINING', '{"capacity":1,"deadline_days":5}');
@@ -52,11 +52,21 @@ update public.opportunities set registered_count = 1 where id = tests.id('e_full
 create table tests.candidates as
   select public.get_recommendation_candidates(tests.id('u1')) as body;
 
-select ok((tests.cand((select body from tests.candidates), 'e_open') ? 'registration_opens_at')
+select ok((tests.cand((select body from tests.candidates), 'e_open') ? 'status')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'deadline')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'end_at')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'registration_opens_at')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'capacity')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'registered_count')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'waitlist_enabled'),
-       'candidate projection exposes registration window and capacity fields');
+       'candidate projection exposes lifecycle, registration window and capacity fields');
+
+select is(tests.cand((select body from tests.candidates), 'e_open') ->> 'status', 'ACTIVE',
+       'open opportunity status reaches the scorer');
+select ok((tests.cand((select body from tests.candidates), 'e_open') ->> 'deadline')::timestamptz > now(),
+       'open opportunity deadline reaches the scorer');
+select ok((tests.cand((select body from tests.candidates), 'e_open') ->> 'end_at')::timestamptz > now(),
+       'open opportunity end_at reaches the scorer');
 
 select is((tests.cand((select body from tests.candidates), 'e_open') ->> 'capacity')::int, 10,
        'open training exposes its capacity');

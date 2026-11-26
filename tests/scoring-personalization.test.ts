@@ -14,7 +14,7 @@ test("all active recommendation families keep weights normalised", () => {
 test("an explicitly mandatory five-year requirement excludes a two-year graduate", () => {
   const item = scoreOpportunity(
     { career_interests: ["FRONTEND"], experience_years: 2, skills: [{ skill_id: "JAVASCRIPT", level: 4 }] },
-    { id: "job", type: "JOB", title: "Frontend Developer", status: "ACTIVE", minimum_experience_years: 5,
+    { id: "job", type: "JOB", title: "Frontend Developer", status: "ACTIVE", deadline: null, end_at: null, minimum_experience_years: 5,
       minimum_experience_required: true, skills: [], eligibility_failures: [] },
   );
   assert.equal(item, null);
@@ -22,7 +22,7 @@ test("an explicitly mandatory five-year requirement excludes a two-year graduate
 test("a preferred, non-mandatory experience requirement reduces match instead of excluding", () => {
   const item = scoreOpportunity(
     { career_interests: ["FRONTEND"], experience_years: 2, skills: [{ skill_id: "JAVASCRIPT", level: 4 }] },
-    { id: "job", type: "JOB", title: "Frontend Developer", status: "ACTIVE", minimum_experience_years: 5,
+    { id: "job", type: "JOB", title: "Frontend Developer", status: "ACTIVE", deadline: null, end_at: null, minimum_experience_years: 5,
       minimum_experience_required: false, skills: [], eligibility_failures: [] },
   );
   assert.ok(item);
@@ -30,7 +30,7 @@ test("a preferred, non-mandatory experience requirement reduces match instead of
 });
 test("positive interaction signals influence recommendations when opportunity fields match", () => {
   const base = { career_interests: [], experience_years: 0, skills: [], inferred_career_paths: [] as string[] };
-  const opportunity = { id: "training", type: "TRAINING", title: "Frontend training", status: "ACTIVE", target_fields: ["Frontend"], skills: [], eligibility_failures: [] };
+  const opportunity = { id: "training", type: "TRAINING", title: "Frontend training", status: "ACTIVE", deadline: null, end_at: null, target_fields: ["Frontend"], skills: [], eligibility_failures: [] };
   const without = scoreOpportunity(base, opportunity)!;
   const withSignal = scoreOpportunity({ ...base, interaction_signals: [{ target_field: "frontend", weight: 2 }] }, opportunity)!;
   assert.ok(withSignal.score > without.score);

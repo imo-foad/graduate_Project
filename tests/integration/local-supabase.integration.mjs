@@ -162,14 +162,19 @@ try {
     candidate_examples: projectedRows.slice(0, 5).map(({ id, type, title, eligibility_failures }) =>
       ({ id, type, title, eligibility_failures })),
   }));
-  pass("recommendation SQL candidate projection responds successfully",
-    candidateProjection.status === 200 && Array.isArray(candidateProjection.json?.opportunities),
-    { status: candidateProjection.status, body: candidateProjection.json ?? candidateProjection.text });
+  pass("recommendation SQL candidate projection returns active, rankable listings",
+    candidateProjection.status === 200 && Array.isArray(candidateProjection.json?.opportunities) &&
+      candidateProjection.json.opportunities.length > 0,
+    { status: candidateProjection.status, diagnostics: {
+      raw_open_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
+      candidate_count: projectedRows.length,
+      candidate_types: projectedRows.reduce((out, row) => { out[row.type] = (out[row.type] ?? 0) + 1; return out; }, {}),
+    }, body: candidateProjection.json ?? candidateProjection.text });
   const first = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   pass("recommend endpoint computes recommendations for user A", first.status === 200 &&
-    first.json?.source === "computed" && Array.isArray(first.json?.items) &&
+    first.json?.source === "computed" && Array.isArray(first.json?.items) && first.json.items.length > 0 &&
     first.json?.ai_mode === "deterministic" && typeof first.json?.model_version === "string" &&
     typeof first.json?.disclaimer === "string" && Array.isArray(first.json?.career_profile?.paths));
   pass("career intelligence returns Sara's inferred Data Analytics path", hasCareerPath(first, "DATA_ANALYTICS"));
@@ -181,7 +186,7 @@ try {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   pass("recommend endpoint serves user A cache on second request", second.status === 200 &&
-    second.json?.source === "cache" && Array.isArray(second.json?.items), {
+    second.json?.source === "cache" && Array.isArray(second.json?.items) && second.json.items.length > 0, {
       status: second.status,
       source: second.json?.source ?? null,
       error: second.json?.error ?? null,

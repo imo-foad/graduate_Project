@@ -20,7 +20,10 @@ export interface GraduateInput {
 }
 export interface OppSkill { skill_id: string; importance: number; min_level: number; is_required: boolean }
 export interface OpportunityInput {
-  id: string; type: string; title: string; description?: string | null;
+  id: string; type: string; title: string;
+  // Required by registrationAvailability(): without these, a valid SQL candidate is treated as CLOSED.
+  status?: string | null; deadline?: string | null; end_at?: string | null;
+  description?: string | null;
   location?: string | null; attendance_mode?: string | null;
   target_fields?: string[]; experience_level?: string | null; target_audience?: string | null;
   minimum_experience_years?: number | null; minimum_experience_required?: boolean;

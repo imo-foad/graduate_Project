@@ -6,7 +6,7 @@ import type { FlowDeps } from "../supabase/functions/_shared/recommend-flow.ts";
 
 const NOW = Date.now();
 const cand = (v: number) => ({ profile_version: v, profile: { career_interests: [], experience_years: 0 }, skills: [],
-  opportunities: [{ id: "o1", type: "JOB", title: "t", skills: [], eligibility_failures: [] }] });
+  opportunities: [{ id: "o1", type: "JOB", title: "t", status: "ACTIVE", deadline: null, end_at: null, skills: [], eligibility_failures: [] }] });
 
 function deps(over: Partial<FlowDeps> & { versions?: number[]; saveErrors?: (string | null)[] } = {}) {
   const calls = { candidates: 0, save: [] as number[], read: 0 };

@@ -138,3 +138,12 @@ test("certification matching accepts a CompTIA prefix but remains an exact norma
   assert.ok(sql.includes("'^comptia[[:space:]:-]+'"));
   assert.ok(sql.includes("'[[:space:]]+'"));
 });
+
+test("recommendation candidates carry status and timestamps required by the scorer", () => {
+  const f = finalFunctions(allMigrationsSql()).get("get_recommendation_candidates");
+  assert.ok(f, "final recommendation candidate projection must exist");
+  for (const field of ["status", "deadline", "end_at"]) {
+    assert.match(f.body, new RegExp(`'${field}',\\s*o\\.${field}\\b`),
+      `candidate JSON must expose ${field} to the deterministic scorer`);
+  }
+});

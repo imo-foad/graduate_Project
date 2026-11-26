@@ -17,7 +17,7 @@ test("every active weight profile sums to 100 and inactive types have no profile
 
 test("only JOB, INTERNSHIP and TRAINING are scored or ranked (scope alignment)", () => {
   const profile = graduate(AHMED);
-  const base = { title: "Listing", description: "x", status: "ACTIVE", skills: [], eligibility_failures: [] };
+  const base = { title: "Listing", description: "x", status: "ACTIVE", deadline: null, end_at: null, skills: [], eligibility_failures: [] };
   for (const type of ["EVENT", "CONFERENCE", "VOLUNTEER", "SCHOLARSHIP", "COMPETITION", "SOMETHING_NEW", "", "job"]) {
     const item = scoreOpportunity(profile, { ...base, id: `outside-${type}`, type });
     assert.equal(item, null, type);
@@ -98,7 +98,8 @@ test("ranking is deterministic and sorted descending", () => {
 const NOW = new Date("2026-11-23T12:00:00Z");
 const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
 const training = (over: Record<string, unknown> = {}) => ({
-  id: "t", type: "TRAINING", title: "Training", status: "ACTIVE", target_fields: [], skills: [], eligibility_failures: [],
+  id: "t", type: "TRAINING", title: "Training", status: "ACTIVE", deadline: null, end_at: null,
+  target_fields: [], skills: [], eligibility_failures: [],
   capacity: 10, registered_count: 0, waitlist_enabled: false, registration_opens_at: null, ...over,
 });
 const bareGraduate = { career_interests: [], experience_years: 0, skills: [] };
@@ -132,7 +133,7 @@ test("availability: a closed opportunity is never scored, even when called direc
 });
 
 test("availability: opportunities without registration data keep the previous behaviour (null criterion)", () => {
-  const job = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", skills: [], eligibility_failures: [] };
+  const job = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", deadline: null, end_at: null, skills: [], eligibility_failures: [] };
   const r = scoreOpportunity(bareGraduate, job, NOW)!;
   assert.equal(r.availability_status, null);
   assert.equal(r.score_breakdown.availability, undefined);

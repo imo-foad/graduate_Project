@@ -365,6 +365,43 @@ select ok(
 );
 reset role;
 
+-- ---- Partial Auth signup recovery: only unlinked PENDING phone profiles can be claimed -----------
+do $
+declare v uuid := gen_random_uuid();
+begin
+  insert into auth.users (id, aud, role, phone, raw_user_meta_data)
+  values (v, 'authenticated', 'authenticated', '+201011110002',
+          jsonb_build_object('full_name', 'Orphaned pending synthetic'));
+  insert into tests.ids values ('orphan_retry', v);
+end $;
+set role service_role;
+select is(
+  public.find_unlinked_pending_registration_retry('+201011110002'),
+  tests.id('orphan_retry'),
+  'provider-verified retry can recover an Auth-created profile with no identity ledger'
+);
+select ok(
+  public.find_unlinked_pending_registration_retry('+201011110003') is null,
+  'unlinked retry lookup does not resolve another phone'
+);
+select is(
+  has_function_privilege('authenticated', 'public.find_unlinked_pending_registration_retry(text)', 'execute'),
+  false,
+  'authenticated clients cannot enumerate unlinked pending Auth accounts'
+);
+select public.record_identity_verification(
+  tests.id('orphan_retry'), 'synthetic-test-provider', 'synthetic:orphan',
+  repeat('f', 64), '0002',
+  '[{"identity_type":"GRADUATE","institution_ref":"SYNTHETIC_RETRY_INSTITUTION"}]'::jsonb,
+  'VERIFIED', null
+);
+select is(
+  public.find_pending_registration_retry('+201011110002', repeat('f', 64)),
+  tests.id('orphan_retry'),
+  'recovered Auth account is now bound to the exact verified identity digest'
+);
+reset role;
+
 -- ---- CV Storage cleanup: failure is delayed, observable and explicitly recoverable ----------------
 insert into private.cv_cleanup_queue (storage_path, graduate_id, reason, status, attempts, next_attempt_at)
 values ('synthetic-cleanup-retry/cv.pdf', tests.id('candidate'), 'METADATA_DELETE', 'PENDING', 0, now() - interval '1 minute');

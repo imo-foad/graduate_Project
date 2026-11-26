@@ -421,17 +421,25 @@ select is(
   true,
   'failed Storage deletion is durably recorded'
 );
+update private.cv_cleanup_queue
+   set attempts = 10
+ where storage_path = 'synthetic-cleanup-retry/cv.pdf';
 select is(
   jsonb_array_length(public.claim_cv_cleanup(10)),
   0,
-  'a failed cleanup is not reclaimed immediately before its backoff expires'
+  'an exhausted cleanup row is not automatically claimed'
+);
+select is(
+  (public.get_cv_cleanup_report() ->> 'exhausted')::int,
+  1,
+  'the reconciliation report exposes exhausted cleanup rows'
 );
 select is(
   public.retry_cv_cleanup(
     (select id from private.cv_cleanup_queue where storage_path = 'synthetic-cleanup-retry/cv.pdf')
   ),
   true,
-  'an operator can explicitly requeue a failed cleanup item'
+  'an operator can explicitly requeue an exhausted cleanup item'
 );
 select is(
   jsonb_array_length(public.claim_cv_cleanup(10)),

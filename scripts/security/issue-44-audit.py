@@ -12,6 +12,7 @@ ROOT=TEMP/"issue-44-private-audit"
 EXPOSURE=ROOT/"actions-exposure"
 REPORTS=ROOT/"reports"
 GITLEAKS=os.environ["GITLEAKS_BIN"]
+GITLEAKS_CONFIG=WORKSPACE/"scripts/security/issue-44-gitleaks.toml"
 API_VERSION="2022-11-28"
 MAX_ARCHIVE_BYTES=1024*1024*1024
 MAX_NESTED=3
@@ -251,6 +252,7 @@ def collect_public_discussions():
 def scan(name,args):
     report=REPORTS/(name+".json")
     command=[GITLEAKS]+args+[
+        "--config="+str(GITLEAKS_CONFIG),
         "--redact=100","--report-format=json","--report-path="+str(report)
     ]
     proc=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
@@ -292,6 +294,19 @@ def self_test():
     if rc==0 or len(found)<1:
         raise RuntimeError("Gitleaks canary detection/nonzero exit test failed")
     print("GITLEAKS_CANARY=PASS DETECTED=YES NONZERO_EXIT=YES REDACTION=PASS")
+    supabase_dir=test_root/"supabase-canary"
+    supabase_dir.mkdir(mode=0o700,parents=True,exist_ok=True)
+    supabase_canary="sb_secret_"+secrets.token_urlsafe(16)+"_"+ "".join(
+        secrets.choice(string.ascii_letters+string.digits+"-_") for _ in range(8))
+    (supabase_dir/"synthetic-supabase-secret.txt").write_text(
+        "SUPABASE_SECRET_KEY="+supabase_canary+"\\n",encoding="utf-8")
+    rc,found,_=scan("supabase-canary",["dir",str(supabase_dir)])
+    report=(REPORTS/"supabase-canary.json").read_bytes() if (REPORTS/"supabase-canary.json").exists() else b""
+    if supabase_canary.encode() in report:
+        raise RuntimeError("Supabase canary redaction check failed")
+    if rc==0 or len(found)<1:
+        raise RuntimeError("Supabase custom-rule canary detection/nonzero exit test failed")
+    print("GITLEAKS_SUPABASE_SECRET_CANARY=PASS DETECTED=YES NONZERO_EXIT=YES REDACTION=PASS")
     rc,found,_=scan("clean-fixture",["dir",str(clean_dir)])
     if rc!=0 or found:
         raise RuntimeError("Gitleaks clean-fixture test failed")
@@ -362,7 +377,7 @@ def main():
     if any(x.returncode!=0 for x in helps):
         raise RuntimeError("Gitleaks CLI help command failed")
     help_text="\n".join(x.stdout+x.stderr for x in helps)
-    for flag in ("--redact","--report-format","--report-path","--log-opts"):
+    for flag in ("--redact","--report-format","--report-path","--log-opts","--config"):
         if flag not in help_text: raise RuntimeError("Gitleaks help missing required option "+flag)
     print("GITLEAKS_VERSION=8.30.1 CLI_HELP=READ REQUIRED_FLAGS=VERIFIED")
 

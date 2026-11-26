@@ -42,7 +42,7 @@ do $$ begin
   perform tests.mk_opp('j_closed', 'JOB',   '{"deadline_days":5,"status":"CLOSED"}');
   perform tests.mk_opp('j_cert',   'JOB',   '{"deadline_days":5}');
   perform tests.mk_opp('j_sample', 'JOB',   '{"deadline_days":5}');
-  perform tests.mk_opp('e_evt',    'TRAINING', '{"deadline_days":5}');
+  perform tests.mk_opp('t_training', 'TRAINING', '{"deadline_days":5}');
   insert into public.opportunity_eligibility (opportunity_id, required_certifications) values (tests.id('j_cert'), array['Security+']);
   insert into public.skills (id, canonical_name, category) values ('T_SKILL_A','T Skill A','Test'), ('T_SKILL_B','T Skill B','Test');
   insert into public.cv_documents (id, graduate_id, storage_path, file_type, size_bytes)
@@ -62,7 +62,8 @@ select tests.login('a1');
 select throws_ok($q$select public.apply_for_job(tests.id('j_ok'))$q$, 'PT409', 'ALREADY_APPLIED', 'duplicate application');
 select throws_ok($q$select public.apply_for_job(tests.id('j_exp'))$q$, 'PT422', 'OPPORTUNITY_CLOSED', 'expired deadline');
 select throws_ok($q$select public.apply_for_job(tests.id('j_closed'))$q$, 'PT422', 'OPPORTUNITY_CLOSED', 'status CLOSED');
-select throws_ok($q$select public.apply_for_job(tests.id('e_evt'))$q$, 'PT422', 'NOT_A_JOB', 'not a job');
+select throws_ok($q$select public.apply_for_job(tests.id('t_training'))$q$, 'PT422', 'NOT_APPLICATION_OPPORTUNITY',
+  'TRAINING is not an application opportunity');
 select throws_ok($q$select public.apply_for_job(gen_random_uuid())$q$, 'PT404', 'OPPORTUNITY_NOT_FOUND', 'unknown opportunity');
 select throws_ok($q$select public.apply_for_job(tests.id('j_cert'))$q$, 'PT422', 'NOT_ELIGIBLE', 'mandatory certification missing');
 select is((select count(*)::int from public.applications where graduate_id = tests.id('a1')), 1, 'rejected attempts created no rows');

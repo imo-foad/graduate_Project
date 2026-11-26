@@ -47,7 +47,7 @@ for f in "${MIGRATIONS[@]}"; do
     fail "migration versions must be unique and increasing: $name follows version $PREVIOUS_VERSION"
   fi
   PREVIOUS_VERSION="$version"
-  grep -q "$name" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $name as applied"
+  grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log" || fail "db reset output does not show $name as applied"
 done
 WANT="$(for f in "${MIGRATIONS[@]}"; do basename "$f" | sed -E 's/^([0-9]+)_.*/\1/'; done | sort | paste -sd, -)"
 GOT="$(q "select coalesce(string_agg(version, ',' order by version), '') from supabase_migrations.schema_migrations")"

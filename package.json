@@ -12,6 +12,7 @@
     "test:db": "bash scripts/run-db-tests.sh",
     "test:workflow": "python3 -m unittest tests/workflow_lint.py -v",
     "provision:university:local": "node scripts/provision-university-demo-users.mjs",
-    "seed:university:local": "node scripts/seed-university-demo.mjs"
+    "seed:university:local": "node scripts/seed-university-demo.mjs",
+    "evaluate:cv:local": "node scripts/evaluate-cv-parser-local.mjs"
   }
 }

@@ -106,6 +106,7 @@ done
 
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
 # The prior local integration removes its temporary admin, leaving a clean one-time bootstrap slot.
 timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
 

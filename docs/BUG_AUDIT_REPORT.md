@@ -12,9 +12,7 @@
 
 QA corrected the original test/contract mismatches in database tests 01, 02 and 15; added a precise next-worker retry assertion to test 16; fixed the exact Supabase Auth allowlist in the OpenAPI contract; and aligned DB-runner documentation with 18 pgTAP files and migrations through 0033.
 
-Two findings are documented for Builder/maintainer:
-- The original P1 E.164 registration lookup defect was corrected in current Builder migrations 0030/0031, but successful test-19 runtime confirmation remains pending.
-- The P2 workflow-lint test hard-codes 27 migrations although the repository has 32; the file is outside Agent 2's explicit ownership list.
+One finding remains open for Builder/maintainer: the P2 workflow-lint test hard-codes 27 migrations although the repository has 32; the file is outside Agent 2's explicit ownership list. The original P1 E.164 lookup defect was corrected by Builder and verified by successful execution of test 19 in the latest disposable-local-Supabase run.
 
 The latest QA branch is rebased on the latest observed Builder HEAD. A completed green run has not been observed for the QA branch. No bug-free claim is made.
 
@@ -58,9 +56,9 @@ Updated scripts/run-db-tests.sh comments to say migrations through 0033 and 18 p
 
 ## 4. Builder handoffs
 
-### P1 — Registration E.164 lookup
+### P1 — Registration E.164 lookup (resolved)
 
-Builder CI run 45829327113 visibly executed test 19 and got INVALID_INPUT from find_pending_registration_retry for a valid synthetic E.164 number under the original double-backslash regex. Builder commit ec7c62e... rewrote both migrations 0030 and 0031 with ^[+][1-9][0-9]{7,14}$. The malformed intermediate commit 4c923 was superseded. Run 45830300439 passed npm/SQL-structure checks but the DB job was cancelled before test 19 could be confirmed against the fix. Current status: source corrected; database runtime verification pending. See docs/agent-handoffs/BUGS_FOR_BUILDER.md.
+Builder CI run 45829327113 visibly executed test 19 and got INVALID_INPUT from find_pending_registration_retry for a valid synthetic E.164 number under the original double-backslash regex. Builder commit ec7c62e... rewrote both migrations 0030 and 0031 with ^[+][1-9][0-9]{7,14}$. The malformed intermediate commit 4c923 was superseded. The subsequent completed run 45831195333 executed the official local DB runner; its uploaded pgtap.log shows 19_product_lifecycle.test.sql ok and a full summary of 18 files / 651 assertions. This verifies the positive valid-phone lookup path against the corrected migrations. See docs/agent-handoffs/BUGS_FOR_BUILDER.md for historical reproduction and closure evidence.
 
 ### P2 — Workflow-lint migration count
 
@@ -115,7 +113,7 @@ Inspected code was not exhaustively runtime-tested. No finding outside the two h
 - OpenAPI contract: PASS.
 - Shell syntax and Node checks: PASS.
 - Workflow lint: FAIL — AssertionError: 32 != 27 in test_run_script_covers_all_phases_and_migrations.
-- Disposable local Supabase job: IN PROGRESS at last inspection; no completed pgTAP/test-19/concurrency/HTTP result available.
+- Disposable local Supabase job: FAIL at the pgTAP stage. The uploaded database-test-logs artifact's pgtap.log shows 18 files / 651 assertions. Tests 01, 02 and 15 failed with the exact stale expectations corrected in this QA PR; test 16 passed; test 19 visibly ran and passed. Since pgTAP fails, concurrency and local HTTP integrations were not reached.
 
 The QA branch was updated using GitHub repository APIs. A local checkout/worktree could not be established because outbound GitHub DNS resolution failed, so no local npm/Python/shell/pgTAP/concurrency/HTTP run is claimed. The final QA PR head still needs its own completed CI run before post-change tests can be marked passed.
 

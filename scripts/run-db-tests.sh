@@ -69,6 +69,7 @@ for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ]
 echo "=== D1. focused Test 15"
 supabase test db database/15_three_type_scope.test.sql 2>&1 | tee "$LOG_DIR/pgtap-15-focused.log"
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap-15-focused.log"; then fail "focused Test 15 reported failures"; fi
+grep -q "15_three_type_scope.test.sql" "$LOG_DIR/pgtap-15-focused.log" || fail "focused pgTAP output does not show Test 15 execution"
 echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done

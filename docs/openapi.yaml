@@ -2,9 +2,7 @@ openapi: 3.0.3
 info:
   title: Alumni Connect AI - Backend API (Supabase)
   version: 0.1.0
-  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`; every operation except the token
-    endpoint also needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` =
-    stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
+  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token and public phone-first registration endpoints do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
 servers:
 - url: '{supabaseUrl}'
   variables:

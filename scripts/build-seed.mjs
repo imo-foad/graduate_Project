@@ -39,14 +39,14 @@ export function validateUniversityFixtures(d) {
     if (!u.seed_key || keys.has(u.seed_key)) errors.push(`missing/duplicate seed_key: ${u.seed_key}`);
     keys.add(u.seed_key);
     if (!/synthetic/i.test(u.full_name ?? "")) errors.push(`${u.seed_key}: name must be explicitly synthetic`);
-    if (!(typeof u.phone === "string" && u.phone.length === 12 && u.phone.startsWith("+121255501") && Number(u.phone.slice(-2)) <= 39)) errors.push(`${u.seed_key}: phone outside fictional reserved block`);
+    if (!(typeof u.phone === "string" && u.phone.length === 12 && u.phone.startsWith("+121255501") && Number(u.phone.slice(-2)) >= 0 && Number(u.phone.slice(-2)) <= 39)) errors.push(`${u.seed_key}: phone outside fictional reserved block`);
     if (phones.has(u.phone)) errors.push(`duplicate synthetic phone ${u.phone}`);
     phones.add(u.phone);
     if (["email","national_id","password"].some(k=>Object.hasOwn(u,k))) errors.push(`${u.seed_key}: forbidden email, National ID or password in fixture`);
     if (u.category==="STUDENT" || u.category==="FACULTY") {
       const prefix=u.category==="STUDENT"?"SYNTH-STU-":"SYNTH-FAC-";
       if (u.identity_type!==u.category) errors.push(`${u.seed_key}: invalid identity type`);
-      if (!u.institution_ref?.startsWith(prefix) || refs.has(u.institution_ref)) errors.push(`${u.seed_key}: invalid/duplicate institution_ref`);
+      if (typeof u.institution_ref !== "string" || !/^SYNTH-(?:STU|FAC)-[0-9]{4}$/.test(u.institution_ref) || !u.institution_ref.startsWith(prefix) || refs.has(u.institution_ref)) errors.push(`${u.seed_key}: invalid/duplicate institution_ref`);
       refs.add(u.institution_ref);
     } else if (Object.hasOwn(u,"identity_type") || u.admin_role!=="PLATFORM_ADMIN") {
       errors.push(`${u.seed_key}: administrator must be a private platform-admin grant only`);

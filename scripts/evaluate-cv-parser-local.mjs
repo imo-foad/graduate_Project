@@ -116,7 +116,7 @@ const cases=[
     ].join("\n"),
     expected:{
       skills:["PYTHON","DOCKER","POSTGRESQL","KOTLIN","SQL","AWS"],
-      experiences:[{company_name:"Northstar Systems",job_title:"Backend Engineer",start_date:"2021-01-01",end_date:"2023-02-28"}],
+      experiences:[{company_name:"Northstar Systems",job_title:"Backend Engineer",start_date:"2021-01-01",end_date:"2023-02-28",is_current:false}],
       certifications:[{title:"AWS Certified Cloud Practitioner",issuer:"Amazon Web Services",issue_date:"2023-01-01"}],
       courses:[{title:"Advanced SQL",issuer:"Coursera",issue_date:"2024-01-01",duration:"12 hours"}],
     },
@@ -132,7 +132,7 @@ const cases=[
     ].join("\n"),
     expected:{
       skills:["PYTHON","SQL","KOTLIN"],
-      experiences:[{company_name:"شركة النور",job_title:"مهندس برمجيات",start_date:"2020-03-01",end_date:"2021-11-30"}],
+      experiences:[{company_name:"شركة النور",job_title:"مهندس برمجيات",start_date:"2020-03-01",end_date:"2021-11-30",is_current:false}],
       certifications:[{title:"شهادة الأمن السيبراني",issuer:"أكاديمية التقنية",issue_date:"2022-01-01"}],
       courses:[{title:"تحليل البيانات",issuer:"منصة التعلم",issue_date:"2023-01-01",duration:"6 weeks"}],
     },
@@ -147,7 +147,7 @@ const cases=[
     ].join("\n"),
     expected:{
       skills:["POWER_BI","EXCEL","TABLEAU","STATISTICS","DATA_VISUALIZATION"],
-      experiences:[{company_name:"Insight Analytics",job_title:"Data Analyst",start_date:"2021-01-01",end_date:"2022-12-31"}],
+      experiences:[{company_name:"Insight Analytics",job_title:"Data Analyst",start_date:"2021-01-01",end_date:"2022-12-31",is_current:false}],
       certifications:[{title:"Microsoft Power BI Data Analyst",issuer:"Microsoft",issue_date:"2024-01-01"}],
       courses:[{title:"Data Visualization with Tableau",issuer:"Tableau",issue_date:"2023-01-01",duration:"4 weeks"}],
     },
@@ -161,8 +161,8 @@ const cases=[
       "COURSES","Agile Delivery | Open Learning | 2019",
     ].join("\n"),
     expected:{
-      skills:["EXCEL","SQL"],
-      experiences:[{company_name:"Bright Analytics",job_title:"Product Analyst",start_date:"2019-01-01",end_date:"2020-12-31"}],
+      skills:["EXCEL","SQL","AGILE"],
+      experiences:[{company_name:"Bright Analytics",job_title:"Product Analyst",start_date:"2019-01-01",end_date:"2020-12-31",is_current:false}],
       certifications:[{title:"Professional Scrum Master",issuer:"Scrum.org",issue_date:"2020-01-01"}],
       courses:[{title:"Agile Delivery",issuer:"Open Learning",issue_date:"2019-01-01"}],
     },

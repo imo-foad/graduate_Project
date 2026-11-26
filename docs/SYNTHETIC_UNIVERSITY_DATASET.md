@@ -43,6 +43,8 @@ npm run build:seed
 npm run seed:university:local
 ```
 
+`npm run evaluate:cv:local` generates PDF/DOCX fixtures, parses them through the local Edge Function and reports field-level precision/recall by skills, experience, certifications and courses. Scanned/image-only PDF is intentionally unsupported (no OCR).
+
 `npm run seed:university:local` validates both URLs before network or database access, provisions Auth users twice, applies generated `04_university_accounts.sql` twice, and checks exact counts and idempotency. It rejects hosted URLs, arbitrary private IPs, HTTPS API URLs and non-standard ports. The generated SQL additionally refuses to run without the session-local `app.synthetic_seed_allowed=local-only` guard set by the local runner.
 
 The local integration suite runs the same command after the four legacy graduate demos. Use only disposable local keys and discard the environment afterward. Do not run this seed against staging or production.

@@ -23,8 +23,42 @@ jobs:
         with: { node-version: 22 }
       - run: node --version && npm test
       - run: pip install pyyaml && python3 -m unittest tests/contract_openapi.py -v
-      - run: bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/career-cohort.integration.mjs && node --check tests/integration/onboarding.integration.mjs && node --check tests/integration/rate-limits.integration.mjs
+      - run: bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/career-cohort.integration.mjs && node --check tests/integration/onboarding.integration.mjs && node --check tests/integration/rate-limits.integration.mjs && node --check scripts/seed-university-demo.mjs && node --check scripts/provision-university-demo-users.mjs && node --check scripts/provision-demo-users.mjs && node --check scripts/evaluate-cv-parser-local.mjs && bash -n scripts/run-university-seed-smoke.sh
       - run: python3 -m unittest tests/workflow_lint.py -v
+
+  university-seed-smoke:
+    name: "synthetic university seed (isolated disposable local Supabase)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Verify Docker and install PostgreSQL client
+        run: |
+          docker --version
+          docker info --format 'docker server {{.ServerVersion}}'
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          psql --version
+      - uses: supabase/setup-cli@v1
+        with: { version: "3.3.0" }
+      - name: Run local synthetic dataset provisioning and idempotency proof
+        run: bash -o pipefail scripts/run-university-seed-smoke.sh 2>&1 | tee .ci-logs-university-seed-smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-university-seed-smoke
+          path: |
+            .ci-logs-university-seed-smoke.log
+            .ci-logs/university-seed-*.log
+            .ci-logs/cv-parser-evaluation.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop disposable local Supabase
+        if: always()
+        run: timeout 120s supabase stop --no-backup || true
 
   database:
     name: "database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency)"

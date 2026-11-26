@@ -73,6 +73,8 @@ echo "PASS demo profile seed idempotency: skills=$SKILL_COUNT, sample applicatio
 # Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
 echo "Provisioning and applying synthetic university dataset (local only)"
 node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+# Verify Student/Faculty academic-record privacy and server-owned platform-admin authorization.
+node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
 
 # Serve the actual Edge Function through the local Supabase gateway with JWT verification ON.
 # The function additionally calls auth.getUser(), so both gateway and handler auth paths are exercised.

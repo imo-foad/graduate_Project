@@ -299,7 +299,7 @@ def self_test():
     supabase_canary="sb_secret_"+secrets.token_urlsafe(16)+"_"+ "".join(
         secrets.choice(string.ascii_letters+string.digits+"-_") for _ in range(8))
     (supabase_dir/"synthetic-supabase-secret.txt").write_text(
-        "SUPABASE_SECRET_KEY="+supabase_canary+"\\n",encoding="utf-8")
+        "SUPABASE_SECRET_KEY="+supabase_canary+"\n",encoding="utf-8")
     rc,found,_=scan("supabase-canary",["dir",str(supabase_dir)])
     report=(REPORTS/"supabase-canary.json").read_bytes() if (REPORTS/"supabase-canary.json").exists() else b""
     if supabase_canary.encode() in report:

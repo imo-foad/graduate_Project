@@ -11,6 +11,6 @@ entropy = 2.5
 [[rules]]
 id = "supabase-personal-access-token"
 description = "Supabase personal access token"
-regex = '''\\bsbp_(?:(?:v0|oauth)_)?[a-f0-9]{40}\\b'''
+regex = '''\bsbp_(?:(?:v0|oauth)_)?[a-f0-9]{40}\b'''
 keywords = ["sbp_"]
 entropy = 3.0

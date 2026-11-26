@@ -312,3 +312,11 @@ test("local CV evaluation cleanup authenticates metadata DELETE as service_role"
   assert.doesNotMatch(cleanup, /method:"DELETE",headers:headers\(service,null,/);
   assert.match(cleanup, /headers:headers\(service,service,/);
 });
+
+test("local phone/password Auth is enabled without enabling public account signup", () => {
+  const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
+  assert.match(config, /^\[auth\]\s*\nenable_signup = false/m);
+  assert.match(config, /^\[auth\.sms\]\s*\nenable_signup = true/m);
+  assert.match(config, /enable_confirmations = true/);
+  assert.ok(config.includes("Global [auth].enable_signup remains false"));
+});

@@ -117,7 +117,6 @@ try {
     assert.equal(profile.status, 200, "profile lookup failed: " + account.seed_key + " " + profile.text);
     assert.equal(profile.json?.length, 1, "missing/duplicate profile: " + account.seed_key);
     const row = profile.json[0];
-    assert.equal(row.phone, account.phone, "Auth phone must be persisted unchanged to profiles.phone");
     assert.equal(row.phone, account.phone, "profiles.phone must retain the canonical E.164 representation");
     assert.equal(row.email, null, "synthetic phone account must not have an email");
     assert.equal(row.account_status, "ACTIVE", "synthetic account must be active after local seed");

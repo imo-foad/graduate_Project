@@ -27,7 +27,10 @@ redact_ci_file() {
 
 # Mirror every later line into the downloadable artifact log. This happens before the first
 # tool check so startup and migration failures are always diagnosable.
+# Keep original streams so the process-substitution tee can be cleanly closed and joined in cleanup.
+exec 3>&1 4>&2
 exec > >(tee -a "$LOG_FILE") 2>&1
+TEE_PID="$!"
 echo "=== synthetic university smoke started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 DB_URL="${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
@@ -66,6 +69,11 @@ cleanup() {
   else
     echo "SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
   fi
+  # Close the process-substitution pipe and wait for tee to flush the terminal marker
+  # into the artifact log before the shell returns its original status to Actions.
+  exec 1>&3 2>&4
+  wait "$TEE_PID" || true
+  exec 3>&- 4>&-
   exit "$status"
 }
 trap cleanup EXIT

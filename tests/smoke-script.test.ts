@@ -46,6 +46,8 @@ esac
   const logFile = join(ROOT, ".ci-logs", "university-seed-smoke.log");
   assert.ok(existsSync(logFile), "smoke artifact log must be created before operations begin");
   assert.ok(readFileSync(logFile, "utf8").length > 0, "smoke artifact log must not be empty");
+  assert.match(readFileSync(logFile, "utf8"), /SMOKE RESULT: FAIL/,
+    "the terminal result marker must be flushed into the artifact log before exit");
 
   // Cleanup still runs, and it runs after the failing reset.
   const invoked = existsSync(calls) ? readFileSync(calls, "utf8") : "";
@@ -69,4 +71,11 @@ test("the smoke workflow does not hide script failures behind an outer tee pipel
   assert.match(workflow, /grep -Fxq "SMOKE RESULT: PASS" \.ci-logs\/university-seed-smoke\.log/);
   assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
   assert.match(workflow, /grep -q "Counts:" \.ci-logs\/university-seed-apply\.log/);
+});
+
+test("the smoke script waits for tee to flush its terminal result into the downloadable log", () => {
+  const script = readFileSync(join(ROOT, "scripts/run-university-seed-smoke.sh"), "utf8");
+  assert.match(script, /exec 3>&1 4>&2/);
+  assert.match(script, /TEE_PID="\$!"/);
+  assert.match(script, /exec 1>&3 2>&4[\s\S]*wait "\$TEE_PID" \|\| true/);
 });

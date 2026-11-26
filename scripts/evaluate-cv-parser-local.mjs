@@ -14,7 +14,9 @@ const parsedBase = new URL(base);
 assert.ok(parsedBase.protocol === "http:" && ["127.0.0.1","localhost","[::1]"].includes(parsedBase.hostname) && parsedBase.port === "54321",
   "refusing CV evaluation outside the disposable local Supabase API");
 
-const userEmail = "graduate.demo@alumni.test";
+// Use a dedicated demo graduate for this benchmark. The CV integration and rate-limit
+// suite intentionally consume the graduate.demo account's five-token CV_PARSE bucket.
+const userEmail = "graduate.cyber@alumni.test";
 const headers = (key, token, more = {}) => ({
   apikey: key,
   ...(token ? { Authorization: "Bearer " + token } : {}),

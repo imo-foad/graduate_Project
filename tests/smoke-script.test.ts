@@ -100,3 +100,14 @@ test("the university smoke proves phone/password Auth and RLS over the local HTT
   assert.match(integration, /external\?\.phone/);
   assert.match(integration, /phone\/password login failed/);
 });
+
+
+test("CV parser benchmark uses a dedicated account isolated from the CV integration quota", () => {
+  const cvIntegration = readFileSync(join(ROOT, "tests/integration/cv-parse.integration.mjs"), "utf8");
+  const evaluator = readFileSync(join(ROOT, "scripts/evaluate-cv-parser-local.mjs"), "utf8");
+  const cvUsers = [...cvIntegration.matchAll(/const demo[AB] = "(\S+@\S+)"/g)].map((match) => match[1]);
+  const benchmarkUser = evaluator.match(/const userEmail = "(\S+@\S+)"/)?.[1];
+  assert.ok(benchmarkUser, "CV benchmark must declare its own Auth account");
+  assert.ok(!cvUsers.includes(benchmarkUser),
+    "CV benchmark must not consume the same per-user CV_PARSE bucket as the focused CV integration");
+});

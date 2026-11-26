@@ -64,6 +64,13 @@ test("university fixture has 20 students, 10 faculty, 10 admins and 20 distinct 
   assert.equal(new Set(university.students.map((s: any)=>s.academic_track)).size,7);
 });
 
+test("university fixture validation requires at least five distinct approved tracks", () => {
+  const invalid = structuredClone(university);
+  for (const student of invalid.students.slice(4)) student.academic_track = invalid.students[0].academic_track;
+  assert.equal(new Set(invalid.students.map((student: any) => student.academic_track)).size, 4);
+  assert.ok(validateUniversityFixtures(invalid).some((error: string) => error.includes("at least five")));
+});
+
 test("university fixture validation rejects invalid GPA, track and duplicate reference", () => {
   const invalid=structuredClone(university);
   invalid.students[0].gpa=4.25;

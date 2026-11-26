@@ -52,3 +52,12 @@ esac
   assert.match(invoked, /supabase db reset/);
   assert.match(invoked, /supabase stop/);
 });
+
+test("GitHub Actions propagates the university smoke exit code and requires its terminal PASS marker", () => {
+  const workflow = readFileSync(join(ROOT, ".github/workflows/backend-tests.yml"), "utf8");
+  assert.match(workflow, /run: bash scripts\/run-university-seed-smoke\.sh\n/);
+  assert.doesNotMatch(workflow, /run: bash scripts\/run-university-seed-smoke\.sh[^\n]*\|\s*tee/);
+  assert.match(workflow, /grep -Fxq "SMOKE RESULT: PASS" \.ci-logs\/university-seed-smoke\.log/);
+  assert.match(workflow, /grep -q "Auth first pass:" \.ci-logs\/university-seed-apply\.log/);
+  assert.match(workflow, /grep -q "Counts:" \.ci-logs\/university-seed-apply\.log/);
+});

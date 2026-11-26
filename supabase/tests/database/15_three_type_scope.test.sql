@@ -111,18 +111,18 @@ select is(
   0,
   'no non-cancelled row exists outside the three active types'
 );
--- The fixture currently contains seven seeded TRAINING catalogue rows. This test
--- contributes four isolated TRAINING fixtures (including one CLOSED row): keep the historical
--- total of eleven rows while measuring the seeded catalogue independently.
+-- The fixture currently contains eight seeded TRAINING catalogue rows, including the DevOps
+-- Cloud Day added for the career-cohort scenario. This test contributes four isolated TRAINING
+-- fixtures (including one CLOSED row): keep the total at twelve while measuring seed rows independently.
 select is(
   (select count(*)::int from public.opportunities where type = 'TRAINING'),
-  11,
-  'seven seeded TRAINING rows plus four test-owned TRAINING fixtures remain present'
+  12,
+  'eight seeded TRAINING rows plus four test-owned TRAINING fixtures remain present'
 );
 select is(
   (select count(*)::int from public.opportunities where type = 'TRAINING' and is_sample is true),
-  7,
-  'the seven seeded TRAINING catalogue rows retain the sample-data marker'
+  8,
+  'the eight seeded TRAINING catalogue rows retain the sample-data marker'
 );
 -- Seed rows are marked is_sample=true by build-seed.mjs. Test-only fixtures above are
 -- deliberately excluded because t_closed is a valid CLOSED TRAINING used by this test.

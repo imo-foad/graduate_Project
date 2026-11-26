@@ -72,74 +72,24 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     `p_opportunity_id`, `p_minimum_experience_years` (number or null) and `p_is_required`. Mandatory minimums
     exclude candidates below the threshold; preferred minimums reduce the experience match score.
 
-14. **Scholarship applications and external delivery**:
-    - List opportunities with GET `/rest/v1/opportunities?type=eq.SCHOLARSHIP&order=deadline.asc`.
-    - Submit with POST `/rest/v1/rpc/apply_for_scholarship`:
-      ```json
-      {
-        "p_opportunity_id": "<scholarship uuid>",
-        "p_cv_document_id": "<own cv uuid or null>",
-        "p_personal_statement": "Why I am applying...",
-        "p_application_data": { "study_area": "Computer Science", "motivation": "Research" }
-      }
-      ```
-    - Only `p_opportunity_id` is required. The CV must belong to the caller; the statement is limited to 10,000 characters and `p_application_data` must be a JSON object no larger than 32 KiB. Answers are stored without an imposed form schema because the current catalogue does not provide scholarship-specific questions.
-    - The server checks opportunity type, open/deadline/end state, server-side eligibility and duplicate submissions. One submission per graduate/opportunity remains enforced after withdrawal.
-    - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/scholarship_application_status_history`.
-    - Withdraw with POST `/rest/v1/rpc/withdraw_scholarship_application` and body `{"p_application_id":"<application uuid>"}`.
-    - The current form stays unchanged: CV (optional), personal statement (maximum 10,000 characters) and flexible JSON answers (maximum 32 KiB). No per-Scholarship Form Builder is part of this contract.
-    - Seeded listings have `is_sample=true` and are demonstration-only. They remain visibly sample and cannot be reviewed or accepted/rejected. Real Scholarships are created by Alumni Connect platform admins with `is_sample=false`; without an explicit provider mapping, applications enter the internal Alumni Connect review queue.
-    - Platform admins create/update/publish/close Scholarships with `create_admin_scholarship`, `update_admin_scholarship`, `publish_admin_scholarship` and `close_admin_scholarship`. Creation starts in DRAFT; publishing moves to ACTIVE; closing moves DRAFT/ACTIVE to CLOSED. The listing is managed inside Alumni Connect; there is no external provider submission.
-    - The central review queue uses `list_admin_scholarship_applications` (optional opportunity/status filters and paired cursor values); use `get_admin_scholarship_application` for applicant profile, CV id and submitted answers. Platform admins can download only CV objects attached to Scholarship applications; they cannot read unrelated graduates' CVs through this policy.
-    - Review through `review_scholarship_application`: SUBMITTED → UNDER_REVIEW → ACCEPTED or REJECTED. Decisions cannot skip or reverse a stage. Each step records ADMIN_ACTION, actor, timestamp and optional note in status history, and creates a notification for the applicant. A student can withdraw only while SUBMITTED.
-    - Applicants read their own status and history through the existing `scholarship_applications` and `scholarship_application_status_history` table paths.
+14. **Cancelled product lines — Scholarship and Competition**: these features were removed from the active
+    product scope by product decision. Do not build screens for them and do not call their old endpoints.
+    - `SCHOLARSHIP` and `COMPETITION` are inactive opportunity types. They are excluded from
+      `/rest/v1/opportunities` discovery, from the deterministic recommendation engine and from all cached
+      recommendations. Sample rows were removed from the seed catalogue.
+    - The former RPCs (`apply_for_scholarship`, `withdraw_scholarship_application`, `apply_for_competition`,
+      `withdraw_competition_application`, the internal scholarship admin and delivery routines) return HTTP 403
+      for client roles. The former Edge Functions (`submit-scholarship`, `deliver-scholarship`,
+      `get-scholarship-review-cv`, `scholarship-provider-callback`) are no longer deployed.
+    - The `scholarship_applications`, `scholarship_application_status_history`, `competition_applications` and
+      `competition_application_status_history` table paths are not readable by clients. Historical rows are
+      retained server-side only for data integrity; there is no client API for them.
+    - Any client behaviour that previously depended on these features should be removed rather than hidden.
 
-    - **Never treat a locally saved application as an externally submitted application.** Without a provider mapping, the existing Alumni Connect workflow remains `SUBMITTED → UNDER_REVIEW → ACCEPTED|REJECTED` with `delivery_status=NOT_REQUIRED`. A platform admin explicitly opts a listing into external delivery by configuring a provider mapping. The provider-backed lifecycle is:
-      - `PENDING_DELIVERY`: saved by this platform; provider has NOT confirmed receipt.
-      - `SUBMITTED_EXTERNALLY`: only set after the provider returns a valid acknowledgement and external application reference.
-      - `IN_REVIEW`: the organizer/provider or an authorized reviewer has begun reviewing it.
-      - `ACCEPTED` / `REJECTED`: final decision received from the provider or authorized reviewer.
-      - `DELIVERY_FAILED`: delivery exhausted its retry budget; a platform admin can queue a new attempt.
-      - `INTERNAL_ONLY`: legacy compatibility state; new sample submissions remain `SUBMITTED` with `delivery_status=NOT_REQUIRED` and are never transmitted.
-      - `WITHDRAWN`: withdrawn before external delivery. Once `SUBMITTED_EXTERNALLY`, withdrawal must be handled by the provider; the app will not claim it has been cancelled externally.
-    - `delivery_status` is independent from application status: `NOT_REQUIRED`, `BLOCKED`, `PENDING`, `PROCESSING`, `DELIVERED`, `FAILED`, `CANCELLED`. No mapping means internal Alumni Connect review (`NOT_REQUIRED`); an explicitly configured but disabled mapping or missing server-side provider secret leaves provider delivery blocked/pending and never means the provider received it.
-    - Read own submissions from `/rest/v1/scholarship_applications?select=*,opportunity:opportunities(title)` and status history from `/rest/v1/scholarship_application_status_history`. History identifies whether a transition came from the graduate, system, provider, reviewer or administrator.
-    - Withdraw an application before delivery with `POST /rest/v1/rpc/withdraw_scholarship_application` and `{"p_application_id":"<application uuid>"}`. A request already processing or externally delivered cannot be locally withdrawn.
-    - **Provider configuration is server-side only.** A platform admin maps a non-sample scholarship using `configure_scholarship_provider_mapping` with `p_opportunity_id`, `p_provider_key`, `p_external_opportunity_id`, and optional `p_is_enabled`. Credentials/endpoints are never stored in an opportunity row or shipped in the APK.
-    - Configure the Edge Function secret `SCHOLARSHIP_PROVIDERS_JSON` as an object keyed by the same provider key. Example shape (replace all placeholders; never commit actual values):
-      ```json
-      {
-        "PROVIDER_A": {
-          "endpoint": "https://provider.example/api/v1/scholarship-applications",
-          "bearer_token": "<provider-issued token>",
-          "webhook_secret": "<random secret of at least 32 characters>"
-        }
-      }
-      ```
-      Endpoints must be HTTPS. Secrets belong in Supabase Edge Function secrets, not SQL, GitHub source, logs or Android configuration.
-    - **Outgoing provider contract:** the backend POSTs JSON with `schema_version`, `event=scholarship.application.submitted`, `application_id`, `provider_opportunity_id`, `submitted_at`, `applicant`, `personal_statement`, `answers`, `cv_download_url`, and `idempotency_key`. It sends `Authorization: Bearer`, `Idempotency-Key`, `X-Alumni-Timestamp`, and `X-Alumni-Signature: sha256=<hex>`. The HMAC-SHA256 signature is over `timestamp + "." + raw_request_body`. The provider must deduplicate by `Idempotency-Key` and respond with a 2xx JSON body containing `{"accepted":true,"application_reference":"<provider id>"}`; optional `request_id` is retained for delivery audit.
-    - If a CV is attached, the provider receives a private signed download URL that expires after 10 minutes. It must download the file during that window; the permanent Storage path and service-role credentials are never sent.
-    - **Provider status callback:** configure the provider to POST to `/functions/v1/scholarship-provider-callback` with `provider_key`, unique `event_id`, `application_reference`, `status` (`IN_REVIEW`, `ACCEPTED`, or `REJECTED`), and optional `note`. Sign the exact raw JSON body with the shared webhook secret using the same timestamp/HMAC headers. Timestamps older than five minutes, invalid signatures, unknown references and invalid transitions are rejected. Repeated event IDs with the same payload are idempotent; reusing an event ID with a different payload is rejected.
-    - **Internal Alumni Connect review:** without a provider mapping, platform admins use `list_admin_scholarship_applications` and `review_scholarship_application` for `SUBMITTED -> UNDER_REVIEW -> ACCEPTED|REJECTED`; sample listings remain non-reviewable. **External provider review:** after provider acknowledgement, a platform admin assigns a verified account with `set_scholarship_reviewer`; reviewers use `get_scholarship_review_queue` and the same review RPC for `SUBMITTED_EXTERNALLY -> IN_REVIEW -> ACCEPTED|REJECTED`. Reviewer access is scoped to its provider. Every transition writes history and a notification.
-    - To view an attached CV during review, call `POST /functions/v1/get-scholarship-review-cv` with `{"application_id":"<id>"}`. The database verifies the reviewer's active provider assignment (or active platform-admin membership) before the Edge Function creates a private 10-minute signed URL. The reviewer URL never grants direct bucket access and cannot be used for another provider's application.
-    - `deliver-scholarship` is a server worker: a trusted scheduler may invoke it with service-role authorization to process due retries; an active platform admin may invoke it for one application after the retry RPC. Never call it from a public client using a service-role key. The worker uses capped exponential backoff, a two-minute lease, a maximum of five automatic attempts, and the stable outbox UUID as its idempotency key.
-    - Seeded/sample scholarships remain `SUBMITTED` with `delivery_status=NOT_REQUIRED`; provider mappings are forbidden for sample listings, so they are never sent externally.
-
-15. **Competition submissions**:
-    - List competitions with GET `/rest/v1/opportunities?type=eq.COMPETITION&order=deadline.asc`.
-    - Submit with POST `/rest/v1/rpc/apply_for_competition` using `p_opportunity_id`, optional caller-owned `p_cv_document_id`, optional `p_personal_statement` (maximum 10,000 characters), and a JSON object in `p_submission_data` (maximum 32 KiB). Example:
-      ```json
-      {
-        "p_opportunity_id": "<competition uuid>",
-        "p_cv_document_id": "<own cv uuid or null>",
-        "p_personal_statement": "Overview of my entry...",
-        "p_submission_data": { "project_title": "Campus Assist", "project_url": "https://example.test/project" }
-      }
-      ```
-    - The server verifies COMPETITION type, open/deadline/end state, registration opening time, eligibility, CV ownership and duplicate prevention. One entry per graduate/competition remains enforced after withdrawal.
-    - This is a competition-entry workflow, not `register_for_event`; the event-registration RPC continues to reject COMPETITION.
-    - Read own entries from `/rest/v1/competition_applications?select=*,opportunity:opportunities(title)` and history from `/rest/v1/competition_application_status_history`; withdraw with POST `/rest/v1/rpc/withdraw_competition_application` and body `{"p_application_id":"<application uuid>"}`.
-    - The entry payload is flexible because no authoritative team, judging, or competition-specific form schema exists in the catalogue. It stores the graduate's data in this backend; sample entries are not transmitted to the external organizer.
+15. **Opportunity-type scope**: the only active types are `JOB`, `INTERNSHIP`, `TRAINING`, `EVENT`,
+    `CONFERENCE` and `VOLUNTEER`. The backend rejects creation of any other type with
+    `CANCELLED_OPPORTUNITY_TYPE`, and clients should treat the `type` field as an open-ended string that may
+    gain new values in the future instead of hard-coding the cancelled ones.
 
 16. **Social Feed**:
     - Feed reads go through `POST /rest/v1/rpc/get_social_feed` with optional `p_limit` (1–50, default 20). For the next page send both `p_before_created_at` and `p_before_id` from the last item in the previous page; send both as null for the first page.
@@ -149,4 +99,4 @@ Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (ch
     - Add a comment with `add_social_comment` (`p_post_id`, `p_content`), edit your own with `update_social_comment` (`p_comment_id`, `p_content`) and delete your own with `delete_social_comment` (`p_comment_id`). Comment text must contain 1–2,000 characters after trimming.
     - Like/unlike using `like_social_post` or `unlike_social_post` with `p_post_id`. The feed returns only the total likes and the caller's `liked_by_me` flag; there is no endpoint exposing the identities of other likers.
     - All posts/comments/likes tables deny direct client table access; use these RPCs only. Posts can be edited/deleted only by their author; comments can be edited/deleted only by their author. Deleting a post cascades its comments and likes.
-    - This scope does not add followers, teams, direct messages, media uploads or moderation tools because those workflows are not defined in the current backend requirements.
+    - This scope does not add followers, teams, direct messages or media uploads. Moderation and reporting are available through the dedicated admin RPCs documented in `docs/openapi.yaml`.

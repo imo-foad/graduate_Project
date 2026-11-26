@@ -12,7 +12,7 @@ const MIGS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.ends
 const VERSIONS = MIGS.map((m) => m.split("_")[0]).join(",");
 const SKILLS = JSON.parse(readFileSync(join(ROOT, "fixtures/skills.json"), "utf8")).length;
 const OPPS = JSON.parse(readFileSync(join(ROOT, "fixtures/opportunities.json"), "utf8")).length;
-const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_scholarship_application", "11_competition_application", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_internal_scholarship_management", "16_scholarship_delivery_review", "17_recommendation_availability"];
+const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "17_recommendation_availability"];
 
 function fakeBin() {
   const dir = mkdtempSync(join(tmpdir(), "fake-"));
@@ -63,9 +63,13 @@ test("the scholarship migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0015_scholarship_applications.sql" });
   assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0015_scholarship_applications.sql as applied"));
 });
-test("the internal Scholarship management migration is mandatory in db reset output", () => {
+test("the internal Scholarship management migration is mandatory in db reset output (historical, retained)", () => {
   const r = run({ FAKE_MISSING: "0020_internal_scholarship_management.sql" });
   assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0020_internal_scholarship_management.sql as applied"));
+});
+test("the cancelled-scope migration is mandatory in db reset output", () => {
+  const r = run({ FAKE_MISSING: "0025_cancel_scholarship_and_competition.sql" });
+  assert.equal(r.status, 1); assert.ok(out(r).includes("does not show 0025_cancel_scholarship_and_competition.sql as applied"));
 });
 test("the graduate-invitation duplicate guard migration is mandatory in db reset output", () => {
   const r = run({ FAKE_MISSING: "0023_graduate_invitation_duplicate_guard.sql" });

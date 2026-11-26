@@ -121,3 +121,31 @@ The CI runner pins Supabase CLI 3.3.0 and does not use cloud credentials or perf
 - Active review branch: `fix/postgres-runtime-test-failures`
 - Review PR: [#2](https://github.com/imo-foad/graduate_Project/pull/2)
 - Full green CI: [run #67](https://github.com/imo-foad/graduate_Project/actions/runs/45416127368)
+
+---
+
+## Addendum — 2026-11-26: product scope alignment (Scholarship/Competition cancelled)
+
+Branch: `fix/alumni-connect-scope-alignment`. This addendum is deliberately separate from the historical
+snapshot above, which describes an older branch and must not be read as current evidence.
+
+**Product decision applied:** Scholarship (issue #14) and Competition (issue #15) are cancelled product
+lines. Nothing from those lines is part of the active backend contract.
+
+**What changed (additive, no historical migration edited):**
+
+| Area | Change | Evidence |
+|---|---|---|
+| Database | `0025_cancel_scholarship_and_competition.sql`: scope predicate, insert guard, existing rows set to `CANCELLED`, cancelled types removed from the candidate projection and from RLS discovery, client grants revoked on applicant tables and on every scholarship/competition routine | `supabase/tests/database/10_cancelled_scope_guard.test.sql` |
+| Recommendations | Cancelled types are never scored; model version `deterministic-v5-scope-aligned` forces recomputation; cached rows of cancelled types are deleted | `tests/scoring.test.ts`, `tests/opportunity-state.test.ts` |
+| API surface | Scholarship Edge Functions, shared provider modules, OpenAPI paths/schemas and Android documentation removed | `tests/contract_openapi.py` |
+| Seed/fixtures | Sample `SCHOLARSHIP` and `COMPETITION` rows removed (29 → 27 opportunities) | `scripts/build-seed.mjs` output, seed assertions |
+| CI diagnostics (#21) | `.ci-logs/` artifact now uploads with `include-hidden-files: true`, fixing the repeated "No files were found" warning | `.github/workflows/backend-tests.yml` |
+
+**Retained on purpose:** the four historical applicant tables and their RLS policies, migrations
+`0015`/`0016`/`0020`/`0021`, and all historical rows. They are readable only by `service_role`; no client
+endpoint exposes them. Deleting them would destroy data and break foreign keys, so they stay.
+
+**Known limitations introduced by the product decision, not by this change:** Student/Faculty/Organization/
+Institution identities, national-ID registration and institutional database verification are still absent from
+the backend; `README.md` states this explicitly. They are not claimed as delivered.

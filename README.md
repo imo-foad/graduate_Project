@@ -1,7 +1,29 @@
 # Alumni Connect AI — Backend (v0.1, phases 1–4 + scoring core)
 
-Supabase-first backend (Postgres + Auth + private Storage + Edge Functions). Graduate is the only account type.
+Supabase-first backend (Postgres + Auth + private Storage + Edge Functions).
 All data is synthetic. Android is a separate workstream: see `docs/openapi.yaml` and `docs/ANDROID_INTEGRATION.md`.
+
+## Product scope (2026-11-26)
+
+Approved account scope: Student, Graduate and Faculty human accounts, plus Company, Organization and
+Institution identities. **Implementation status:** graduate accounts are implemented end to end; company
+identities exist as `companies` + `company_memberships` with owner/recruiter/viewer permissions. Student,
+Faculty, Organization and Institution identity models, national-ID registration and institutional database
+verification are **not implemented yet** — they are tracked as product work, not delivered by this branch.
+
+Cancelled product lines (explicit product decision, not deprioritisation):
+
+- **Scholarship (issue #14) — cancelled.** No submission, review, delivery, provider or recommendation flow.
+- **Competition (issue #15) — cancelled.** No entry, capacity, waitlist or recommendation flow.
+- **Out of scope:** tuition/fees, installments, financial assistance, lectures, exams, academic course content
+  and university financial services.
+
+Migration `0025_cancel_scholarship_and_competition.sql` deactivates both lines without deleting history:
+`SCHOLARSHIP`/`COMPETITION` are inactive opportunity types (new rows rejected, existing rows set to
+`CANCELLED`), their RPCs are revoked from `anon`/`authenticated` and the applicant tables are no longer
+readable by clients. Historical rows remain for data integrity and are documented as such in
+`docs/ANDROID_INTEGRATION.md`. Re-enabling either line requires a new, explicit product decision and a
+forward migration.
 
 ## Architecture decision
 
@@ -12,7 +34,7 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 
 ## Layout
 
-- `supabase/migrations/0001..0010` — schema, catalogue, activity, RPCs, grants/RLS/storage bucket and audit/security fixes
+- `supabase/migrations/0001..0025` — schema, catalogue, activity, RPCs, grants/RLS/storage, social feed, onboarding, recommendations and scope alignment
 - `fixtures/*.json` -> `npm run build:seed` -> `supabase/seed/01_skills.sql, 02_catalogue.sql, 03_demo_profiles.sql`
 - `supabase/functions/_shared/` — deterministic scoring, opportunity filtering and recommendation orchestration
 - `supabase/functions/recommend/` — authenticated Edge Function
@@ -20,7 +42,10 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 - `scripts/run-local-integrations.sh` — local-only Auth, demo-seed, Storage and Edge HTTP checks
 - `tests/` — Node, OpenAPI, workflow, SQL, pgTAP and HTTP integration tests
 
-## Full verification status (2026-11-24)
+## Historical verification baseline (2026-11-24 — not current evidence)
+
+The table below is the audit snapshot from 2026-11-24, kept for traceability. Current evidence for a change
+lives in that branch's GitHub Actions run, not here.
 
 <https://github.com/imo-foad/graduate_Project/actions/runs/45416127368> — GitHub Actions **run #67**, successful on commit `1a8ae70164034690af9722f2c7de6fb43943e3f1`.
 
@@ -61,7 +86,7 @@ See `docs/AUDIT_REPORT.md` for the subsystem scores, exact test evidence and rem
 - Paths cover Frontend, Backend, Mobile, Data Analytics, Data Science / ML, Cybersecurity, DevOps / Cloud, QA Automation and UI/UX.
 - Core skills carry 3x the weight of supporting skills. A path needs at least two matched core skills; Backend, Data Science and Cybersecurity also require path-specific specialization evidence. Results include a primary path, every qualifying parallel path, weighted skill coverage, matched evidence, missing core skills, suggested next skills and an Arabic explanation.
 - The score measures coverage of the defined path skill catalogue; it is not a hiring probability. Pending CV suggestions never contribute before graduate confirmation.
-- The recommendation model version is `deterministic-v3-career-intelligence`; cached rows produced by an older model version are recomputed before being served.
+- The recommendation model version is `deterministic-v5-scope-aligned`; cached rows produced by an older model version are recomputed before being served.
 
 ## Free-first career intelligence (migration 0014)
 - Structured CV suggestions now cover SKILL, EXPERIENCE, CERTIFICATION and COURSE. Extraction uses PDF.js/fflate plus local section/date rules; no paid API key or external model is needed.

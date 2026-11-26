@@ -70,8 +70,10 @@ SAMPLE_HISTORY_COUNT_2="$(psql "$DB_URL" -X -At -v ON_ERROR_STOP=1 -c "select co
 echo "PASS Auth provisioning + trigger-created profile rows: profiles=$PROFILE_COUNT, graduates=$GRADUATE_COUNT"
 echo "PASS demo profile seed idempotency: skills=$SKILL_COUNT, sample applications=$SAMPLE_APP_COUNT_2, sample history=$SAMPLE_HISTORY_COUNT_2"
 
-# Provision and validate the typed synthetic university dataset in a guarded local-only pass.
+# Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
+echo "Provisioning and applying synthetic university dataset (local only)"
 node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+# Independently verify Student/Faculty academic-record RLS and private platform-admin authorization.
 node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
 
 # Serve the actual Edge Function through the local Supabase gateway with JWT verification ON.
@@ -106,6 +108,7 @@ done
 
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
 # The prior local integration removes its temporary admin, leaving a clean one-time bootstrap slot.
 timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
 

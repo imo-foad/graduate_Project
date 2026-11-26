@@ -44,7 +44,17 @@ The mock identity provider is allowed only in explicitly configured disposable l
 
 **Step B — confirm the SMS code**
 
-Use Supabase Auth's phone OTP verification flow (SMS type) with the phone number and the code sent to that number. Keep the resulting access token only after Auth confirms the phone.
+Use Supabase Auth's phone OTP verification flow (SMS type) with the phone number and the code sent to that number:
+
+```http
+POST {SUPABASE_URL}/auth/v1/verify
+apikey: <anon key>
+Content-Type: application/json
+
+{ "type": "sms", "phone": "+201XXXXXXXXX", "token": "<SMS code>" }
+```
+
+The response contains the access token needed by the finalize-registration Edge Function. Keep the resulting access token only after Auth confirms the phone.
 
 Then call:
 

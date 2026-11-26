@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Alumni Connect AI - Backend API (Supabase)
   version: 0.1.0
-  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token and public phone-first registration endpoints do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
+  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token, public phone-first registration and SMS OTP verification endpoints do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
 servers:
 - url: '{supabaseUrl}'
   variables:
@@ -552,6 +552,15 @@ paths:
         '409': { description: 'PHONE_ALREADY_REGISTERED or IDENTITY_ALREADY_LINKED' }
         '422': { description: 'Invalid input or institutional verification rejected' }
         '503': { description: 'IDENTITY_PROVIDER_UNAVAILABLE or OTP_DELIVERY_FAILED; no verification is fabricated' }
+  /functions/v1/finalize-registration:
+    post:
+      summary: Activate the pending phone-first account after Supabase confirms SMS OTP and the institution has verified at least one identity
+      responses:
+        '200': { description: 'Account activated; requires a confirmed Auth phone and at least one VERIFIED human identity' }
+        '401': { description: 'UNAUTHENTICATED' }
+        '403': { description: 'ACCOUNT_UNAVAILABLE' }
+        '409': { description: 'PHONE_NOT_VERIFIED or IDENTITY_NOT_VERIFIED' }
+        '500': { description: 'REGISTRATION_FINALIZE_FAILED' }
   /rest/v1/opportunities:
     get:
       summary: Read-only catalogue. Only open opportunities (ACTIVE, not expired) plus ones you applied/registered/saved.
@@ -1268,6 +1277,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecommendError'
+  /auth/v1/verify:
+    post:
+      summary: Verify the mandatory phone SMS OTP. This is a Supabase Auth endpoint and returns a session/access token.
+      security:
+      - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type, phone, token]
+              properties:
+                type: { type: string, enum: [sms] }
+                phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+                token: { type: string, minLength: 6, maxLength: 10 }
+      responses:
+        '200':
+          description: Phone verified; returns an authenticated session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { description: Invalid or expired OTP }
+        '401': { description: Missing or invalid API key }
   /auth/v1/token:
     post:
       summary: Sign in (password grant) or renew the session (refresh_token grant). No pre-existing JWT is needed; the apikey

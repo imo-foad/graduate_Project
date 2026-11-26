@@ -304,7 +304,7 @@ class SecurityAndAuthContract(unittest.TestCase):
 
     def test_authenticated_operations_inherit_global_security(self):
         for path, ops in API["paths"].items():
-            if path in (self.TOKEN, "/functions/v1/register"): continue
+            if path in (self.TOKEN, "/auth/v1/verify", "/functions/v1/register"): continue
             for method, op in ops.items():
                 self.assertNotIn("security", op, f"{method.upper()} {path} overrides global security")
 

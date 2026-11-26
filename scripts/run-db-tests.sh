@@ -43,7 +43,7 @@ for f in "${MIGRATIONS[@]}"; do
   name="$(basename "$f")"
   [[ "$name" =~ ^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$ ]] || fail "migration filename is not four-digit versioned: $name"
   version="${BASH_REMATCH[1]}"
-  if [[ -n "$PREVIOUS_VERSION" && "$version" <= "$PREVIOUS_VERSION" ]]; then
+  if [[ -n "$PREVIOUS_VERSION" ]] && [[ ! "$version" > "$PREVIOUS_VERSION" ]]; then
     fail "migration versions must be unique and increasing: $name follows version $PREVIOUS_VERSION"
   fi
   PREVIOUS_VERSION="$version"

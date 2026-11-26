@@ -18,6 +18,15 @@ select is(public.is_opportunity_type_active('SCHOLARSHIP'), false, 'SCHOLARSHIP 
 select is(public.is_opportunity_type_active('COMPETITION'), false, 'COMPETITION is cancelled');
 select is(public.is_opportunity_type_active(null), false, 'a null type is never active');
 select is(public.is_opportunity_type_active('SOMETHING_NEW'), false, 'unknown types are not active');
+select is(public.is_opportunity_type_active(''), false, 'an empty type is not active');
+select is(public.is_opportunity_type_active('   '), false, 'a whitespace-only type is not active');
+-- Parity contract mirrored in TypeScript (_shared/opportunity-state.ts): matching is case-sensitive and
+-- exact, so these must stay rejected. Tests the current SQL behaviour; it does not change any rule.
+select is(public.is_opportunity_type_active('job'), false, 'type matching is case-sensitive (lowercase job)');
+select is(public.is_opportunity_type_active('Job'), false, 'type matching is case-sensitive (mixed-case Job)');
+select is(public.is_opportunity_type_active('JOB '), false, 'types are not trimmed (trailing space)');
+select is(public.is_opportunity_type_active(' JOB'), false, 'types are not trimmed (leading space)');
+select is(public.is_opportunity_type_active('JOBS'), false, 'near-miss values are not active');
 
 -- ---- 2. Seed data no longer ships live cancelled listings ------------------------------------------
 select is(

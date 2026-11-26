@@ -1,50 +1,67 @@
 # Builder Handoffs — Independent QA
 
-## 1. P1 — E.164 registration retry lookup
+## 1. P1 registration retry E.164 validation — implementation RESOLVED; boundary test coverage OPEN
 
-**Status:** RESOLVED in Builder code and verified by the latest completed pgTAP run (test 19 passed). No remaining code handoff is required; retain as audit history.  
-**Original affected functions:**
-- public.find_pending_registration_retry(text,text) in migration 0030
-- public.find_unlinked_pending_registration_retry(text) in migration 0031
-- caller: supabase/functions/register/index.ts
+**Implementation status:** RESOLVED in Builder migrations 0030/0031. The latest Builder run 45846570698 executed `19_product_lifecycle.test.sql` successfully. The current validator uses `^[+][1-9][0-9]{7,14}$`.
 
-At Builder commit a522b01d6b0e7f27ed1a82e8ae1680aa05ccb1a2, both SQL functions used two literal backslashes before + in the E.164 regex. In PostgreSQL ARE syntax, \\ matches a literal backslash and + repeats the preceding atom. A normal leading-plus phone therefore failed validation. register/index.ts called the first lookup before provider verification/Auth-user creation and mapped the SQL error to HTTP 503 REGISTRATION_RETRY_UNAVAILABLE. Builder CI 45829327113 later ran test 19 and observed INVALID_INPUT from the lookup when supplied a valid synthetic E.164 number.
+**Historical defect:** Earlier `find_pending_registration_retry(text,text)` / `find_unlinked_pending_registration_retry(text)` SQL regex escaping rejected valid leading-plus numbers. The failure surfaced as `INVALID_INPUT` / registration retry failure. This was corrected by Builder; QA did not modify migrations 0030/0031, Edge Functions or test 19.
 
-**Current Builder code:** Commit ec7c62e94aa4ec6e24160f72dafe9bf5ff9e6593 rewrote the functions in migrations 0030/0031 and now uses ^[+][1-9][0-9]{7,14}$ in both. The function delimiters and validation blocks are now structurally well formed. Intermediate commit 4c923fef115e70666c7cd5fd720e98151e0be1a0 briefly contained a malformed SQL rewrite and failed the static SQL structure check; that version was superseded by ec7c.
+**Remaining coverage request:** The current Test 19 has a valid E.164 case and mismatched phone/digest cases, but no explicit malformed, too-short, or too-long phone assertions. Add pgTAP cases for at least:
+- valid boundary numbers with 8 and 15 digits after '+';
+- too-short number;
+- too-long number;
+- missing '+', leading zero after '+', letters/whitespace;
+- equivalent checks for both pending and unlinked retry lookup RPCs.
 
-CI 45830300439 on ec7c passed npm/static SQL structure checks but its local database job was cancelled after a newer push. The subsequent latest Builder CI run 45831195333 completed its database job: the official runner executed all 18 pgTAP files / 651 assertions and reported 19_product_lifecycle.test.sql ok. This proves the fixed E.164 lookup assertions pass on the current migrations. The current Builder Edge Function also enforces that the synthetic identity provider can only be used when ALLOW_MOCK_IDENTITY=true and SUPABASE_URL is an HTTP local Supabase host.
+Expected: malformed/too-short/too-long values raise `PT422 INVALID_INPUT`; valid international-format values pass input validation and only resolve an exact eligible phone + keyed digest match. Keep test 19 Builder-owned unless ownership is reassigned.
 
-**Reproduction against the original defect** (disposable local Supabase with matching pending fixtures; service_role):
+## 2. P2 workflow-lint migration count — RESOLVED by Builder; current CI PASS
 
-```sql
-select public.find_pending_registration_retry('+201011110001', repeat('e', 64));
-select public.find_unlinked_pending_registration_retry('+201011110002');
-```
+The previous lint hard-coded 27 migrations and failed with 32 actual files. Builder's current implementation at head `329a0be14d49f5c1c1f2efe5273495dda09f3b25`:
+- discovers versioned migration filenames dynamically;
+- checks unique, increasing four-digit versions;
+- rejects SQL migration filenames that do not match the four-digit format;
+- verifies the DB runner dynamically enumerates migration files and compares all discovered versions with `supabase_migrations.schema_migrations`.
 
-Expected on current code: valid E.164 values pass validation and exact eligible lookups return the pending profile UUID (or NULL if no matching eligible row exists). Historical actual: PT422 INVALID_INPUT.
+GitHub Actions run 45846570698 ran `tests/workflow_lint.py`: 14/14 PASS. The clean DB reset applied all 32 migrations through 0033. No QA edit to `tests/workflow_lint.py` was needed.
 
-**Closure evidence:** Satisfied by run 45831195333. The pgtap.log artifact lists 19_product_lifecycle.test.sql as ok, and the summary records 18 files / 651 tests. QA did not modify migrations 0030/0031, register/index.ts, or test 19.
+## 3. Synthetic university dataset — MISSING IMPLEMENTATION
 
-## 2. P2 — Workflow lint hard-codes obsolete migration count
+**Observed Builder head:** `329a0be14d49f5c1c1f2efe5273495dda09f3b25` (PR #41).
 
-**Status:** Reproduced in GitHub Actions; unresolved.  
-**File:** tests/workflow_lint.py  
-**Test:** Scripts.test_run_script_covers_all_phases_and_migrations (line 95).
+The required 20 STUDENT + 10 FACULTY + 10 synthetic platform-admin dataset is not present in the committed implementation inspected by QA.
 
-Builder CI run 45831195333 on commit ffd02350b6280e5ea0672fa6a3333587d0773513 reports:
+Evidence:
+- `fixtures/demo-profiles.json` has four GRADUATE demo accounts only.
+- `scripts/provision-demo-users.mjs` iterates only `demo-profiles.json`; it creates those four graduate users, not student/faculty/admin university accounts.
+- `scripts/build-seed.mjs` produces `01_skills.sql`, `02_catalogue.sql`, `03_demo_profiles.sql`; there is no university identity/GPA/track seed.
+- `supabase/seed/03_demo_profiles.sql` updates graduate profile, skills, career history, sample applications and registrations.
+- Migration 0028 permits human identity types `STUDENT`, `GRADUATE`, `FACULTY` only. `ADMIN` is not a valid human identity.
+- `scripts/bootstrap-platform-admin.mjs` is a one-time first-admin bootstrap for one confirmed Auth account; it is not a local ten-admin seed.
 
-```
-self.assertEqual(len(migs), 27)
-AssertionError: 32 != 27
-Ran 14 tests
-FAILED (failures=1)
-```
+**Required Builder implementation before QA can build tests:** commit the actual fixture, field vocabulary, GPA scale/constraints, track vocabulary, student/faculty identity attributes, admin membership provisioning contract, local provisioning script, idempotency policy, and documentation. Do not infer these fields from QA or change the schema on the QA branch.
 
-The repository contains 32 migration files through 0033, while the test embeds a fixed count of 27 and a hard-coded list ending at 0028.
+**Security/local-only note:** `scripts/provision-demo-users.mjs` accepts `SUPABASE_URL` and service-role credentials but does not enforce a local-host allow-list itself. Its existing local-runner caller is local, but direct script invocation is not independently protected. Add an explicit allow-list check before the first HTTP request and unit tests for supported local URLs, hosted URLs, deceptive hostnames/userinfo/query tricks, and malformed URLs. Do not log or commit the service-role key.
 
-**Expected:** Validate required historical migrations and approved ordering, while discovering all forward migration files dynamically rather than freezing a count/terminal version.  
-**Actual:** The valid forward migrations cause workflow lint to fail.
+**Acceptance to test after implementation:** 20 STUDENT, 10 FACULTY, 10 private.platform_admins accounts plus four preserved GRADUATE demos; no duplicate references/phone/identity/profile/admin membership after two runs; synthetic source markers; no ADMIN human identity; student-only/faculty-only rows without graduate profiles; GPA scale/range/uniqueness; documented tracks; faculty attributes; RLS/privacy; admin privilege escalation denial; local-only guard; counts unchanged after second run.
 
-**Suggested correction:** Derive the complete migration set/order from the repository and runner, then assert every migration is applied by the official runner. Preserve missing-file and ordering checks; do not skip or suppress the test.
+## 4. QA evidence: latest Builder baseline
 
-**Ownership:** tests/workflow_lint.py is outside Agent 2's explicit owned-file list. QA documents the finding but does not edit it; Builder/maintainer should assign the harness correction.
+Run 45846570698: https://github.com/imo-foad/graduate_Project/actions/runs/45846570698
+
+- npm: 143/143 PASS
+- OpenAPI: 24/24 PASS
+- Workflow lint: 14/14 PASS
+- 32 migrations applied on clean local Supabase
+- seed loop: 50 skills and 21 opportunities, second pass idempotent
+- pgTAP: 18 files / 658 assertions, only Test 15 assertion 16 failed (10 active vs 11 total TRAINING rows)
+- Tests 01, 02, 16 and 19 reported OK on the Builder-head test versions.
+- Concurrency and local HTTP integrations were not reached because pgTAP failed.
+
+Artifact: https://api.github.com/repos/imo-foad/graduate_Project/actions/artifacts/15131653447/zip (database-test-logs; contains reset, pgTAP, container, Docker and environment logs). No concurrency/HTTP log exists because those stages did not execute.
+
+QA corrected Test 15 by setting `is_sample=false` in `tests.mk_opp`, retaining the 11-row total in the test transaction (7 seeded + 4 test fixtures), and separately asserting the seven sample catalogue rows remain active. QA also added Test 01 candidate/system status-history assertions and an independently logged Test 15 preflight. These QA changes still require a fresh post-sync CI run.
+
+## 5. External provider blockers
+
+Real institutional identity API and SMS/OTP delivery are `BLOCKED_EXTERNAL` until approved provider contracts, credentials and configuration are available. Continue using deterministic local mocks only in disposable local Supabase; do not claim mock coverage as real provider delivery.

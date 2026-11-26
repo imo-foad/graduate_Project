@@ -3,47 +3,46 @@
 **Date:** 2026-11-26  
 **Repository:** `imo-foad/graduate_Project`  
 **QA branch:** `qa/independent-bug-hunt-20261126`  
-**PR:** https://github.com/imo-foad/graduate_Project/pull/43  
+**QA PR:** https://github.com/imo-foad/graduate_Project/pull/43  
 **Builder PR:** #41 — `fix/complete-foundation-and-training-rules-20261126`  
-**Latest Builder head inspected:** `329a0be14d49f5c1c1f2efe5273495dda09f3b25`  
-**Latest Builder Actions run inspected:** https://github.com/imo-foad/graduate_Project/actions/runs/45846570698
+**Latest Builder head inspected:** `3dd22f7f136a07a19d1933411fa6a49f66a58b51`  
+**Latest Builder Actions run inspected:** https://github.com/imo-foad/graduate_Project/actions/runs/45855098768
 
 ## 1. Current conclusion
 
-This is a partial QA delivery, not a full acceptance. The latest Builder run passed static/unit, OpenAPI, shell/Node syntax, and dynamically discovered workflow-lint checks. Its clean disposable-local-Supabase job applied all 32 migrations and ran all 18 pgTAP files (658 assertions), but failed one assertion in test 15. The exact root cause is now corrected on the QA branch. The corrected Test 15, additional Test 01 history assertions, and focused Test 15 runner have not yet been executed by a new post-change CI run.
+This is a partial QA delivery, not a full acceptance. The latest Builder head introduces the synthetic university dataset (20 STUDENT, 10 FACULTY, 10 local platform-admin accounts) and migration 0034. The JSON fixture satisfies the requested counts, GPA distribution, and seven-track distribution. However, the latest Builder CI failed both the OpenAPI contract and pgTAP, so the new university provisioning and HTTP authorization stages were never reached.
 
-The requested 20 STUDENT + 10 FACULTY + 10 local administrator synthetic university dataset is not present in the inspected Builder head. QA did not invent a fixture, GPA scale, track vocabulary, or schema. This is an explicit Builder handoff.
+QA has fixed the owned Test 01/02/15/16 regressions, added explicit status-history assertions, added a focused Test 15 runner stage, removed fixed migration-count/terminal-version assumptions from the QA DB runner, and added an independent local HTTP test for synthetic identities, academic-record RLS and the admin guard. Those QA changes still need to be synchronized with the latest Builder head and executed in CI. No success is claimed for tests not yet run on the current QA head.
 
-## 2. Latest baseline evidence — Builder run 45846570698
+## 2. Latest Builder baseline — run 45855098768
 
-Run URL: https://github.com/imo-foad/graduate_Project/actions/runs/45846570698  
-Run number: 765; Builder head: `329a0be14d49f5c1c1f2efe5273495dda09f3b25`.
+Run URL: https://github.com/imo-foad/graduate_Project/actions/runs/45855098768  
+Builder head: `3dd22f7f136a07a19d1933411fa6a49f66a58b51`.
 
-### Static job — PASS
+### Static job
 
-- `npm test`: 143/143 Node TAP tests passed; the SQL migration-structure check passed.
-- OpenAPI contract: 24/24 tests passed.
-- Shell syntax and Node syntax checks passed.
-- Workflow lint: 14/14 tests passed after Builder's dynamic migration-discovery fix.
+- `npm test`: PASS — 149/149 Node TAP tests.
+- OpenAPI contract: FAIL — 24 tests run, 1 failure.
+- Exact failure: `tests/contract_openapi.py::Contract.test_every_granted_table_capability_is_documented`, line 130: `student_academic_records: granted but undocumented`.
+- Shell syntax / other static steps and workflow lint were skipped after the OpenAPI step failed. Do not call current-head workflow lint green based on this run.
 
-### Clean disposable local Supabase job — FAIL at pgTAP
+### Clean disposable local Supabase job
 
-- Local Supabase started and the database was reset from empty.
-- Reset log shows 32 migrations applied, from 0001 through 0033 (there is no 0022 migration).
-- Seed build and the two-pass skill/catalogue seed completed; the runner reported 50 skills and 21 opportunities, idempotent on the second load.
-- pgTAP executed all 18 files: 658 assertions total.
-- The sole failing file was `15_three_type_scope.test.sql`, assertion 16: actual active TRAINING rows = 10, expected total TRAINING rows = 11.
-- Test files 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 12, 13, 14, 16, 17, 18 and 19 reported `ok` in that Builder-head run.
-- Since the runner is fail-fast, concurrency and local HTTP integration were not reached. Onboarding, CV parser HTTP integration, rate-limit HTTP integration and both career-cohort rounds are therefore NOT RUN in that run.
+- Supabase started on the isolated GitHub runner.
+- All 33 migration files were applied, through `0034_synthetic_university_dataset.sql` (there is no 0022 migration).
+- Seed builder generated `01_skills.sql`, `02_catalogue.sql`, `03_demo_profiles.sql`, and `04_university_accounts.sql`.
+- Skill/catalogue seeds ran twice and were idempotent: 50 skills and 21 opportunities.
+- pgTAP executed 18 files, 651 assertions. Three legacy QA assertions failed:
+  - Test 01 assertion 23: expected later registrant `REGISTERED`, actual `WAITLISTED`; the test still had the old expectation that cancellation leaves the seat open instead of transactionally promoting the waitlist.
+  - Test 02 assertion 8: expected `NOT_A_JOB`, actual `NOT_APPLICATION_OPPORTUNITY`.
+  - Test 15 assertion 16: actual 10 active vs expected 11 because test fixtures were inserted with the schema default `is_sample=true`.
+- Test 16 and Test 19 reported `ok` in this Builder-head run; tests 03–14, 17, and 18 also reported `ok`.
+- Because pgTAP failed, concurrency and all local HTTP stages were NOT REACHED. This includes the new synthetic dataset provisioner, RLS/admin integration, onboarding, CV parser integration, rate-limit integration and career-cohort rounds 1 and 2.
 
-The Builder run did not contain the QA branch's later changes to tests 01/02/15/16, so its passing results are baseline evidence for the Builder-head files only, not post-change proof of the QA PR.
+### Downloadable logs
 
-### Downloadable diagnostics
-
-GitHub artifact: [database-test-logs ZIP](https://api.github.com/repos/imo-foad/graduate_Project/actions/artifacts/15131653447/zip)  
-Artifact ID: `15131653447`; name: `database-test-logs`; size: 107,341 bytes; expiry shown by GitHub: 2026-12-03.
-
-The artifact was downloaded and inspected. It contains:
+GitHub artifact: [database-test-logs ZIP](https://api.github.com/repos/imo-foad/graduate_Project/actions/artifacts/15136086556/zip)  
+Artifact ID: `15136086556`; artifact name `database-test-logs`; downloaded and inspected. It contains:
 - `db-container.log`
 - `db-reset.log`
 - `docker-ps.txt`
@@ -52,79 +51,130 @@ The artifact was downloaded and inspected. It contains:
 - `supabase-start.log`
 - `supabase-status.txt`
 
-No concurrency or local-HTTP log exists in this artifact because those stages were not reached.
+It contains no concurrency or local HTTP logs because those stages were not reached.
 
-## 3. Continuous regression history — PRs #40, #41 and #43
+## 3. Continuous regression history — PR #40, #41 and #43
 
-### PR #40 — Test 15 authentication / Test 16 reconciliation
+### PR #40 — Test 15 authentication regression
 
-**Test 15 authentication protection:** the helper creates a user, inserts the UUID into `tests.ids`, then returns. The authenticated RPC uses that registered UUID as `request.jwt.claims.sub`; role is set to `authenticated`. The `tests.as_user` helper includes both JWT claims and role setup in the SQL passed to `throws_ok`, keeping identity setup with the expected-error RPC invocation in its pgTAP subtransaction. The latest Builder-head pgTAP run got through all 16 assertions in that earlier Test 15 version and failed only its catalogue assertion, not with UNAUTHENTICATED. The QA branch retains the registry/auth setup and adds further catalogue assertions; those latest assertions await the next CI run.
+The test user helper inserts the generated UUID into `tests.ids` before returning it. The JWT subject is taken from that registry. The direct authenticated call sets `request.jwt.claims` and `role` inside the transaction; the `tests.as_user` helper embeds the claims and role setup in the SQL passed to `throws_ok`, so identity initialization is part of the same pgTAP subtransaction that invokes the RPC.
 
-**Test 16 reconciliation protection:** the current QA test checks that the failed row is still `FAILED`, preserves `last_error`, reads `get_cv_cleanup_report()->>'failed'` before another claim, checks retry eligibility, then claims and separately verifies `PROCESSING`. It also retains abandoned PROCESSING lease recovery. The Builder-head test 16 reported `ok` in run 45846570698. QA's additional `next_attempt_at <= now()` assertion awaits the post-change run.
+Latest Builder-head Test 15 reached its catalogue assertion and failed there; it did not reproduce the historic `UNAUTHENTICATED` crash. QA retains the helper and setup. A post-fix focused Test 15 run is still required to prove the complete current TAP plan executes.
 
-### PR #41 — product continuation regressions
+### PR #40 — Test 16 CV cleanup reconciliation regression
 
-**Test 01:** QA asserts confirmed cancellation, FIFO promotion of the oldest waiting participant, the confirmed counter, no seat stealing by a later participant, and no seat decrement/promotion from cancelling a WAITLISTED row. It now also asserts separate `CANDIDATE` cancellation and `SYSTEM` promotion history records.
+Current QA Test 16 verifies:
+1. the failed queue row is still `FAILED`;
+2. `last_error` is retained;
+3. `get_cv_cleanup_report()->>'failed'` equals 1 before retry claim;
+4. retry eligibility (`next_attempt_at <= now()`) is asserted separately;
+5. the next claim returns the retry row;
+6. its state/report becomes `PROCESSING`;
+7. an abandoned `PROCESSING` lease is recovered on a later claim.
 
-**Test 02:** QA asserts `NOT_APPLICATION_OPPORTUNITY` for TRAINING and does not restore the obsolete `NOT_A_JOB` expectation. The shared JOB/INTERNSHIP lifecycle is also exercised in the Builder-owned product lifecycle suite.
+Builder-head Test 16 reported `ok` in run 45855098768. QA's added retry-eligibility assertion needs the post-sync QA run.
 
-**Test 15:** see the root cause and exact correction below. No seed fixture was added and no product rule was changed.
+### PR #41 — Test 01 FIFO and history
 
-**Workflow lint:** Builder corrected `tests/workflow_lint.py` in the two commits after QA's previous base. It now discovers four-digit migration filenames, checks unique/increasing version prefixes, and verifies that the DB runner dynamically discovers files and compares the complete applied migration ledger. No fixed migration count or terminal migration version remains. The latest Builder workflow lint passed 14/14 tests.
+QA Test 01 asserts confirmed cancellation, FIFO promotion of the oldest eligible WAITLISTED user, correct registered counter, no later-seat leapfrogging, and no false seat release/promotion when a WAITLISTED entry is cancelled. It now also checks the exact history events:
+- REGISTERED → CANCELLED with actor = cancelling user and source = `CANDIDATE`;
+- WAITLISTED → REGISTERED with null actor and source = `SYSTEM`.
 
-### Test 19 phone validation
+The latest Builder run still executed the old Test 01 and failed its obsolete assertion. QA's corrected version has not yet executed.
 
-The latest Builder-head run reports `19_product_lifecycle.test.sql ... ok`. The test proves a valid synthetic E.164 phone resolves the exact pending phone + keyed National-ID digest pair, rejects a mismatched phone/digest, and denies authenticated enumeration. The corrected SQL validator uses `^[+][1-9][0-9]{7,14}$`. The current test does not exercise malformed, too-short, and too-long phone inputs; that missing boundary coverage is handed back to Builder because test 19 is outside Agent 2's owned SQL range.
+### PR #41 — Test 02 contract
 
-## 4. Test 15 root cause and QA correction
+QA Test 02 expects `NOT_APPLICATION_OPPORTUNITY` for TRAINING and does not reintroduce `NOT_A_JOB`. JOB and INTERNSHIP share the approved application workflow. Latest Builder run still used the old test and failed its obsolete error-code assertion.
 
-The `tests.mk_opp` helper inserted test-owned opportunity rows without specifying `is_sample`. The column default marked these local test fixtures as sample data. Test 15 creates four TRAINING fixtures, including a CLOSED one. The approved catalogue fixture contains seven TRAINING rows. Mixing the four test rows into the sample-catalogue query caused the earlier active-vs-total count mismatch (10 vs 11).
+### PR #41 — Test 15 sample isolation
 
-QA changed only `supabase/tests/database/15_three_type_scope.test.sql`:
-- `tests.mk_opp` now explicitly inserts `is_sample=false`.
-- The test preserves the 11-row total within this test transaction: seven seeded TRAINING catalogue rows plus four test-owned TRAINING fixtures.
-- It asserts there are exactly seven seeded `is_sample=true` TRAINING rows.
-- It separately asserts every seeded TRAINING row remains ACTIVE.
-- The expected count was not lowered to 10; no fake seed opportunity was added.
+The root cause is the helper `tests.mk_opp`: it omitted `is_sample`, so the column default marked the six helper-created opportunity fixtures as catalogue samples. Four of those are TRAINING fixtures; they contaminated the seeded catalogue assertion.
 
-The runner now executes `supabase test db database/15_three_type_scope.test.sql` as a focused preflight before the full 18-file pgTAP suite, and stores its output in `.ci-logs/pgtap-15-focused.log`. `tests/db-script-flow.test.ts` now covers the focused failure path. This implementation is based on the Supabase CLI's documented `supabase test db [path]` interface; the next CI run must prove it against the repository's pinned CLI.
+QA now explicitly inserts `is_sample=false` for every test-owned opportunity. It retains the 11 TRAINING rows inside this test transaction (7 seeded rows + 4 isolated test fixtures), asserts exactly 7 seeded `is_sample=true` TRAINING rows, and asserts all 7 seeded rows remain ACTIVE. It does not lower the count to 10, add a fake seed row, or alter product rules.
 
-## 5. Synthetic university dataset — NOT IMPLEMENTED on Builder head 329a0be
+QA also added a focused `supabase test db database/15_three_type_scope.test.sql` preflight to `scripts/run-db-tests.sh`, with its own log and a guard that confirms the Test 15 filename actually appears before the full 18-file suite starts.
 
-Inspection of the actual Builder branch shows:
-- `fixtures/demo-profiles.json` contains exactly four existing GRADUATE demo profiles.
-- `scripts/provision-demo-users.mjs` provisions those fixture entries; it does not provision 20 students, 10 faculty or 10 synthetic administrators.
-- `scripts/build-seed.mjs` generates only skills, opportunity catalogue and the four graduate demo profile seed files.
-- `supabase/seed/03_demo_profiles.sql` updates existing graduate profiles and related graduate career data.
-- Migration 0028 defines human identity types `STUDENT`, `GRADUATE` and `FACULTY`; `ADMIN` is not a supported human identity type.
-- `scripts/bootstrap-platform-admin.mjs` bootstraps one first platform admin via the server-owned bootstrap RPC; it is not a ten-admin local synthetic dataset provisioner.
-- The current fixture contract contains no GPA field, GPA scale, or academic-track vocabulary.
+### PR #41 — Workflow lint and migration discovery
 
-The separate career-cohort fixtures are two rounds of ten GRADUATE test users, not the requested student/faculty/administrator university dataset. Consequently no valid evidence exists for 20/10/10 counts, GPA uniqueness/range, track distribution, faculty attributes, student/faculty privacy, admin membership counts, or dataset-specific two-pass idempotency. QA did not fabricate a schema or fixture to force these checks.
+Builder's `tests/workflow_lint.py` dynamically discovers four-digit migration files, checks unique/increasing versions, and validates that the DB runner requires all discovered versions in the applied migration ledger. The latest run 45855098768 did not execute workflow lint because the OpenAPI step failed first.
 
-The existing `provision-demo-users.mjs` consumes a supplied `SUPABASE_URL` and service-role key without its own explicit local-host allow-list. The local test runner controls its current call path, but direct invocation is not independently guarded. Builder should add an explicit local URL guard plus tests before treating any synthetic account provisioner as local-only.
+QA independently removed the fixed `-ge 22` minimum and the stale “through 0033” comment from its owned `scripts/run-db-tests.sh`. It validates discovered filenames, unique/increasing four-digit versions, reset output for each discovered migration, and exact equality with `schema_migrations`; it contains no fixed migration count or terminal version. The new QA run must execute the full static stage to prove the DB-runner flow tests and workflow lint.
 
-## 6. Broader feature test matrix and limits
+### Test 19 — phone validation
 
-| Area | Evidence in latest Builder run | Not yet proven |
-|---|---|---|
-| CV cleanup queue | pgTAP test 16 passed; covers FAILED reporting, next-claim flow and expired lease recovery in the Builder version | QA's added retry-time assertion, actual Storage worker HTTP deletion/replacement race and end-to-end lifecycle after pgTAP |
-| Recommendation availability | pgTAP test 17 passed | HTTP/local-cache integration not reached |
-| Identity and organizations | pgTAP test 18 passed; product lifecycle test 19 passed | onboarding HTTP workflow not reached; real institutional provider and SMS remain BLOCKED_EXTERNAL |
-| Social Feed/moderation | pgTAP tests 12 and 13 passed | live concurrent-like tests not reached |
-| CV parsing | parser integration and career-cohort harness exist in the runner | HTTP parse integration and both cohort rounds not reached; no independent Arabic/DOCX corpus result claimed |
-| Synthetic university records | no 20/10/10 dataset contract found | all dataset-specific functional/security/idempotency checks remain BLOCKED_MISSING_IMPLEMENTATION |
+Builder's Test 19 reported `ok` in latest Builder run 45855098768; the corrected E.164 validator uses `^[+][1-9][0-9]{7,14}$`. The existing Test 19 covers valid international format and mismatched phone/digest but does not explicitly cover malformed, too-short and too-long phone cases. Test 19 is Builder-owned; QA has not edited it. Boundary cases remain a Builder handoff.
 
-Scanned/image-only PDF OCR is not claimed. Real institutional API and SMS delivery remain `BLOCKED_EXTERNAL`; only disposable-local mocks may be used.
+## 4. Synthetic university dataset — independent inspection
 
-## 7. Execution and environment limitations
+Latest Builder commit `3dd22f7f136a07a19d1933411fa6a49f66a58b51` adds:
+- `fixtures/university-accounts.json`;
+- migration `0034_synthetic_university_dataset.sql`;
+- `scripts/provision-university-demo-users.mjs`;
+- `scripts/seed-university-demo.mjs`;
+- a fourth generated SQL seed file;
+- dataset documentation and operations notes.
 
-The latest evidence above is from GitHub Actions on its fresh disposable local Supabase runner. No hosted Supabase environment was touched.
+### Fixture facts observed
 
-A local checkout/worktree could not be created in this environment: `git ls-remote https://github.com/imo-foad/graduate_Project.git` failed with `Could not resolve host: github.com`. Thus no local npm/Python/shell/pgTAP/HTTP command is claimed. Repository changes were made on the isolated QA branch through GitHub repository APIs. A new Actions run on the synchronized QA PR head is required to validate those commits.
+| Check | Observed |
+|---|---:|
+| STUDENT accounts | 20 |
+| FACULTY accounts | 10 |
+| PLATFORM_ADMIN accounts | 10 |
+| Existing GRADUATE demo profiles retained | 4 |
+| Distinct student GPA values | 20 / 20 |
+| GPA range | 2.14–3.94 |
+| GPA scale | 4.0 for all |
+| Academic tracks | 7 distinct |
+| Unique synthetic phone numbers | 40 / 40 |
+| Unique Student/Faculty institution refs | 30 / 30 |
+| Email / National ID / password fields in fixture | 0 |
+| Synthetic admin human-identity entries | 0 (fixture contains no `identity_type` for admins) |
 
-## 8. Delivery status
+Track distribution:
+- Software Engineering: 4
+- Artificial Intelligence: 3
+- Data Science and Analytics: 3
+- Cybersecurity: 3
+- Mobile Development: 3
+- Networks and Cloud: 2
+- Information Systems: 2
 
-- QA PR: https://github.com/imo-foad/graduate_Project/pull/43 (open; never merged).
-- No changes to `main`, Cloud Supabase, production data, or hosted secrets.
-- Full completion is pending the post-change QA CI, focused Test 15, all pgTAP tests, concurrency, local HTTP integrations, onboarding, parser integration, rate limits and both career-cohort rounds.
+The provisioner creates phone-only Auth users with confirmed synthetic marker metadata, reuses only matching seed/phone accounts, and enforces the API local allow-list. The legacy graduate demo provisioner now calls the same local URL guard. The database seed checks local API + DB URLs before network/database operations, runs Auth provisioning twice and expects 0 new / 40 reused on pass two, applies SQL twice, and checks exact counts including 20 student records, 10 faculty records, 10 active private platform admins, 0 graduate profiles for the 40 new accounts and four preserved graduates.
+
+Migration 0034 defines GPA range/scale constraints, academic-track vocabulary, faculty title vocabulary, a trigger requiring a matching VERIFIED STUDENT/FACULTY identity, and own-profile SELECT RLS. Service role owns writes. The human identity allowlist remains STUDENT/GRADUATE/FACULTY; ADMIN is not introduced as a human identity.
+
+### Dataset gaps found in code review
+
+1. `validateUniversityFixtures()` only rejects fewer than **2** distinct tracks (`tracks.size < 2`), although acceptance requires at least **5**. The current committed fixture has seven, and the QA-owned independent fixture test now asserts at least five; the Builder validator itself remains too permissive for future fixture changes.
+2. OpenAPI contract fails because authenticated SELECT is granted on `student_academic_records` and `faculty_academic_records` but these table paths are not documented. The exact latest failure names `student_academic_records`; the faculty table is subject to the same grant-vs-documentation contract and may be the next assertion once the first is fixed. Builder owns `docs/openapi.yaml`; QA deliberately did not weaken its grant/documentation test.
+3. Latest CI stopped before synthetic seed execution, so Auth provisioning idempotency, real DB counts, student/faculty record RLS, admin self-grant denial, and preservation of the four graduate records remain NOT RUN in the latest run. QA added `tests/integration/university-dataset.integration.mjs` and wired it after the local university seed; that new integration has not yet been executed.
+4. The actual validator test in Builder's `tests/seed.test.ts` checks fixture values and negative GPA/track/ref cases, but does not assert that validator rejects a fixture with only 2–4 distinct tracks. The handoff asks Builder to enforce the minimum five-track contract.
+
+No real National IDs or user personal records were added. Real institutional verification API and real SMS delivery remain `BLOCKED_EXTERNAL`; all synthetic provisioning is local-only.
+
+## 5. QA-owned changes currently staged on QA branch
+
+- `supabase/tests/database/01_register_for_event.test.sql`
+- `supabase/tests/database/02_rpc_rules.test.sql`
+- `supabase/tests/database/15_three_type_scope.test.sql`
+- `supabase/tests/database/16_cv_cleanup_queue.test.sql`
+- `scripts/run-db-tests.sh`
+- `scripts/run-local-integrations.sh`
+- `tests/db-script-flow.test.ts`
+- `tests/integration/university-dataset.integration.mjs` (new)
+- `tests/contract_openapi.py` (unchanged regression contract)
+- `docs/BUG_AUDIT_REPORT.md`
+- `docs/agent-handoffs/BUGS_FOR_BUILDER.md`
+
+## 6. Execution status and limits
+
+- Latest Builder run executed 149/149 npm tests, 24 OpenAPI checks (1 failed), 33 migration applications, idempotent base seeds and 18 pgTAP files / 651 assertions (three failures).
+- Concurrency, local HTTP integration, synthetic dataset provisioning, student/faculty/admin authorization checks, CV parser HTTP tests, onboarding, rate limits and cohort round 1/2 were NOT REACHED.
+- No post-fix QA CI run is yet available for the branch synchronized with Builder 3dd.
+- A local checkout/worktree could not be created in this environment: `git ls-remote https://github.com/imo-foad/graduate_Project.git` failed with `Could not resolve host: github.com`. All file changes were pushed through GitHub repository APIs; no local shell/npm/pgTAP/HTTP result is claimed.
+- No Cloud Supabase, production credentials/data, or main branch changes; PR #41/#43 were not merged.
+
+## 7. Delivery state
+
+PR #43 remains open and targets Builder PR #41's branch, not main. Full acceptance remains pending a current synchronized QA Actions run and all stages listed above. Do not treat fixture shape or a commit as proof of database provisioning and authorization.

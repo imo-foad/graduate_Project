@@ -16,7 +16,9 @@ language sql
 immutable
 set search_path = ''
 as $is_opportunity_type_active$
-  select p_type in ('JOB','INTERNSHIP','TRAINING','EVENT','CONFERENCE','VOLUNTEER')
+  -- coalesce matters: `null in (...)` is null, and a null predicate would silently skip both the
+  -- insert guard and the RLS discovery filter.
+  select coalesce(p_type in ('JOB','INTERNSHIP','TRAINING','EVENT','CONFERENCE','VOLUNTEER'), false)
 $is_opportunity_type_active$;
 revoke all on function public.is_opportunity_type_active(text) from public, anon;
 grant execute on function public.is_opportunity_type_active(text) to authenticated, service_role;

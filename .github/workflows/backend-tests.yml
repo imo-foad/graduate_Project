@@ -59,15 +59,22 @@ jobs:
       - uses: supabase/setup-cli@v1
         with: { version: "3.3.0" }
       - name: Run local synthetic dataset provisioning and idempotency proof
-        run: bash -o pipefail scripts/run-university-seed-smoke.sh 2>&1 | tee .ci-logs-university-seed-smoke.log
+        # The script tees internally and returns its original failure code. Do not wrap it in
+        # an outer tee pipeline: that could make GitHub report success when the script fails.
+        run: bash scripts/run-university-seed-smoke.sh
+      - name: Verify explicit smoke success marker and idempotency evidence
+        if: success()
+        run: |
+          grep -Fxq "SMOKE RESULT: PASS" .ci-logs/university-seed-smoke.log
+          grep -q "PASS: synthetic university seed applied twice" .ci-logs/university-seed-smoke.log
+          grep -q "Auth first pass:" .ci-logs/university-seed-apply.log
+          grep -q "Counts:" .ci-logs/university-seed-apply.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: synthetic-university-seed-smoke
           path: |
-            .ci-logs-university-seed-smoke.log
             .ci-logs/
-            .ci-logs/cv-parser-evaluation.json
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7

@@ -21,13 +21,14 @@ end $f$;
 create function tests.mk_opp(p_key text, p_type text, p_props jsonb default '{}') returns uuid language plpgsql as $f$
 declare v uuid;
 begin
+  -- Test-created rows must not be counted as synthetic catalogue seed rows.
   insert into public.opportunities (seed_key, type, title, status, deadline, capacity, waitlist_enabled,
-    registration_opens_at, attendance_mode)
+    registration_opens_at, attendance_mode, is_sample)
   values ('t-' || p_key, p_type, 'Test ' || p_key, coalesce(p_props ->> 'status', 'ACTIVE'),
     now() + make_interval(days => coalesce((p_props ->> 'deadline_days')::int, 5)),
     (p_props ->> 'capacity')::int, coalesce((p_props ->> 'waitlist')::boolean, false),
     case when p_props ? 'opens_in_days' then now() + make_interval(days => (p_props ->> 'opens_in_days')::int) end,
-    'ONLINE')
+    'ONLINE', false)
   returning id into v;
   insert into tests.ids values (p_key, v);
   return v;

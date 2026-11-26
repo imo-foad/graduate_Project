@@ -131,6 +131,40 @@ try {
   pass("recommend endpoint rejects invalid JWT", invalidAuth.status === 401,
     { status: invalidAuth.status, body: invalidAuth.json ?? invalidAuth.text });
 
+  // Capture the exact input to the recommendation engine so an empty result cannot masquerade as a cache failure.
+  const rawCatalogue = await request(
+    "/rest/v1/opportunities?select=id,seed_key,type,status,deadline,end_at,company_id,company_verification_status&order=seed_key.asc",
+    { headers: headers(service) },
+  );
+  const candidateProjection = await request("/rest/v1/rpc/get_recommendation_candidates", {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_graduate_id: a.id }),
+  });
+  const rawRows = Array.isArray(rawCatalogue.json) ? rawCatalogue.json : [];
+  const projectedRows = Array.isArray(candidateProjection.json?.opportunities)
+    ? candidateProjection.json.opportunities
+    : [];
+  console.info("recommendation candidate diagnostics", JSON.stringify({
+    raw_status: rawCatalogue.status,
+    raw_count: rawRows.length,
+    raw_active_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
+    raw_company_owned: rawRows.filter((row) => row.company_id !== null).length,
+    raw_examples: rawRows.slice(0, 5).map(({ seed_key, type, status, company_id, company_verification_status }) =>
+      ({ seed_key, type, status, company_id, company_verification_status })),
+    candidate_status: candidateProjection.status,
+    candidate_error: candidateProjection.json?.message ?? candidateProjection.json?.error ?? null,
+    candidate_count: projectedRows.length,
+    candidate_types: projectedRows.reduce((out, row) => {
+      out[row.type] = (out[row.type] ?? 0) + 1;
+      return out;
+    }, {}),
+    candidate_examples: projectedRows.slice(0, 5).map(({ id, type, title, eligibility_failures }) =>
+      ({ id, type, title, eligibility_failures })),
+  }));
+  pass("recommendation SQL candidate projection responds successfully",
+    candidateProjection.status === 200 && Array.isArray(candidateProjection.json?.opportunities),
+    { status: candidateProjection.status, body: candidateProjection.json ?? candidateProjection.text });
   const first = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });

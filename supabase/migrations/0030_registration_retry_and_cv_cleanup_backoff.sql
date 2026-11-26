@@ -104,7 +104,7 @@ begin
            updated_at = now()
       from picked p
      where q.id = p.id
-    returning q.id, q.storage_path, q.graduate_id, q.attempts, q.reason
+    returning q.id, q.storage_path, q.graduate_id, q.attempts, q.reason, q.created_at
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', u.id,
@@ -114,10 +114,7 @@ begin
     'reason', u.reason
   ) order by u.created_at, u.id), '[]'::jsonb)
     into v_items
-    from (
-      select q.*, q.created_at
-        from updated q
-    ) u;
+    from updated u;
 
   return v_items;
 end

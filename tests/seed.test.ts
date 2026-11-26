@@ -316,8 +316,8 @@ test("local CV evaluation cleanup authenticates metadata DELETE as service_role"
 test("local phone/password Auth is enabled without enabling public account signup", () => {
   const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
   assert.match(config, /^\[auth\]\s*\nenable_signup = false/m);
-  assert.match(config, /\[auth\.sms\][\s\S]*?\nenabled = true\s*\nenable_confirmations = true/);
-  assert.doesNotMatch(config, /^\s*enable_signup = true\s*$/m,
-    "deprecated SMS enable_signup must not be used as the GoTrue provider-enabled switch");
-  assert.ok(config.includes("Global [auth].enable_signup remains false"));
+  assert.match(config, /\[auth\.sms\][\s\S]*?\nenabled = true\s*\nenable_signup = true\s*\nenable_confirmations = true/);
+  assert.ok(config.includes("CLI v3.3.0 maps enable_signup to GOTRUE_EXTERNAL_PHONE_ENABLED"));
+  assert.ok(config.includes("Global [auth].enable_signup remains false"),
+    "global signup disable must remain explicit while the existing phone provider is enabled");
 });

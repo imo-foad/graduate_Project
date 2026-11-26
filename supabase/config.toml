@@ -11,9 +11,12 @@ enable_signup = false   # demo accounts are provisioned by scripts/provision-dem
 
 [auth.sms]
 # Enables the GoTrue phone provider for phone/password login of locally provisioned users.
-# Global [auth].enable_signup remains false: public phone/email signup is still disabled.
-# Keep phone confirmation enabled; synthetic Auth Admin provisioning explicitly confirms test accounts.
+# The pinned Supabase CLI v3.3.0 maps enable_signup to GOTRUE_EXTERNAL_PHONE_ENABLED;
+# keep both keys during compatibility with that CLI. Global [auth].enable_signup remains false,
+# so public phone/email signup is still disabled.
+# Phone confirmation remains required; synthetic Auth Admin provisioning explicitly confirms test accounts.
 enabled = true
+enable_signup = true
 enable_confirmations = true
 
 [functions.recommend]

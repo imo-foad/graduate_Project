@@ -110,12 +110,17 @@ class Scripts(unittest.TestCase):
         # or hard-coded terminal version, so adding a forward-only migration cannot break workflow lint.
         for runner_contract in (
             'MIGRATIONS=(supabase/migrations/*.sql)',
+            'PREVIOUS_VERSION=""',
             'for f in "${MIGRATIONS[@]}"; do',
-            'grep -q "$(basename "$f")" "$LOG_DIR/db-reset.log"',
+            'version="${BASH_REMATCH[1]}"',
+            '[[ ! "$version" > "$PREVIOUS_VERSION" ]]',
+            'grep -q "$name" "$LOG_DIR/db-reset.log"',
             'from supabase_migrations.schema_migrations',
             '[ "$WANT" = "$GOT" ]',
         ):
             self.assertIn(runner_contract, s)
+        self.assertNotRegex(s, r"-ge\s+\d+")
+        self.assertNotRegex(s, r"through\s+\d{4}")
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]

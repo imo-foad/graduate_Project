@@ -98,11 +98,27 @@ select is((public.register_for_event(tests.id('e_wait'))).status, 'WAITLISTED', 
 reset role;
 select is((select count(*)::int from public.event_registrations where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 1, 'single row for re-registered user');
 
--- freeing a seat lets a NEW user register (no auto-promotion is specified in the source)
+-- A confirmed cancellation atomically promotes the oldest FIFO entry before a new user can claim the seat.
 select tests.login('u1');
-select public.cancel_event_registration(tests.id('e_wait'));
+select is((public.cancel_event_registration(tests.id('e_wait'))).status, 'CANCELLED',
+  'confirmed participant cancellation succeeds');
+reset role;
+select is((select status from public.event_registrations
+  where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 'REGISTERED',
+  'the oldest eligible waitlisted participant is automatically promoted');
+select is((select registered_count from public.opportunities where id = tests.id('e_wait')), 1,
+  'FIFO promotion restores the confirmed registration counter');
 select tests.login('u3');
-select is((public.register_for_event(tests.id('e_wait'))).status, 'REGISTERED', 'seat freed by cancellation can be taken');
+select is((public.register_for_event(tests.id('e_wait'))).status, 'WAITLISTED',
+  'a later new participant cannot steal the seat already promoted to FIFO');
+select is((public.cancel_event_registration(tests.id('e_wait'))).status, 'CANCELLED',
+  'a later waitlisted participant can cancel their queue entry');
+reset role;
+select is((select registered_count from public.opportunities where id = tests.id('e_wait')), 1,
+  'cancelling a WAITLISTED participant does not free the confirmed seat');
+select is((select status from public.event_registrations
+  where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 'REGISTERED',
+  'the promoted FIFO participant keeps the confirmed seat');
 
 -- 5. rule violations
 select tests.login('u1');

@@ -70,6 +70,10 @@ SAMPLE_HISTORY_COUNT_2="$(psql "$DB_URL" -X -At -v ON_ERROR_STOP=1 -c "select co
 echo "PASS Auth provisioning + trigger-created profile rows: profiles=$PROFILE_COUNT, graduates=$GRADUATE_COUNT"
 echo "PASS demo profile seed idempotency: skills=$SKILL_COUNT, sample applications=$SAMPLE_APP_COUNT_2, sample history=$SAMPLE_HISTORY_COUNT_2"
 
+# Provision and validate the typed synthetic university dataset in a guarded local-only pass.
+node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
+
 # Serve the actual Edge Function through the local Supabase gateway with JWT verification ON.
 # The function additionally calls auth.getUser(), so both gateway and handler auth paths are exercised.
 supabase functions serve --env-file "$LOCAL_ENV" > "$LOG_DIR/functions-serve.log" 2>&1 &

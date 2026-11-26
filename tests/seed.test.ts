@@ -323,3 +323,26 @@ test("local phone/password Auth has an SMS transport without enabling public sig
   assert.doesNotMatch(config, /\[auth\.sms\][\s\S]*?\nenable_signup\s*=/,
     "use the current auth.sms.enabled provider switch, not the deprecated alias");
 });
+
+
+test("DevOps cohort has its configured future Cloud Day recommendation in the seeded catalogue", () => {
+  const cloudDay = opportunities.find((o: any) => o.seed_key === "trn-cloud-day");
+  const devops = JSON.parse(readFileSync(new URL("../fixtures/career-cohort-round1.json", import.meta.url), "utf8"))
+    .users.find((user: any) => user.code === "07-DEVOPS");
+  assert.ok(cloudDay, "Cloud Day fixture must exist");
+  assert.equal(cloudDay.title, "Cloud Day (registration opens later)");
+  assert.ok(cloudDay.registration_opens_days > 0, "Cloud Day is an upcoming, not immediately registrable, training");
+  assert.ok(["DOCKER", "LINUX", "AWS", "CLOUD_BASICS", "DEVOPS_CI_CD"].every((id) =>
+    cloudDay.skills.some((skill: any) => skill.skill_id === id)));
+  assert.ok(devops.recommendation_titles.includes(cloudDay.title),
+    "the configured DevOps cohort expectation must point to a seeded matching catalogue entry");
+});
+
+test("career cohort activates its reviewed CV before attempting job applications", () => {
+  const integration = readFileSync(new URL("../tests/integration/career-cohort.integration.mjs", import.meta.url), "utf8");
+  const activeSelection = integration.indexOf("graduate selects the completed reviewed CV as their active application document");
+  const application = integration.indexOf("p_cv_document_id: user.cvId");
+  assert.ok(activeSelection >= 0 && application > activeSelection,
+    "a graduate must explicitly select a completed CV before passing its ID to apply_for_job");
+  assert.match(integration, /method: "PATCH"[\s\S]*?JSON\.stringify\(\{ is_active: true \}\)/);
+});

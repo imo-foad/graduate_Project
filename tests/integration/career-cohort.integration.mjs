@@ -356,6 +356,21 @@ async function uploadAndParse(user) {
   record(user, "suggestion_review", "a completed CV cannot be parsed a second time",
     duplicateParse.status === 409 && duplicateParse.json?.error === "CV_ALREADY_PARSED",
     { status: duplicateParse.status, body: duplicateParse.json ?? duplicateParse.text });
+
+  // Applications require the graduate to explicitly select one completed CV as active.
+  const activation = await request("/rest/v1/cv_documents?id=eq." + encodeURIComponent(user.cvId), {
+    method: "PATCH",
+    headers: headers(user.token, { "Content-Type": "application/json", Prefer: "return=representation" }),
+    body: JSON.stringify({ is_active: true }),
+  });
+  const activeDocument = await getById("cv_documents", "id,is_active,parse_status", user.cvId, user.token);
+  record(user, "suggestion_review", "graduate selects the completed reviewed CV as their active application document",
+    activation.status === 200 && activation.json?.some((row) => row.id === user.cvId && row.is_active === true) &&
+      activeDocument?.status === 200 && activeDocument.json?.[0]?.is_active === true &&
+      activeDocument.json?.[0]?.parse_status === "DONE",
+    { activationStatus: activation.status, activationBody: activation.json ?? activation.text,
+      activeDocument: activeDocument?.json ?? activeDocument?.text });
+
 }
 async function testStructuredPersistence(user) {
   if (!user.token) {

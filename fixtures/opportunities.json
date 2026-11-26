@@ -837,5 +837,70 @@
     "is_required": false
    }
   ]
- }
+ },
+  {
+    "seed_key": "trn-cloud-day",
+    "type": "TRAINING",
+    "title": "Cloud Day (registration opens later)",
+    "organizer_name": "Cloud Native Guild (sample)",
+    "description": "An upcoming practical day covering Linux operations, containers, AWS fundamentals and automated cloud delivery.",
+    "location": "Online",
+    "attendance_mode": "ONLINE",
+    "status": "ACTIVE",
+    "deadline_days": 30,
+    "start_days": 40,
+    "end_days": 41,
+    "registration_opens_days": 5,
+    "capacity": 30,
+    "waitlist_enabled": false,
+    "target_fields": [
+      "DevOps and Cloud",
+      "DevOps",
+      "Cloud Engineering",
+      "Computer Science"
+    ],
+    "event": {
+      "venue": null,
+      "target_audience": "Graduates",
+      "registration_required": true
+    },
+    "skills": [
+      {
+        "skill_id": "DOCKER",
+        "importance": 5,
+        "min_level": 1,
+        "is_required": false
+      },
+      {
+        "skill_id": "LINUX",
+        "importance": 4,
+        "min_level": 1,
+        "is_required": false
+      },
+      {
+        "skill_id": "AWS",
+        "importance": 5,
+        "min_level": 1,
+        "is_required": false
+      },
+      {
+        "skill_id": "CLOUD_BASICS",
+        "importance": 5,
+        "min_level": 1,
+        "is_required": false
+      },
+      {
+        "skill_id": "DEVOPS_CI_CD",
+        "importance": 5,
+        "min_level": 1,
+        "is_required": false
+      },
+      {
+        "skill_id": "NETWORKING",
+        "importance": 3,
+        "min_level": 1,
+        "is_required": false
+      }
+    ]
+  }
 ]

@@ -119,6 +119,22 @@ select is((select registered_count from public.opportunities where id = tests.id
 select is((select status from public.event_registrations
   where opportunity_id = tests.id('e_wait') and graduate_id = tests.id('u2')), 'REGISTERED',
   'the promoted FIFO participant keeps the confirmed seat');
+select is((select count(*)::int
+  from public.event_registration_status_history h
+  join public.event_registrations r on r.id = h.registration_id
+  where r.opportunity_id = tests.id('e_wait')
+    and r.graduate_id = tests.id('u1')
+    and h.old_status = 'REGISTERED' and h.new_status = 'CANCELLED'
+    and h.actor_user_id = tests.id('u1') and h.source_type = 'CANDIDATE'),
+  1, 'confirmed cancellation is recorded in candidate status history');
+select is((select count(*)::int
+  from public.event_registration_status_history h
+  join public.event_registrations r on r.id = h.registration_id
+  where r.opportunity_id = tests.id('e_wait')
+    and r.graduate_id = tests.id('u2')
+    and h.old_status = 'WAITLISTED' and h.new_status = 'REGISTERED'
+    and h.actor_user_id is null and h.source_type = 'SYSTEM'),
+  1, 'FIFO promotion is recorded separately as a system status-history event');
 
 -- 5. rule violations
 select tests.login('u1');

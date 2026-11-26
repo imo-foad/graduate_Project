@@ -62,7 +62,7 @@ export function validateUniversityFixtures(d) {
     if (!s.department || !s.major || !Number.isInteger(s.academic_level) || s.academic_level<1 || s.academic_level>5) errors.push(`${s.seed_key}: department/major/academic_level required`);
   }
   if(gpas.size!==20) errors.push("all 20 student GPAs must be distinct");
-  if(tracks.size<2) errors.push("students must cover multiple approved tracks");
+  if(tracks.size<5) errors.push("students must cover at least five approved academic tracks");
   for(const f of d.faculty) if(!f.department || !f.specialization || !FACULTY_TITLES.includes(f.academic_title)) errors.push(`${f.seed_key}: invalid faculty department/specialization/title`);
   return errors;
 }

@@ -14,6 +14,9 @@ const ts = (days) => (days === null || days === undefined ? "null" : `now() + in
 const oppId = (key) => `(select id from public.opportunities where seed_key = ${q(key)})`;
 const gradId = (email) => `(select id from public.profiles where email = ${q(email)})`;
 
+// Final product scope (docs/PRODUCT_DECISIONS.md): the catalogue may only ship these three types.
+export const ACTIVE_OPPORTUNITY_TYPES = ["JOB", "INTERNSHIP", "TRAINING"];
+
 export function validateFixtures({ skills, opportunities, demo }) {
   const errors = [];
   const skillIds = new Set(skills.map((s) => s.id));
@@ -22,6 +25,7 @@ export function validateFixtures({ skills, opportunities, demo }) {
   for (const o of opportunities) {
     if (keys.has(o.seed_key)) errors.push(`duplicate seed_key ${o.seed_key}`);
     keys.add(o.seed_key);
+    if (!ACTIVE_OPPORTUNITY_TYPES.includes(o.type)) errors.push(`${o.seed_key}: inactive opportunity type ${o.type}`);
     for (const s of o.skills ?? []) if (!skillIds.has(s.skill_id)) errors.push(`${o.seed_key}: unknown skill ${s.skill_id}`);
     if (o.end_days !== undefined && o.start_days !== undefined && o.end_days < o.start_days) errors.push(`${o.seed_key}: end before start`);
     if (o.deadline_days !== undefined && o.start_days !== undefined && o.deadline_days > (o.end_days ?? o.start_days)) errors.push(`${o.seed_key}: deadline after event`);

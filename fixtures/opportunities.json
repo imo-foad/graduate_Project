@@ -599,302 +599,6 @@
   ]
  },
  {
-  "seed_key": "evt-tech-conf",
-  "type": "CONFERENCE",
-  "title": "Tech Horizons Conference",
-  "organizer_name": "Tech Society (sample)",
-  "description": "One-day conference on software and data careers.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 19,
-  "start_days": 20,
-  "end_days": 21,
-  "capacity": 200,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Computer Science",
-   "Information Systems"
-  ],
-  "event": {
-   "venue": "Cairo Expo Hall (sample)",
-   "target_audience": "All graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "PROBLEM_SOLVING",
-    "importance": 2,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-data-meetup",
-  "type": "EVENT",
-  "title": "Data Analysts Meetup",
-  "organizer_name": "Data Circle (sample)",
-  "description": "Networking and lightning talks on analytics.",
-  "location": "Mansoura",
-  "attendance_mode": "HYBRID",
-  "status": "ACTIVE",
-  "deadline_days": 13,
-  "start_days": 14,
-  "end_days": 14.2,
-  "capacity": 40,
-  "waitlist_enabled": true,
-  "target_fields": [
-   "Data Analysis",
-   "Information Systems"
-  ],
-  "event": {
-   "venue": "Mansoura Innovation Hub (sample)",
-   "target_audience": "Graduates in data fields",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "SQL",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   },
-   {
-    "skill_id": "DATA_VISUALIZATION",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-security-webinar",
-  "type": "EVENT",
-  "title": "Intro to Blue-Team Operations (Webinar)",
-  "organizer_name": "SecOps Guild (sample)",
-  "description": "Online session on SOC workflows.",
-  "location": "Online",
-  "attendance_mode": "ONLINE",
-  "status": "ACTIVE",
-  "deadline_days": 9,
-  "start_days": 10,
-  "end_days": 10.1,
-  "capacity": 500,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Cybersecurity"
-  ],
-  "event": {
-   "venue": null,
-   "target_audience": "Graduates and students",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "CYBERSECURITY",
-    "importance": 4,
-    "min_level": 1,
-    "is_required": false
-   },
-   {
-    "skill_id": "SIEM",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-android-meetup",
-  "type": "EVENT",
-  "title": "Android Developers Night",
-  "organizer_name": "Android Cairo (sample)",
-  "description": "Talks on Compose and architecture.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 11,
-  "start_days": 12,
-  "end_days": 12.1,
-  "capacity": 60,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Android",
-   "Mobile",
-   "Computer Science"
-  ],
-  "event": {
-   "venue": "Cairo Co-working (sample)",
-   "target_audience": "Android graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "ANDROID",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   },
-   {
-    "skill_id": "JETPACK_COMPOSE",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-full-event",
-  "type": "EVENT",
-  "title": "Hands-on Security Lab (limited seats)",
-  "organizer_name": "SecOps Guild (sample)",
-  "description": "Lab with a single seat, used to test capacity and waitlist.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 10,
-  "start_days": 11,
-  "end_days": 11.2,
-  "capacity": 1,
-  "waitlist_enabled": true,
-  "target_fields": [
-   "Cybersecurity"
-  ],
-  "event": {
-   "venue": "Cairo Lab (sample)",
-   "target_audience": "Graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "PENETRATION_TESTING",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-full-nowait",
-  "type": "EVENT",
-  "title": "Workshop: Leadership for Graduates (full, no waitlist)",
-  "organizer_name": "Career Hub (sample)",
-  "description": "Single seat, waitlist disabled: registration must fail with EVENT_FULL.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": 10,
-  "start_days": 11,
-  "end_days": 11.2,
-  "capacity": 1,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Management"
-  ],
-  "event": {
-   "venue": "Cairo Hub (sample)",
-   "target_audience": "All graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "COMMUNICATION",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ]
- },
- {
-  "seed_key": "evt-past",
-  "type": "EVENT",
-  "title": "Career Fair (already ended)",
-  "organizer_name": "Career Hub (sample)",
-  "description": "Ended event used for expiry tests.",
-  "location": "Cairo",
-  "attendance_mode": "ONSITE",
-  "status": "ACTIVE",
-  "deadline_days": -6,
-  "start_days": -5,
-  "end_days": -4.7,
-  "capacity": 100,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Computer Science"
-  ],
-  "event": {
-   "venue": null,
-   "target_audience": "All graduates",
-   "registration_required": true
-  },
-  "skills": []
- },
- {
-  "seed_key": "evt-opens-later",
-  "type": "EVENT",
-  "title": "Cloud Day (registration opens later)",
-  "organizer_name": "Cloud Club (sample)",
-  "description": "Registration window has not opened yet.",
-  "location": "Online",
-  "attendance_mode": "ONLINE",
-  "status": "ACTIVE",
-  "deadline_days": 30,
-  "start_days": 35,
-  "end_days": 35.3,
-  "capacity": 100,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Cloud"
-  ],
-  "event": {
-   "venue": null,
-   "target_audience": "All graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "CLOUD_BASICS",
-    "importance": 3,
-    "min_level": 1,
-    "is_required": false
-   }
-  ],
-  "registration_opens_days": 5
- },
- {
-  "seed_key": "vol-code-mentor",
-  "type": "VOLUNTEER",
-  "title": "Volunteer Coding Mentor",
-  "organizer_name": "Code For All (sample)",
-  "description": "Mentor school students in programming basics.",
-  "location": "Online",
-  "attendance_mode": "ONLINE",
-  "status": "ACTIVE",
-  "deadline_days": 25,
-  "start_days": 30,
-  "end_days": 35,
-  "capacity": 30,
-  "waitlist_enabled": false,
-  "target_fields": [
-   "Computer Science",
-   "Education"
-  ],
-  "event": {
-   "venue": null,
-   "target_audience": "Graduates",
-   "registration_required": true
-  },
-  "skills": [
-   {
-    "skill_id": "COMMUNICATION",
-    "importance": 3,
-    "min_level": 2,
-    "is_required": false
-   }
-  ]
- },
- {
   "seed_key": "trn-rest-api",
   "type": "TRAINING",
   "title": "REST APIs Workshop",
@@ -1035,6 +739,100 @@
    {
     "skill_id": "STATISTICS",
     "importance": 5,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-full-waitlist",
+  "type": "TRAINING",
+  "title": "Full Training with FIFO Waitlist",
+  "organizer_name": "Skill Up (sample)",
+  "description": "Capacity one with a waitlist: promotion is FIFO when a seat frees.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 10,
+  "start_days": 20,
+  "end_days": 21,
+  "capacity": 1,
+  "waitlist_enabled": true,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 2,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-full-nowait",
+  "type": "TRAINING",
+  "title": "Full Training without Waitlist",
+  "organizer_name": "Skill Up (sample)",
+  "description": "Capacity one without a waitlist: registration must fail when full.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 10,
+  "start_days": 20,
+  "end_days": 21,
+  "capacity": 1,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 2,
+    "min_level": 1,
+    "is_required": false
+   }
+  ]
+ },
+ {
+  "seed_key": "trn-opens-later",
+  "type": "TRAINING",
+  "title": "Training with a Future Registration Window",
+  "organizer_name": "Skill Up (sample)",
+  "description": "Registration has not opened yet: shown as upcoming, never immediately actionable.",
+  "location": "Online",
+  "attendance_mode": "ONLINE",
+  "status": "ACTIVE",
+  "deadline_days": 30,
+  "start_days": 40,
+  "end_days": 41,
+  "registration_opens_days": 5,
+  "capacity": 20,
+  "waitlist_enabled": false,
+  "target_fields": [
+   "Computer Science"
+  ],
+  "event": {
+   "venue": null,
+   "target_audience": "Graduates",
+   "registration_required": true
+  },
+  "skills": [
+   {
+    "skill_id": "PROBLEM_SOLVING",
+    "importance": 2,
     "min_level": 1,
     "is_required": false
    }

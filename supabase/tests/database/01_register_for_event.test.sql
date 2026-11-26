@@ -37,10 +37,10 @@ end $f$;
 
 do $$ begin
   perform tests.mk_user('u1'); perform tests.mk_user('u2'); perform tests.mk_user('u3');
-  perform tests.mk_opp('e_cap',    'EVENT', '{"capacity":2,"deadline_days":5}');
-  perform tests.mk_opp('e_wait',   'EVENT', '{"capacity":1,"waitlist":true,"deadline_days":5}');
-  perform tests.mk_opp('e_nowait', 'EVENT', '{"capacity":1,"deadline_days":5}');
-  perform tests.mk_opp('e_closed', 'EVENT', '{"deadline_days":-1}');
+  perform tests.mk_opp('e_cap',    'TRAINING', '{"capacity":2,"deadline_days":5}');
+  perform tests.mk_opp('e_wait',   'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
+  perform tests.mk_opp('e_nowait', 'TRAINING', '{"capacity":1,"deadline_days":5}');
+  perform tests.mk_opp('e_closed', 'TRAINING', '{"deadline_days":-1}');
   perform tests.mk_opp('j_job',    'JOB',   '{"deadline_days":5}');
 end $$;
 
@@ -50,7 +50,7 @@ select is((public.register_for_event(tests.id('e_cap'))).status, 'REGISTERED', '
 reset role;
 select is((select registered_count from public.opportunities where id = tests.id('e_cap')), 1, 'registered_count = 1');
 select is((select count(*)::int from public.event_registrations where opportunity_id = tests.id('e_cap') and graduate_id = tests.id('u1')), 1, 'exactly one registration row exists');
-select is((select count(*)::int from public.notifications where profile_id = tests.id('u1') and type = 'EVENT_REGISTERED'), 1, 'notification created');
+select is((select count(*)::int from public.notifications where profile_id = tests.id('u1') and type = 'TRAINING_REGISTERED'), 1, 'notification created');
 
 -- duplicate
 select tests.login('u1');
@@ -67,7 +67,7 @@ select is((select count(*)::int from public.event_registrations where opportunit
 
 -- 2. full + waitlist ENABLED
 select tests.login('u1');
-select is((public.register_for_event(tests.id('e_wait'))).status, 'REGISTERED', 'waitlist event: first user REGISTERED');
+select is((public.register_for_event(tests.id('e_wait'))).status, 'REGISTERED', 'waitlist training: first user REGISTERED');
 select tests.login('u2');
 select is((public.register_for_event(tests.id('e_wait'))).status, 'WAITLISTED', 'full + waitlist -> WAITLISTED');
 reset role;
@@ -116,7 +116,7 @@ select throws_ok($q$select public.register_for_event(tests.id('e_cap'))$q$, 'PT4
 reset role;
 select is((select count(*)::int from public.opportunities o where o.seed_key like 't-%'
             and o.registered_count <> (select count(*) from public.event_registrations r where r.opportunity_id = o.id and r.status = 'REGISTERED')),
-          0, 'registered_count == count(REGISTERED) for every test event');
+          0, 'registered_count == count(REGISTERED) for every test training');
 
 reset role;
 select * from finish();

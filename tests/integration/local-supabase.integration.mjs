@@ -198,15 +198,15 @@ try {
   pass("recommendations query for user B exposes only B rows", recB.status === 200 &&
     Array.isArray(recB.json) && recB.json.every((x) => x.graduate_id === b.id));
 
-  // Availability (issue #16): a full event without a waitlist must never be recommended, a full event with a
-  // waitlist must be labelled WAITLIST_ONLY, and a future registration window must be labelled UPCOMING.
+  // Availability (issue #16): a full training without a waitlist must never be recommended, a full training
+  // with a waitlist must be labelled WAITLIST_ONLY, and a future registration window must be labelled UPCOMING.
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
   const inOneDay = new Date(Date.now() + 86_400_000).toISOString();
   const inOneWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
   const availabilityEvents = [
-    { key: "full", body: { title: "CI full event (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
-    { key: "waitlist", body: { title: "CI waitlist event", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
-    { key: "upcoming", body: { title: "CI upcoming registration event", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+    { key: "full", body: { title: "CI full training (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "waitlist", body: { title: "CI waitlist training", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
+    { key: "upcoming", body: { title: "CI upcoming training registration", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
   ];
   for (const event of availabilityEvents) {
     const created = await request("/rest/v1/opportunities", {
@@ -214,9 +214,9 @@ try {
       headers: headers(service, { "Content-Type": "application/json", Prefer: "return=representation" }),
       body: JSON.stringify({
         seed_key: `ci-availability-${event.key}-${randomUUID()}`,
-        type: "EVENT",
+        type: "TRAINING",
         title: event.body.title,
-        description: "Temporary event created by the local HTTP integration test.",
+        description: "Temporary training created by the local HTTP integration test.",
         location: "Cairo",
         attendance_mode: "ONSITE",
         status: "ACTIVE",
@@ -239,8 +239,8 @@ try {
   });
   const availabilityItems = Array.isArray(availability.json?.items) ? availability.json.items : [];
   const itemFor = (key) => availabilityItems.find((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === key)?.id);
-  pass("recommendations exclude a full event without a waitlist", availability.status === 200 && !itemFor("full"));
-  pass("recommendations label a full event with a waitlist as WAITLIST_ONLY",
+  pass("recommendations exclude a full training without a waitlist", availability.status === 200 && !itemFor("full"));
+  pass("recommendations label a full training with a waitlist as WAITLIST_ONLY",
     itemFor("waitlist")?.availability_status === "WAITLIST_ONLY");
   pass("recommendations keep a future registration window as UPCOMING",
     itemFor("upcoming")?.availability_status === "UPCOMING");
@@ -498,10 +498,22 @@ try {
   const afterDelete = await request(`/storage/v1/object/${bucket}/${encodePath(objectPath)}`, { headers: headers(a.token) });
   pass("Storage API lets A delete own object and it disappears", aDelete.ok && !afterDelete.ok);
 
-  const aMetadataDelete = cvId
+  // Metadata deletion is routed through an owner-scoped RPC that also enqueues Storage cleanup.
+  // Direct PostgREST DELETE is revoked so a failure cannot bypass the cleanup ledger.
+  const directDelete = cvId
     ? await request(`/rest/v1/cv_documents?id=eq.${cvId}`, { method: "DELETE", headers: headers(a.token) })
     : { ok: false, status: 0 };
-  pass("A can delete own CV metadata row", aMetadataDelete.ok);
+  pass("direct CV metadata DELETE is rejected for clients", !directDelete.ok,
+    { status: directDelete.status, body: directDelete.json ?? directDelete.text });
+  const aMetadataDelete = cvId
+    ? await request("/rest/v1/rpc/delete_cv_document", {
+      method: "POST",
+      headers: headers(a.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_cv_document_id: cvId }),
+    })
+    : { ok: false, status: 0 };
+  pass("A can delete own CV metadata through the owner-scoped RPC",
+    aMetadataDelete.status === 200 && aMetadataDelete.json?.deleted === true, { status: aMetadataDelete.status });
 } finally {
   // Remove only temporary skill rows inserted for these career-path integration cases.
   for (const injected of injectedSkillRows) {

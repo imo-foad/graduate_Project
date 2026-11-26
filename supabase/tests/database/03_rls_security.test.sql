@@ -40,7 +40,7 @@ do $$ begin
   perform tests.mk_opp('o_open',   'JOB', '{"deadline_days":5}');
   perform tests.mk_opp('o_exp',    'JOB', '{"deadline_days":-1}');
   perform tests.mk_opp('o_closed', 'JOB', '{"deadline_days":5,"status":"CLOSED"}');
-  perform tests.mk_opp('o_ended',  'EVENT', '{"start_days":-3,"end_days":-2}');
+  perform tests.mk_opp('o_ended',  'TRAINING', '{"start_days":-3,"end_days":-2}');
   perform tests.mk_opp('o_seen',   'JOB', '{"deadline_days":-2}');
   insert into public.skills (id, canonical_name, category) values ('T_GAP','T Gap','Test'), ('T_OLD','T Old','Test');
   insert into public.graduate_skills (graduate_id, skill_id, level, source) values (tests.id('u2'), 'T_GAP', 3, 'SEED');

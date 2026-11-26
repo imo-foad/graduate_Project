@@ -23,6 +23,15 @@ components:
       bearerFormat: JWT
       description: User access_token from /auth/v1/token. Required on every operation except the token endpoint itself.
   schemas:
+    OpportunityType:
+      type: string
+      description: 'Active opportunity types. Final product decision 2026-11-26: only JOB, INTERNSHIP and TRAINING are
+        active. Every other value is rejected by the database and is never returned as actionable. Matching is exact
+        and case-sensitive.'
+      enum:
+      - JOB
+      - INTERNSHIP
+      - TRAINING
     Error:
       type: object
       properties:
@@ -357,14 +366,14 @@ components:
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN.
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, IDENTITY_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, IDENTITY_ALREADY_LINKED, PHONE_NOT_VERIFIED, IDENTITY_NOT_VERIFIED.
         422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
-        INVALID_INTERACTION, JOB_NOT_DRAFT,
+        INVALID_INTERACTION, JOB_NOT_DRAFT, INVALID_IDENTITY, IDENTITY_WITHOUT_VERIFIED_ROLE,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
         409 ALREADY_REPORTED, SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE.
         422 CANNOT_REPORT_OWN_CONTENT, INVALID_RATE_LIMIT_SUBJECT.
@@ -500,7 +509,8 @@ paths:
   /rest/v1/opportunities:
     get:
       summary: Read-only catalogue. Only open opportunities (ACTIVE, not expired) plus ones you applied/registered/saved.
-        Use PostgREST filters, e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
+        The active scope is exactly JOB, INTERNSHIP and TRAINING (schema OpportunityType). Use PostgREST filters,
+        e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
       responses:
         '200':
           description: OK
@@ -576,6 +586,89 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/finalize_registration:
+    post:
+      summary: Complete phone-first registration after OTP confirmation and institutional identity verification
+      responses:
+        '200':
+          description: '{account_status: ACTIVE, verified_identities: n}. Requires auth.users.phone_confirmed_at and
+            at least one VERIFIED human identity.'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/list_my_identities:
+    post:
+      summary: Own verified/pending institutional identities (STUDENT, GRADUATE, FACULTY; multiple allowed)
+      responses:
+        '200':
+          description: Array of {id, identity_type, institution_ref, status, verification_source, verified_at, attributes}
+  /rest/v1/rpc/review_human_identity:
+    post:
+      summary: Platform admin verifies or revokes one identity (manual review fallback)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_identity_id
+              - p_decision
+              properties:
+                p_identity_id:
+                  type: string
+                  format: uuid
+                p_decision:
+                  type: string
+                  enum: [VERIFIED, REVOKED]
+                p_note:
+                  type: string
+      responses:
+        '200':
+          description: '{id, status}'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/transfer_company_ownership:
+    post:
+      summary: Current active OWNER (or platform admin) transfers ownership to an existing active member
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_company_id
+              - p_new_owner_id
+              properties:
+                p_company_id:
+                  type: string
+                  format: uuid
+                p_new_owner_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: The new OWNER membership row; the previous owner becomes RECRUITER. Audited.
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/delete_cv_document:
+    post:
+      summary: Delete own CV metadata and enqueue cleanup of the private Storage object (owner only)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_cv_document_id
+              properties:
+                p_cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: '{deleted: true, cv_document_id, cleanup_queued: true}. The object is removed by the
+            service-role worker through the Storage API; retry is idempotent.'
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/get_social_feed:
@@ -1232,6 +1325,13 @@ paths:
       responses:
         '204':
           description: Deleted
+  /rest/v1/human_identities:
+    get:
+      summary: Own institutional identities only (RLS-scoped; STUDENT/GRADUATE/FACULTY; multiple rows allowed).
+        Writes happen only through the service-role verification contract.
+      responses:
+        '200':
+          description: OK
   /rest/v1/cv_documents:
     get:
       summary: Own CV records
@@ -1246,11 +1346,8 @@ paths:
       responses:
         '204':
           description: Updated
-    delete:
-      summary: Delete CV record (storage object must be removed separately)
-      responses:
-        '204':
-          description: Deleted
+    # Direct DELETE is revoked: deletion must go through /rest/v1/rpc/delete_cv_document so the
+    # private Storage object is recorded in the durable cleanup ledger.
   /rest/v1/cv_suggestions:
     get:
       summary: Pending/decided CV skill suggestions (confirm via RPC)

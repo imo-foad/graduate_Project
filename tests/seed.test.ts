@@ -12,11 +12,18 @@ test("seed covers the scenarios required by 11.4", () => {
   assert.ok(k("job-expired").deadline_days < 0, "expired job");
   assert.equal(k("job-closed").status, "CLOSED");
   assert.ok(k("job-cert-gated").eligibility.required_certifications.length > 0, "mandatory requirement");
-  assert.ok(k("evt-full-event").waitlist_enabled && k("evt-full-event").capacity === 1);
-  assert.ok(!k("evt-full-nowait").waitlist_enabled && k("evt-full-nowait").capacity === 1);
+  assert.ok(k("trn-full-waitlist").waitlist_enabled && k("trn-full-waitlist").capacity === 1);
+  assert.ok(!k("trn-full-nowait").waitlist_enabled && k("trn-full-nowait").capacity === 1);
+  assert.ok(k("trn-opens-later").registration_opens_days > 0);
   assert.ok(demo.some((d: any) => d.employment_status === "EMPLOYED") && demo.some((d: any) => d.employment_status === "SEEKING"));
   assert.equal(demo.length, 4);
   assert.ok(demo.every((d: any) => d.email.endsWith("@alumni.test")));
+});
+test("the seeded catalogue contains only the approved three active types", () => {
+  assert.deepEqual([...new Set(opportunities.map((o: any) => o.type))].sort(), ["INTERNSHIP", "JOB", "TRAINING"]);
+  for (const o of opportunities) {
+    assert.ok(["JOB", "INTERNSHIP", "TRAINING"].includes(o.type), `${o.seed_key}: ${o.type}`);
+  }
 });
 test("demo sample states never include a SUBMITTED record and use SAMPLE_ prefixes", () => {
   for (const d of demo) for (const a of d.applications) assert.match(a.status, /^SAMPLE_/);

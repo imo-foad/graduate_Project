@@ -12,6 +12,18 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/university-seed-smoke.log"
 : > "$LOG_FILE"
 
+# Redact ephemeral Supabase CLI keys/JWTs and credential-like assignments before any
+# startup output is copied to the public Actions log or downloadable artifact.
+redact_ci_file() {
+  sed -E -i \
+    -e 's/sb_secret_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_SECRET]/g' \
+    -e 's/sb_publishable_[A-Za-z0-9_-]{20,}/[REDACTED_LOCAL_SUPABASE_PUBLISHABLE]/g' \
+    -e 's/eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}/[REDACTED_LOCAL_JWT]/g' \
+    -e 's/((SERVICE_ROLE_KEY|ANON_KEY|JWT_SECRET|DB_PASSWORD|S3_ACCESS_KEY_ID|S3_SECRET_ACCESS_KEY)[[:space:]]*=[[:space:]]*)[^[:space:]]+/\\1[REDACTED]/Ig' \
+    -e 's/(Authorization: Bearer )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' \
+    -e 's/(apikey: )[A-Za-z0-9._-]{20,}/\\1[REDACTED]/Ig' "$1"
+}
+
 # Mirror every later line into the downloadable artifact log. This happens before the first
 # tool check so startup and migration failures are always diagnosable.
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -45,6 +57,9 @@ cleanup() {
   fi
   rm -f "$LOCAL_ENV"
   timeout 120s supabase stop --no-backup >>"$LOG_DIR/supabase-stop.log" 2>&1 || true
+  for log_file in "$LOG_DIR"/*; do
+    [ -f "$log_file" ] && redact_ci_file "$log_file"
+  done
   if [ "$status" -eq 0 ]; then
     echo "SMOKE RESULT: PASS"
   else
@@ -55,7 +70,13 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== starting disposable local Supabase stack"
-supabase start 2>&1 | tee "$LOG_DIR/university-seed-supabase-start.log"
+START_LOG="$(mktemp)"
+START_STATUS=0
+supabase start >"$START_LOG" 2>&1 || START_STATUS=$?
+redact_ci_file "$START_LOG"
+tee "$LOG_DIR/university-seed-supabase-start.log" < "$START_LOG"
+rm -f "$START_LOG"
+[ "$START_STATUS" -eq 0 ] || exit "$START_STATUS"
 
 echo "=== applying a clean database reset (all migrations)"
 supabase db reset 2>&1 | tee "$LOG_DIR/university-seed-db-reset.log"

@@ -17,11 +17,13 @@ node scripts/assert-local-db.mjs "$DB_URL"
 }
 
 need() { command -v "$1" >/dev/null || { echo "MISSING TOOL: $1" >&2; exit 3; }; }
-for tool in node npm supabase docker psql; do need "$tool"; done
+for tool in node npm supabase docker psql curl timeout; do need "$tool"; done
 docker info >/dev/null
 
 LOCAL_ENV="$(mktemp)"
+FUNCTION_PID=""
 cleanup() {
+  if [ -n "$FUNCTION_PID" ]; then kill "$FUNCTION_PID" >/dev/null 2>&1 || true; wait "$FUNCTION_PID" >/dev/null 2>&1 || true; fi
   rm -f "$LOCAL_ENV"
   timeout 120s supabase stop --no-backup >/dev/null 2>&1 || true
 }
@@ -71,4 +73,32 @@ psql "$DB_URL" -X -v ON_ERROR_STOP=1 --single-transaction -q -f supabase/seed/03
 # and asserts 20/10/10, 20 unique GPA values, seven tracks, zero graduate leakage, and four existing grads.
 node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed-apply.log"
 
-echo "UNIVERSITY SEED SMOKE PASSED: local Auth, identities, academic records, admin grants and idempotency"
+# Also run the synthetic PDF/DOCX CV field-accuracy harness against the actual local Edge Function.
+supabase functions serve --env-file "$LOCAL_ENV" > "$LOG_DIR/university-seed-functions-serve.log" 2>&1 &
+FUNCTION_PID=$!
+READY=0
+READY_STREAK=0
+CODE="000"
+for _ in $(seq 1 90); do
+  CODE="$(curl -sS -o /dev/null -w '%{http_code}' -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/functions/v1/recommend" 2>/dev/null || true)"
+  if [ "$CODE" = "405" ]; then
+    READY_STREAK=$((READY_STREAK + 1))
+    if [ "$READY_STREAK" -ge 2 ]; then READY=1; break; fi
+  else
+    READY_STREAK=0
+  fi
+  if ! kill -0 "$FUNCTION_PID" >/dev/null 2>&1; then
+    echo "Local Edge Function process exited early" >&2
+    tail -100 "$LOG_DIR/university-seed-functions-serve.log" >&2
+    exit 1
+  fi
+  sleep 1
+done
+[ "$READY" = "1" ] || {
+  echo "Local Edge Function gateway not ready: expected two HTTP 405 GET responses, received $CODE" >&2
+  tail -100 "$LOG_DIR/university-seed-functions-serve.log" >&2
+  exit 1
+}
+node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
+
+echo "UNIVERSITY SEED + CV EVALUATION PASSED: local Auth, identities, academic records, admin grants, idempotency and parser metrics"

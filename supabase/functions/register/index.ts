@@ -33,17 +33,6 @@ Deno.serve(async (req) => {
     return json({ error: "SERVER_CONFIGURATION_ERROR" }, 500);
   }
 
-  const provider = createIdentityProviderFromEnv({
-    IDENTITY_PROVIDER_MODE: env("IDENTITY_PROVIDER_MODE"),
-    IDENTITY_PROVIDER_URL: env("IDENTITY_PROVIDER_URL"),
-    IDENTITY_PROVIDER_TOKEN: env("IDENTITY_PROVIDER_TOKEN"),
-    ALLOW_MOCK_IDENTITY: env("ALLOW_MOCK_IDENTITY"),
-  });
-  if (!provider) {
-    // BLOCKED_EXTERNAL: no approved institutional provider/credentials were supplied.
-    return json({ error: "IDENTITY_PROVIDER_UNAVAILABLE" }, 503);
-  }
-
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)
       || Object.keys(body).some((key) => !ALLOWED_KEYS.has(key))) {
@@ -65,15 +54,57 @@ Deno.serve(async (req) => {
     return json({ error: "INVALID_FULL_NAME" }, 422);
   }
 
-  const verification = await provider.verify({ nationalId, phone });
-  if (!verification.verified) {
-    return json({ error: verification.error_code ?? "IDENTITY_NOT_VERIFIED" }, 422);
-  }
   const digest = await nationalIdDigest(digestSecret, nationalId);
 
   const admin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+
+  // Fast path: an exact pending identity already passed the institutional check. OTP resend must
+  // remain possible even while the institution's API is temporarily unavailable.
+  const pendingRetry = await admin.rpc("find_pending_registration_retry", {
+    p_phone: phone,
+    p_national_id_digest: digest,
+  });
+  if (pendingRetry.error) {
+    return json({ error: "REGISTRATION_RETRY_UNAVAILABLE" }, 503);
+  }
+  if (typeof pendingRetry.data === "string" && UUID_RE.test(pendingRetry.data)) {
+    const existingIdentities = await admin.from("human_identities")
+      .select("identity_type")
+      .eq("profile_id", pendingRetry.data)
+      .eq("status", "VERIFIED");
+    if (existingIdentities.error) {
+      return json({ error: "REGISTRATION_RETRY_UNAVAILABLE" }, 503);
+    }
+
+    const anon = createClient(url, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    const otp = await anon.auth.signInWithOtp({ phone, options: { shouldCreateUser: false } });
+    if (otp.error) return json({ error: "OTP_DELIVERY_FAILED" }, 503);
+
+    return json({
+      status: "PENDING_OTP",
+      identities: (existingIdentities.data ?? []).map((identity) => identity.identity_type),
+      next: "Confirm the phone OTP, then POST /functions/v1/finalize-registration with the new access token.",
+    }, 202);
+  }
+
+  const provider = createIdentityProviderFromEnv({
+    IDENTITY_PROVIDER_MODE: env("IDENTITY_PROVIDER_MODE"),
+    IDENTITY_PROVIDER_URL: env("IDENTITY_PROVIDER_URL"),
+    IDENTITY_PROVIDER_TOKEN: env("IDENTITY_PROVIDER_TOKEN"),
+    ALLOW_MOCK_IDENTITY: env("ALLOW_MOCK_IDENTITY"),
+  });
+  if (!provider) {
+    // BLOCKED_EXTERNAL: no approved institutional provider/credentials were supplied.
+    return json({ error: "IDENTITY_PROVIDER_UNAVAILABLE" }, 503);
+  }
+  const verification = await provider.verify({ nationalId, phone });
+  if (!verification.verified) {
+    return json({ error: verification.error_code ?? "IDENTITY_NOT_VERIFIED" }, 422);
+  }
   const created = await admin.auth.admin.createUser({
     phone,
     password: input.password,

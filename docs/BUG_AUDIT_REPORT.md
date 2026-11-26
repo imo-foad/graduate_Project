@@ -122,7 +122,7 @@ Real institutional identity-provider and SMS credentials remain BLOCKED_EXTERNAL
 ## 7. Delivery
 
 - QA branch: qa/independent-bug-hunt-20261126
-- Latest QA commit: d099f981b95ce991350eef94dcf02bd63cd780e2
+- Latest QA commit: authoritative current PR #43 head (see the PR commits tab).
 - PR: https://github.com/imo-foad/graduate_Project/pull/43 (OPEN; base is fix/complete-foundation-and-training-rules-20261126)
 - PR #42 was closed during an intermediate rebase; PR #43 is the active replacement.
 - QA did not merge.

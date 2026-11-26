@@ -551,7 +551,7 @@ paths:
         '202': { description: 'PENDING_OTP; confirm the SMS code and complete registration' }
         '409': { description: 'PHONE_ALREADY_REGISTERED or IDENTITY_ALREADY_LINKED' }
         '422': { description: 'Invalid input or institutional verification rejected' }
-        '503': { description: 'IDENTITY_PROVIDER_UNAVAILABLE or OTP_DELIVERY_FAILED; no verification is fabricated' }
+        '503': { description: 'IDENTITY_PROVIDER_UNAVAILABLE, OTP_DELIVERY_FAILED, or REGISTRATION_RETRY_UNAVAILABLE. Resubmitting the exact pending phone + National-ID digest pair resends OTP without creating a second Auth user; a retry never changes the pending account password.' }
   /functions/v1/finalize-registration:
     post:
       summary: Activate the pending phone-first account after Supabase confirms SMS OTP and the institution has verified at least one identity

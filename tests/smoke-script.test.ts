@@ -111,3 +111,16 @@ test("CV parser benchmark uses a dedicated account isolated from the CV integrat
   assert.ok(!cvUsers.includes(benchmarkUser),
     "CV benchmark must not consume the same per-user CV_PARSE bucket as the focused CV integration");
 });
+
+
+test("CV parsing and rate-limit integration use independent per-user quota buckets", () => {
+  const cvIntegration = readFileSync(join(ROOT, "tests/integration/cv-parse.integration.mjs"), "utf8");
+  const evaluator = readFileSync(join(ROOT, "scripts/evaluate-cv-parser-local.mjs"), "utf8");
+  const rateLimits = readFileSync(join(ROOT, "tests/integration/rate-limits.integration.mjs"), "utf8");
+  const cvUsers = [...cvIntegration.matchAll(/const demo[AB] = "(\S+@\S+)"/g)].map((match) => match[1]);
+  const benchmarkUser = evaluator.match(/const userEmail = "(\S+@\S+)"/)?.[1];
+  const rateLimitUser = rateLimits.match(/email: "(\S+@\S+)"/)?.[1];
+  assert.ok(benchmarkUser && rateLimitUser, "each CV test stage must declare its own Auth account");
+  assert.equal(new Set([...cvUsers, benchmarkUser, rateLimitUser]).size, cvUsers.length + 2,
+    "focused parser integration, parser benchmark and quota test must not share per-user CV_PARSE buckets");
+});

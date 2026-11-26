@@ -29,10 +29,12 @@ async function request(path, init = {}) {
     retryAfter: response.headers.get("Retry-After"),
   };
 }
+// Keep this probe on its own graduate so the result never depends on CV parser tests
+// or other integrations that intentionally consume the same user's token bucket.
 const login = await request("/auth/v1/token?grant_type=password", {
   method: "POST",
   headers: headers(null, { "Content-Type": "application/json" }),
-  body: JSON.stringify({ email: "graduate.demo@alumni.test", password }),
+  body: JSON.stringify({ email: "graduate.data@alumni.test", password }),
 });
 assert.equal(login.status, 200, "rate-limit probe graduate must authenticate");
 const token = login.json.access_token;
@@ -40,8 +42,8 @@ const graduateId = login.json.user.id;
 
 const insertedIds = [];
 try {
-  // CV_PARSE has a five-token initial bucket. Earlier CV integration cases use the
-  // same demo account; keep submitting isolated metadata rows until the bucket blocks.
+  // CV_PARSE has a five-token initial bucket. This dedicated user starts with a fresh bucket,
+  // so the test proves the full five successes followed by a genuine quota rejection.
   let rateLimited = null;
   let completedAttempts = 0;
   for (let i = 0; i < 8; i++) {

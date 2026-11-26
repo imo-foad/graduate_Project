@@ -33,7 +33,7 @@ select concat_ws('|',
  (select count(distinct academic_track) from public.student_academic_records where record_source='SYNTHETIC_SEED'),
  (select count(*) from public.human_identities where identity_type='FACULTY' and verification_source='SYNTHETIC_SEED' and institution_ref like 'SYNTH-FAC-%'),
  (select count(*) from public.faculty_academic_records where record_source='SYNTHETIC_SEED'),
- (select count(*) from private.platform_admins a join public.profiles p on p.id=a.user_id where a.is_active and p.phone between '+12125550130' and '+12125550139'),
+ (select count(*) from private.platform_admins a join public.profiles p on p.id=a.user_id join auth.users u on u.id=p.id where a.is_active and p.phone between '+12125550130' and '+12125550139' and u.raw_user_meta_data->>'synthetic_seed'='true'),
  (select count(*) from public.profiles p join public.graduate_profiles gp on gp.profile_id=p.id where p.phone between '+12125550100' and '+12125550139'),
  (select count(*) from public.human_identities h join public.profiles p on p.id=h.profile_id where p.phone between '+12125550100' and '+12125550139' and h.identity_type='GRADUATE'),
  (select count(*) from public.profiles p join public.graduate_profiles gp on gp.profile_id=p.id where p.email in ('graduate.demo@alumni.test','graduate.android@alumni.test','graduate.data@alumni.test','graduate.cyber@alumni.test'))

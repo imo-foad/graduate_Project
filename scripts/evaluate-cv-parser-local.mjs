@@ -201,12 +201,23 @@ async function upload(uid,token,doc) {
   assert.equal(meta.status,201,doc.key+" metadata failed: "+meta.raw);
   return {id:meta.data[0].id,path,bytes,mime};
 }
-async function cleanup(token,path,id) {
-  if(path) await request("/storage/v1/object/cv-documents",{
-    method:"DELETE",headers:headers(service,token,{"Content-Type":"application/json"}),
-    body:JSON.stringify({prefixes:[path]}),
-  }).catch(()=>{});
-  if(id) await request("/rest/v1/cv_documents?id=eq."+id,{method:"DELETE",headers:headers(service,token)}).catch(()=>{});
+async function cleanup(_token,_path,id) {
+  // Delete metadata first so migration 0027 enqueues the object, then drain it through the worker.
+  if (id) {
+    const metadata = await request("/rest/v1/cv_documents?id=eq."+id,{
+      method:"DELETE",headers:headers(service,null,{Prefer:"return=minimal"}),
+    });
+    if (![200,204].includes(metadata.status)) throw new Error("CV metadata cleanup failed: "+metadata.raw);
+  }
+  for (let attempt=0; attempt<5; attempt++) {
+    const worker = await request("/functions/v1/cleanup-cv-objects",{
+      method:"POST",headers:headers(service,service,{"Content-Type":"application/json"}),
+      body:"{}",
+    });
+    if (worker.status !== 200) throw new Error("CV Storage cleanup worker failed: "+worker.raw);
+    if ((worker.data?.failed ?? 0) > 0) throw new Error("CV Storage cleanup worker reported failures: "+JSON.stringify(worker.data));
+    if ((worker.data?.processed ?? 0) === 0) break;
+  }
 }
 
 const loginResult=await login();

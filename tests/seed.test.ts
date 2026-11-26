@@ -107,6 +107,8 @@ test("university seed SQL is guarded, transactional, deterministic and credentia
   assert.match(sql,/private\.platform_admins/);
   assert.match(sql,/student_academic_records/);
   assert.match(sql,/faculty_academic_records/);
+  assert.match(sql,/raw_user_meta_data.*synthetic_seed/);
+  assert.match(sql,/raw_user_meta_data.*seed_key/);
   assert.doesNotMatch(sql,/DEMO_PASSWORD|service_role_key|national_id/i);
   assert.equal(buildSeed()["04_university_accounts.sql"],sql);
 });

@@ -131,10 +131,20 @@ Deno.serve(async (req) => {
     if (pending.error) {
       return json({ error: "REGISTRATION_RETRY_UNAVAILABLE" }, 503);
     }
-    if (typeof pending.data !== "string" || !UUID_RE.test(pending.data)) {
-      return json({ error: "PHONE_ALREADY_REGISTERED" }, 409);
+    if (typeof pending.data === "string" && UUID_RE.test(pending.data)) {
+      userId = pending.data;
+    } else {
+      // Recover only an Auth-created pending profile with no identity ledger at all. This fallback
+      // is reached after the provider has just re-verified the submitted National ID and phone.
+      const unlinked = await admin.rpc("find_unlinked_pending_registration_retry", { p_phone: phone });
+      if (unlinked.error) {
+        return json({ error: "REGISTRATION_RETRY_UNAVAILABLE" }, 503);
+      }
+      if (typeof unlinked.data !== "string" || !UUID_RE.test(unlinked.data)) {
+        return json({ error: "PHONE_ALREADY_REGISTERED" }, 409);
+      }
+      userId = unlinked.data;
     }
-    userId = pending.data;
   }
 
   if (!UUID_RE.test(userId)) {

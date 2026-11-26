@@ -172,6 +172,10 @@ test("university seed SQL is guarded, transactional, deterministic and credentia
   assert.match(sql,/faculty_academic_records/);
   assert.match(sql,/raw_user_meta_data.*synthetic_seed/);
   assert.match(sql,/raw_user_meta_data.*seed_key/);
+  assert.ok(sql.includes("private.normalize_auth_phone(a.phone)"),
+    "Auth's plus-stripped storage representation must be normalized before comparing the fixture E.164 phone");
+  assert.ok(sql.includes("a.phone_confirmed_at is not null"),
+    "phone confirmation remains a required seed precondition");
   assert.doesNotMatch(sql,/DEMO_PASSWORD|service_role_key|national_id/i);
   assert.equal(buildSeed()["04_university_accounts.sql"],sql);
 });

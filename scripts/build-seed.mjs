@@ -149,7 +149,9 @@ on conflict (opportunity_id) do update set venue = excluded.venue, target_audien
     "do $guard$ begin if current_setting('app.synthetic_seed_allowed',true) is distinct from 'local-only' then raise exception 'SYNTHETIC_UNIVERSITY_SEED_REQUIRES_LOCAL_GUARD'; end if; end $guard$;"];
   const authCheck = u => `do $auth_check$ begin if not exists (
     select 1 from public.profiles p join auth.users a on a.id=p.id
-    where p.phone=${q(u.phone)} and p.email is null and a.phone=${q(u.phone)} and a.phone_confirmed_at is not null
+    where p.phone=${q(u.phone)} and p.email is null
+      and private.normalize_auth_phone(a.phone)=${q(u.phone)}
+      and a.phone_confirmed_at is not null
       and a.raw_user_meta_data->>'synthetic_seed' = 'true' and a.raw_user_meta_data->>'seed_key' = ${q(u.seed_key)}
   ) then raise exception ${q("SYNTHETIC_PHONE_AUTH_USER_NOT_CONFIRMED: "+u.seed_key)}; end if; end $auth_check$;`;
   const activate = u => `update public.profiles set full_name=${q(u.full_name)}, account_status='ACTIVE',

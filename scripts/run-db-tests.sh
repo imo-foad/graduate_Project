@@ -75,13 +75,39 @@ EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 # A focused run makes the high-risk three-type catalogue/auth fixture independently observable.
 echo "=== D1. focused Test 15"
-supabase test db database/15_three_type_scope.test.sql 2>&1 | tee "$LOG_DIR/pgtap-15-focused.log"
+supabase test db supabase/tests/database/15_three_type_scope.test.sql 2>&1 | tee "$LOG_DIR/pgtap-15-focused.log"
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap-15-focused.log"; then fail "focused Test 15 reported failures"; fi
-grep -q "15_three_type_scope.test.sql" "$LOG_DIR/pgtap-15-focused.log" || fail "focused pgTAP output does not show Test 15 execution"
+grep -q "supabase/tests/database/15_three_type_scope.test.sql" "$LOG_DIR/pgtap-15-focused.log" || fail "focused pgTAP output does not show Test 15 execution"
+grep -Eq '^Files=1, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap-15-focused.log" || fail "focused Test 15 did not execute a non-empty TAP plan"
+grep -q '^Result: PASS
+
+# ---- E. real concurrent sessions
+echo "=== E. concurrency"
+bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
+
+# ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function
+echo "=== F. local Supabase HTTP integration"
+bash scripts/run-local-integrations.sh 2>&1 | tee "$LOG_DIR/local-integrations.log"
+
+echo "DB TESTS PASSED"
+ "$LOG_DIR/pgtap-15-focused.log" || fail "focused Test 15 TAP plan did not pass"
 echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi
+grep -Eq '^Files=18, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 18 files with a non-empty TAP plan"
+grep -q '^Result: PASS
+
+# ---- E. real concurrent sessions
+echo "=== E. concurrency"
+bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
+
+# ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function
+echo "=== F. local Supabase HTTP integration"
+bash scripts/run-local-integrations.sh 2>&1 | tee "$LOG_DIR/local-integrations.log"
+
+echo "DB TESTS PASSED"
+ "$LOG_DIR/pgtap.log" || fail "full pgTAP TAP plan did not pass"
 
 # ---- E. real concurrent sessions
 echo "=== E. concurrency"

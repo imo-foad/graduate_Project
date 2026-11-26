@@ -35,12 +35,12 @@ jobs:
           "$INSTALL_DIR/gitleaks" version
       - name: Download and inspect retained artifacts without unsafe extraction
         env:
-          GITHUB_TOKEN: \${{ github.token }}
-          GITHUB_REPOSITORY: \${{ github.repository }}
-          GITHUB_WORKSPACE: \${{ github.workspace }}
-          RUNNER_TEMP: \${{ runner.temp }}
-          GITHUB_STEP_SUMMARY: \${{ github.step_summary }}
-          GITLEAKS_BIN: \${{ runner.temp }}/gitleaks-8.30.1/gitleaks
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
         shell: bash
         run: |
           set -euo pipefail

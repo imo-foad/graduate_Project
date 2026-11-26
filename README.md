@@ -6,10 +6,7 @@ All data is synthetic. Android is a separate workstream: see `docs/openapi.yaml`
 ## Product scope (2026-11-26)
 
 Approved account scope: Student, Graduate and Faculty human accounts, plus Company, Organization and
-Institution identities. **Implementation status:** graduate accounts are implemented end to end; company
-identities exist as `companies` + `company_memberships` with owner/recruiter/viewer permissions. Student,
-Faculty, Organization and Institution identity models, national-ID registration and institutional database
-verification are **not implemented yet** — they are tracked as product work, not delivered by this branch.
+Institution identities. **Implementation status:** phone-first accounts and verified human identity types STUDENT, GRADUATE and FACULTY are supported; student and faculty attributes are held in typed academic tables. The new university cohort uses simulated `SYNTHETIC_SEED` verification only for disposable local development and is not evidence of real institutional verification. Real institutional provider credentials and SMS delivery remain **BLOCKED_EXTERNAL**. Company identities exist as `companies` + `company_memberships` with owner/recruiter/viewer permissions.
 
 Cancelled product lines (explicit product decision, not deprioritisation):
 
@@ -27,18 +24,18 @@ forward migration.
 
 ## Architecture decision
 
-Supabase (free plan) with no separate server: relational integrity, RLS and race-sensitive operations live in
-Postgres (RPCs with row locks); the only Edge Function is `recommend` (deterministic scoring, no paid AI).
+Supabase-first backend: relational integrity, RLS and race-sensitive operations live in Postgres (RPCs with row locks). Edge Functions currently cover `register`, `finalize-registration`, `recommend`, `parse-cv`, `cleanup-cv-objects`, `invite-graduate`, `manage-graduate` and `delete-graduate`. Recommendation scoring and CV text extraction are free/local-first; no paid AI/OCR dependency is used.
 Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k function invocations, pause after
 7 days idle) are **not verified against supabase.com/pricing** — check before relying on them.
 
 ## Layout
 
-- `supabase/migrations/0001..0025` — schema, catalogue, activity, RPCs, grants/RLS/storage, social feed, onboarding, recommendations and scope alignment
-- `fixtures/*.json` -> `npm run build:seed` -> `supabase/seed/01_skills.sql, 02_catalogue.sql, 03_demo_profiles.sql`
+- `supabase/migrations/0001..0034` — schema, catalogue, activity, RLS/storage, social feed, identity, company rules, recommendation availability, CV cleanup and typed synthetic university academic records
+- `fixtures/*.json` -> `npm run build:seed` -> four generated SQL seeds for skills, active catalogue, the four existing graduate demos and local synthetic university accounts
 - `supabase/functions/_shared/` — deterministic scoring, opportunity filtering and recommendation orchestration
 - `supabase/functions/recommend/` — authenticated Edge Function
-- `scripts/provision-demo-users.mjs` — creates four synthetic demo Auth users (public sign-up stays disabled)
+- `scripts/provision-demo-users.mjs` — provisions the four existing synthetic graduate demos locally only
+- `scripts/provision-university-demo-users.mjs` and `scripts/seed-university-demo.mjs` — provision and apply 20 students, 10 faculty and 10 local platform admins; strict localhost guards, phone-only Auth users, no SMS
 - `scripts/run-local-integrations.sh` — local-only Auth, demo-seed, Storage and Edge HTTP checks
 - `tests/` — Node, OpenAPI, workflow, SQL, pgTAP and HTTP integration tests
 
@@ -95,3 +92,11 @@ See `docs/AUDIT_REPORT.md` for the subsystem scores, exact test evidence and rem
 - `POST /rest/v1/rpc/record_recommendation_interaction` records IMPRESSION, VIEW, DISMISS or NOT_INTERESTED. Saves, job applications and event registrations are recorded automatically.
 - Companies/admins can set a numeric minimum through `set_job_experience_requirement`; it can be mandatory (not recommended below threshold) or preferred (score penalty).
 - Career paths and recommendation scoring are local deterministic TypeScript. pgvector/hosted LLMs are intentionally deferred to avoid paid infrastructure and CV data sharing.
+
+## Current verification snapshot (2026-11-26)
+
+Builder PR #41 HEAD before the university dataset commits: [Actions run #765](https://github.com/imo-foad/graduate_Project/actions/runs/45846570698). The static, OpenAPI and workflow-lint job passed. The disposable database job failed three QA-owned pgTAP expectations in database tests 01, 02 and 15; the exact current log is linked from the run artifact. Because pgTAP failed, concurrency and all local HTTP integrations did not execute in that run. Do not treat this snapshot as a green release or merge signal. PR #43 contains follow-up QA work and must be rebased and retested against the latest Builder head.
+
+## Synthetic university development dataset
+
+The repository includes a local-only cohort of 20 STUDENT identities, 10 FACULTY identities and 10 private platform-admin grants, alongside the original four graduate demo accounts. Student GPA values are distinct on a synthetic 4.0 scale. Setup and exact local commands are documented in `docs/SYNTHETIC_UNIVERSITY_DATASET.md`. Admin grants are made only by the local seed runner; they are not migrations or cloud bootstrap instructions.

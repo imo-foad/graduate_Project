@@ -45,18 +45,18 @@ begin
 
   if e.min_graduation_year is not null
      and (gp.graduation_year is null or gp.graduation_year < e.min_graduation_year) then
-    f := f || 'GRADUATION_YEAR_TOO_EARLY';
+    f := array_append(f, 'GRADUATION_YEAR_TOO_EARLY');
   end if;
 
   if e.max_graduation_year is not null
      and (gp.graduation_year is null or gp.graduation_year > e.max_graduation_year) then
-    f := f || 'GRADUATION_YEAR_TOO_LATE';
+    f := array_append(f, 'GRADUATION_YEAR_TOO_LATE');
   end if;
 
   if cardinality(e.allowed_degrees) > 0
      and (gp.degree is null
           or not (lower(gp.degree) = any (select lower(d) from unnest(e.allowed_degrees) d))) then
-    f := f || 'DEGREE_NOT_ALLOWED';
+    f := array_append(f, 'DEGREE_NOT_ALLOWED');
   end if;
 
   foreach cert in array coalesce(e.required_certifications, '{}'::text[]) loop
@@ -69,7 +69,7 @@ begin
                 private.normalize_certification_title(cert)
             and private.normalize_certification_title(c.title) <> ''
        ) then
-      f := f || ('MISSING_CERTIFICATION:' || cert);
+      f := array_append(f, 'MISSING_CERTIFICATION:' || cert);
     end if;
   end loop;
 

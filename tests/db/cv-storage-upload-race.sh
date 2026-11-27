@@ -81,7 +81,22 @@ wait_for_app_lock_wait() {
                      and wait_event_type = 'Lock'
                      and wait_event = 'advisory'")"
     fi
-    [ "$count" -ge 1 ] && return 0
+    if [ "$count" -ge 1 ]; then
+      P "select a.pid || ' | ' || coalesce(a.application_name,'') || ' | ' ||
+                coalesce(a.wait_event_type,'') || ' | ' || coalesce(a.wait_event,'') || ' | ' ||
+                coalesce(l.classid::text,'') || ':' || coalesce(l.objid::text,'') || ':' ||
+                coalesce(l.objsubid::text,'') || ' | ' || left(a.query, 500)
+           from pg_catalog.pg_stat_activity a
+           join pg_catalog.pg_locks l on l.pid = a.pid
+          where a.state = 'active'
+            and a.wait_event = 'advisory'
+            and l.locktype = 'advisory'
+            and not l.granted
+            and l.objsubid = 1
+            and ((l.classid::bigint << 32) | l.objid::bigint) = $lock_key::bigint
+            and a.query ~* 'insert.*storage.*objects'" >&2
+      return 0
+    fi
     sleep 0.01
   done
   echo "TIMEOUT waiting for PostgreSQL advisory lock wait: $app (key ${lock_key:-any})" >&2
@@ -423,6 +438,7 @@ P "create schema issue18_storage_race;
    as \$pause\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
+       raise log 'ISSUE18_TEST_UPLOAD_AFTER_INSERT_TRIGGER_REACHED';
        insert into issue18_storage_race.upload_first_insert_events(storage_path, backend_pid, txid)
        values (new.name, pg_catalog.pg_backend_pid(), pg_catalog.txid_current());
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);

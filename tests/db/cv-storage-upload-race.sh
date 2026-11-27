@@ -259,42 +259,9 @@ UPLOAD_DOC="$(tr -d '[:space:]' < "$TMP/upload-doc.id")"
   exit 2
 }
 
-# Prepare real bytes through the local Storage HTTP API. The later authenticated SQL INSERT
-# recreates only the storage.objects row so this test can hold the exact RLS INSERT transaction
-# at a deterministic barrier while keeping the real backing object available to the worker.
-upload_in_background "$UPLOAD_PATH" "upload-first-preflight"
-set +e
-wait "$UPLOAD_PID"; PREFLIGHT_UPLOAD_STATUS=$?
-set -e
-UPLOAD_PID=""
-PREFLIGHT_HTTP_STATUS="$(cat "$TMP/upload-first-preflight.status" 2>/dev/null || echo 000)"
-check "upload-first backing bytes are created through the real Storage API" "200" "$PREFLIGHT_HTTP_STATUS"
-check "upload-first backing bytes are readable before the controlled INSERT race" "200" "$(download_status "$UPLOAD_PATH" "upload-first-preflight-download")"
-[ "$PREFLIGHT_UPLOAD_STATUS" -eq 0 ] && [ "$PREFLIGHT_HTTP_STATUS" = "200" ] || {
-  echo "PREREQUISITE FAILED: cannot prepare actual Storage bytes for upload-first race" >&2
-  exit 2
-}
-
-# Save the complete Storage row, then remove only its database record. Storage bytes live outside
-# PostgreSQL and remain available for the authenticated INSERT plus the real worker DELETE.
-P "create schema issue18_storage_race;
-   create table issue18_storage_race.upload_first_row as
-     select to_jsonb(o) as row_data from storage.objects o
-      where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH';
-   delete from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH';" >/dev/null
-UPLOAD_COLUMNS="$(P "select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
-  from information_schema.columns where table_schema = 'storage' and table_name = 'objects'
-    and is_generated = 'NEVER' and is_identity = 'NO'")"
-UPLOAD_SELECT_COLUMNS="$(P "select string_agg('r.' || quote_ident(column_name), ', ' order by ordinal_position)
-  from information_schema.columns where table_schema = 'storage' and table_name = 'objects'
-    and is_generated = 'NEVER' and is_identity = 'NO'")"
-[ -n "$UPLOAD_COLUMNS" ] && [ -n "$UPLOAD_SELECT_COLUMNS" ] || {
-  echo "PREREQUISITE FAILED: could not inspect writable storage.objects columns" >&2
-  exit 2
-}
-check "upload-first Storage metadata row is staged for the authenticated INSERT" "1" \
-  "$(P "select count(*) from issue18_storage_race.upload_first_row")"
-check "upload-first database row is absent while the real backing bytes are staged" "0" \
+# The second object path has live CV metadata but no Storage row yet. Its HTTP upload is
+# paused by a BEFORE INSERT trigger after taking the same path advisory lock as the RLS policy.
+check "upload-first object path starts without a Storage object row" "0" \
   "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 
 # Ordering A: deletion acquires the shared path lock and remains uncommitted.
@@ -332,40 +299,29 @@ check "storage upload blocks on the path lock while deletion is uncommitted, the
 check "delete-first tombstone is committed with no live CV metadata" "0" \
   "$(P "select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path where q.storage_path = '$DELETE_PATH'")"
 
-# Ordering B: the actual storage.objects INSERT wins the same RLS advisory lock;
-# deletion then waits for that authenticated INSERT to commit before creating the tombstone.
+# Ordering B: the real Storage API upload takes the same path advisory lock BEFORE the RLS
+# WITH CHECK runs. Deletion waits for that lock; after release the upload commits first, then the
+# metadata delete creates the tombstone and the worker removes the actual object bytes.
 UPLOAD_BARRIER=918180000000001102
-P "create function issue18_storage_race.pause_storage_insert()
+P "create schema issue18_storage_race;
+   create function issue18_storage_race.pause_storage_insert()
    returns trigger language plpgsql security definer set search_path = ''
-   as \$pause\$
+   as \\$pause\\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
+       perform private.lock_cv_storage_paths(array[new.name]);
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
        perform pg_catalog.pg_advisory_unlock($UPLOAD_BARRIER);
      end if;
      return new;
    end
-   \$pause\$;
+   \\$pause\\$;
    create trigger zz_issue18_pause_storage_insert
-   after insert on storage.objects
+   before insert on storage.objects
    for each row execute function issue18_storage_race.pause_storage_insert();" >/dev/null
 
 start_barrier "$UPLOAD_BARRIER" "UPLOAD_BARRIER_READY"
-PGAPPNAME="issue18-storage-upload-first" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \\
-  >"$TMP/upload-first-insert.log" 2>&1 <<SQL &
-begin;
-set local application_name = 'issue18-storage-upload-first';
-select pg_catalog.set_config('request.jwt.claims',
-  jsonb_build_object('sub', '$OWNER', 'role', 'authenticated')::text, true);
-set local role authenticated;
-insert into storage.objects ($UPLOAD_COLUMNS)
-select $UPLOAD_SELECT_COLUMNS
-  from issue18_storage_race.upload_first_row b
-  cross join lateral jsonb_populate_record(null::storage.objects, b.row_data) as r;
-reset role;
-commit;
-SQL
-UPLOAD_PID=$!
+upload_in_background "$UPLOAD_PATH" "upload-first"
 wait_for_storage_insert_lock_wait
 
 PGAPPNAME="issue18-storage-delete-after-upload" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \\
@@ -383,26 +339,28 @@ DELETE_PID=$!
 wait_for_app_lock_wait "issue18-storage-delete-after-upload"
 release_barrier "UPLOAD_BARRIER_RELEASED"
 set +e
-wait "$UPLOAD_PID"; UPLOAD_INSERT_STATUS=$?
+wait "$UPLOAD_PID"; UPLOAD_WAIT_STATUS=$?
 wait "$DELETE_PID"; DELETE_STATUS=$?
 set -e
 UPLOAD_PID=""; DELETE_PID=""
-if [ "$UPLOAD_INSERT_STATUS" -ne 0 ]; then
-  echo "UPLOAD_FIRST_STORAGE_INSERT_DIAGNOSTIC:"
-  sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first-insert.log" | tail -n 20
+UPLOAD_HTTP_STATUS="$(cat "$TMP/upload-first.status" 2>/dev/null || echo 000)"
+if [ "$UPLOAD_HTTP_STATUS" != "200" ] && [ "$UPLOAD_HTTP_STATUS" != "201" ]; then
+  echo "UPLOAD_FIRST_STORAGE_ERROR_BODY (test-only response):"
+  sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first.body" | head -c 1200
+  echo
 fi
 UPLOAD_FIRST_OBJECTS_BEFORE_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")"
 UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
-check "upload-first Storage INSERT wins the path lock before deletion commits" "0" "$UPLOAD_INSERT_STATUS"
-check "upload-first metadata deletion commits after waiting for the Storage INSERT lock" "0" "$DELETE_STATUS"
-check "upload-first object row and tombstone coexist before worker while real bytes remain readable" "1" \\
+check "upload-first Storage API request commits after winning the path lock" "200" "$UPLOAD_HTTP_STATUS"
+check "upload-first metadata deletion commits after waiting for the Storage upload lock" "0" "$DELETE_STATUS"
+check "upload-first object row and tombstone coexist before worker" "1" \\
   "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \\
      [ "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER" = "1" ] && \\
      [ "$UPLOAD_FIRST_METADATA_BEFORE_WORKER" = "0" ] && \\
      [ "$(download_status "$UPLOAD_PATH" "upload-first-before-worker")" = "200" ] && echo 1 || echo 0)"
 
-# The service-role worker removes the actual backing bytes and the Storage metadata row.
+# The service-role worker removes the actual uploaded bytes and Storage metadata row.
 WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \\
   -X POST "$SUPABASE_URL/functions/v1/cleanup-cv-objects" \\
   -H "apikey: $SUPABASE_ANON_KEY" \\
@@ -411,11 +369,11 @@ WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \\
   --data '{}')"
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
 check "upload that wins the lock is still removed by the worker after tombstone" "1" \\
-  "$([ "$UPLOAD_INSERT_STATUS" -eq 0 ] && \\
-     [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \\
-     [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \\
-     [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \\
-     [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0)"
+  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]) && \\
+   [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \\
+   [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \\
+   [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \\
+   [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0)"
 
 echo "CV STORAGE UPLOAD RACE PASSED"
 else

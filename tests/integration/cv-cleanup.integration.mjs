@@ -55,11 +55,11 @@ async function request(path, init = {}) {
   const res = await fetch(base + path, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) });
   return readResponse(res);
 }
-async function login(email) {
+async function login(email, accountPassword = password) {
   const r = await request("/auth/v1/token?grant_type=password", {
     method: "POST",
     headers: headers(null, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password: accountPassword }),
   });
   const summary = {
     status: r.status,
@@ -231,32 +231,59 @@ try {
     sql("select storage_path from public.cv_documents where id = " + quote(newId)) === newPath);
   pass("no cleanup row was ever created for the new path", queueCount(newPath) === 0);
 
-  // ---- B2. A re-used object key cancels a queued cleanup ------------------------------------------
-  const reusePath = ownerPrefix + "-reuse.pdf";
-  const reuseBytes = buildPdf("REUSE CV\nReact");
-  staleObjects.push(reusePath);
-  pass("reusable object uploads", (await upload(owner.token, reusePath, reuseBytes)).status < 300);
-  const reuseMeta = await createMetadata(owner.token, owner.id, reusePath, reuseBytes);
-  await deleteMetadata(owner.token, reuseMeta.json?.[0]?.id);
-  pass("deleting the first metadata row queues the path", queueCount(reusePath) === 1);
-  // A client that re-uses a key removes the old object first (the bucket deliberately has no UPDATE
-  // policy, so an in-place upsert is not a supported client operation), then uploads the same key
-  // again and registers it. The queued cleanup must be cancelled rather than deleting the new bytes.
-  const reuseRemove = await removeObject(owner.token, reusePath);
-  pass("the owner removes the old object before re-using the key",
-    reuseRemove.status === 200 || reuseRemove.status === 204, reuseRemove);
-  const reupload = await upload(owner.token, reusePath, reuseBytes);
-  const reuseAgain = await createMetadata(owner.token, owner.id, reusePath, reuseBytes);
-  pass("the same object key can be re-registered after re-upload",
-    (reupload.status === 200 || reupload.status === 201) && reuseAgain.status === 201, { reupload, reuseAgain });
-  const reusedQueue = queue(reusePath);
-  pass("re-registering the path cancels the queued cleanup",
-    reusedQueue.length === 1 && reusedQueue[0].status === "DONE" &&
-    reusedQueue[0].last_error === "PATH_REUSED_CLEANUP_CANCELLED", reusedQueue);
-  const reuseDrain = await worker();
-  pass("worker does not delete a re-used live object",
-    reuseDrain.status === 200 && (await download(owner.token, reusePath)).status === 200, reuseDrain.json);
-  pass("the re-used path has no new cleanup row", queue(reusePath).length === 1);
+  // ---- B2. Immutable Storage paths: a retired key is rejected in every queue state ----------------
+  const retiredPath = ownerPrefix + "-retired.pdf";
+  const retiredBytes = buildPdf("RETIRED CV\\nReact");
+  staleObjects.push(retiredPath);
+  const retiredUpload = await upload(owner.token, retiredPath, retiredBytes);
+  pass("the original private object uploads before retirement",
+    retiredUpload.status === 200 || retiredUpload.status === 201, retiredUpload.status);
+  const retiredMeta = await createMetadata(owner.token, owner.id, retiredPath, retiredBytes);
+  const retiredId = retiredMeta.json?.[0]?.id;
+  pass("metadata is registered for the original Storage object",
+    retiredMeta.status === 201 && Boolean(retiredId), retiredMeta);
+  const retireResult = await deleteMetadata(owner.token, retiredId);
+  pass("metadata deletion queues the Storage path through the owner RPC",
+    retireResult.status === 200 && queueCount(retiredPath) === 1 &&
+    queue(retiredPath)[0]?.status === "PENDING", { response: retireResult, rows: queue(retiredPath) });
+  pass("no live metadata references a queued path",
+    sqlInt("select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path where q.storage_path = " + quote(retiredPath)) === 0);
+
+  const retiredRegistration = await createMetadata(owner.token, owner.id, retiredPath, retiredBytes);
+  pass("a PENDING cleanup path is rejected as permanently retired",
+    retiredRegistration.status >= 400 && retiredRegistration.json?.message === "CV_STORAGE_PATH_RETIRED",
+    { status: retiredRegistration.status, error: retiredRegistration.json?.message ?? retiredRegistration.text });
+
+  const retiredDrain = await worker();
+  const retiredRows = queue(retiredPath);
+  pass("the real worker deletes the retired object bytes",
+    retiredDrain.status === 200 && retiredRows.length === 1 && retiredRows[0]?.status === "DONE" &&
+    (await download(owner.token, retiredPath)).status !== 200,
+    { response: retiredDrain.json, rows: retiredRows });
+
+  const freshPath = ownerPrefix + "-fresh-replacement.pdf";
+  const freshBytes = buildPdf("FRESH REPLACEMENT CV\\nPython and SQL");
+  staleObjects.push(freshPath);
+  const freshUpload = await upload(owner.token, freshPath, freshBytes);
+  pass("a replacement CV uploads under a different fresh path",
+    freshUpload.status === 200 || freshUpload.status === 201, freshUpload.status);
+  const freshMeta = await createMetadata(owner.token, owner.id, freshPath, freshBytes);
+  const freshId = freshMeta.json?.[0]?.id;
+  pass("a never-used replacement path registers successfully",
+    freshMeta.status === 201 && Boolean(freshId), freshMeta);
+  const afterFreshRegistration = await worker();
+  const freshDownload = await download(owner.token, freshPath);
+  pass("running cleanup for the old tombstone cannot delete the new object",
+    afterFreshRegistration.status === 200 && freshDownload.status === 200 &&
+    Buffer.compare(freshDownload.bytes, freshBytes) === 0 &&
+    metadataCount(freshId) === 1 &&
+    sql("select storage_path from public.cv_documents where id = " + quote(freshId)) === freshPath,
+    { response: afterFreshRegistration.json, downloadStatus: freshDownload.status });
+  pass("the old retired path remains a single DONE tombstone",
+    queue(retiredPath).length === 1 && queue(retiredPath)[0]?.status === "DONE");
+  pass("the new path has no cleanup entry",
+    queueCount(freshPath) === 0 &&
+    sqlInt("select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path") === 0);
 
   // ---- C. Already-missing object is idempotent ----------------------------------------------------
   const missingPath = ownerPrefix + "-missing.pdf";
@@ -377,10 +404,11 @@ try {
 
   // ---- G. Approved account deletion cleans every object --------------------------------------------
   const email = "cv-cleanup-e2e-" + tag + "@alumni.test";
+  const targetPassword = "Cv-Cleanup-Test-" + tag.slice(0, 8);
   const created = await request("/auth/v1/admin/users", {
     method: "POST",
     headers: headers(service, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password: "Cv-Cleanup-Test-" + tag.slice(0, 8), email_confirm: true }),
+    body: JSON.stringify({ email, password: targetPassword, email_confirm: true }),
   });
   pass("service role creates a disposable local Auth account", created.status === 200 || created.status === 201, {
     status: created.status,
@@ -389,7 +417,7 @@ try {
   });
   const targetId = created.json?.id;
   createdUsers.push(targetId);
-  const target = await login(email);
+  const target = await login(email, targetPassword);
   const accountPaths = [
     targetId + "/account-a-" + tag + ".pdf",
     targetId + "/account-b-" + tag + ".pdf",

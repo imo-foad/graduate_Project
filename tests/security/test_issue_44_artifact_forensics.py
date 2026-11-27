@@ -345,5 +345,114 @@ class ArtifactForensicsTests(unittest.TestCase):
             self.assertTrue(destination.is_file())
             self.assertEqual(destination.read_bytes(), b"PK\\x03\\x04test")
 
+
+    def test_noncompleted_runs_are_deferred_without_becoming_incomplete(self):
+        runs = [
+            {"id": 21, "status": "completed", "name": "backend-tests",
+             "created_at": "2026-11-27T19:00:00Z"},
+            {"id": 22, "status": "in_progress", "name": "backend-tests",
+             "created_at": "2026-11-27T19:01:00Z"},
+            {"id": 23, "status": "queued", "name": "issue-44-public-secret-audit",
+             "created_at": "2026-11-27T19:02:00Z"},
+        ]
+        state = MODULE.ScanState(Path("."))
+        deferred = MODULE.deferred_run_records(runs, 22)
+        self.assertEqual([item["run_id"] for item in deferred], [22, 23])
+        self.assertTrue(deferred[0]["is_current_run"])
+        self.assertFalse(deferred[1]["is_current_run"])
+        self.assertEqual(state.incomplete, [])
+
+    def test_finding_classification_requires_exact_rule_origin_member_and_line(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            exposure = root / "extracted"
+            exposure.mkdir()
+            report = root / "classifications.json"
+            report.write_text(json.dumps({
+                "schema_version": 1,
+                "classifications": [{
+                    "rule_id": "supabase-secret-key",
+                    "origin": "run:77/logs",
+                    "member": "0_database.txt",
+                    "line": 861,
+                    "classification": "LOCAL_EPHEMERAL_SUPABASE_KEY",
+                    "verdict": "LOCAL_EPHEMERAL_NOT_HOSTED",
+                    "rationale": "The run used the disposable local Supabase stack.",
+                    "baseline_occurrences": 1,
+                }],
+            }), encoding="utf-8")
+            index = MODULE.load_finding_classifications(report)
+            file_path = exposure / "database" / "0_database.txt"
+            file_path.parent.mkdir()
+            file_path.write_text("redacted fixture context only", encoding="utf-8")
+            manifest = {
+                file_path.relative_to(exposure).as_posix(): {
+                    "origin": "run:77/logs", "member": "0_database.txt",
+                }
+            }
+            finding = {
+                "RuleID": "supabase-secret-key", "File": str(file_path), "StartLine": 861,
+            }
+            classified, unclassified = MODULE.classify_gitleaks_findings(
+                [finding], exposure, manifest, index
+            )
+            self.assertEqual(unclassified, [])
+            self.assertEqual(classified[0]["verdict"], "LOCAL_EPHEMERAL_NOT_HOSTED")
+            self.assertEqual(classified[0]["observed_count"], 1)
+
+            classified, unclassified = MODULE.classify_gitleaks_findings(
+                [dict(finding, StartLine=862)], exposure, manifest, index
+            )
+            self.assertEqual(classified, [])
+            self.assertEqual(len(unclassified), 1)
+
+            wrong_origin = {
+                file_path.relative_to(exposure).as_posix(): {
+                    "origin": "run:78/logs", "member": "0_database.txt",
+                }
+            }
+            classified, unclassified = MODULE.classify_gitleaks_findings(
+                [finding], exposure, wrong_origin, index
+            )
+            self.assertEqual(classified, [])
+            self.assertEqual(len(unclassified), 1)
+
+    def test_duplicate_or_unsupported_finding_classifications_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "classifications.json"
+            entry = {
+                "rule_id": "generic-api-key", "origin": "run:1/logs",
+                "member": "database.txt", "line": 10,
+                "classification": "SYNTHETIC_LOCAL_TEST_DIAGNOSTIC",
+                "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+                "rationale": "Disposable local integration fixture metadata.",
+            }
+            path.write_text(json.dumps({
+                "schema_version": 1, "classifications": [entry, entry],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.ForensicsError, "duplicate source keys"):
+                MODULE.load_finding_classifications(path)
+            entry["verdict"] = "SUPPRESSED_ALL_GENERIC_API_KEYS"
+            path.write_text(json.dumps({
+                "schema_version": 1, "classifications": [entry],
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.ForensicsError, "invalid value"):
+                MODULE.load_finding_classifications(path)
+
+    def test_permanent_artifact_download_failure_remains_incomplete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "unavailable.zip"
+            with mock.patch.object(MODULE, "api_open", return_value=(None, 403, {})), \
+                 mock.patch.object(MODULE.time, "sleep") as sleep:
+                ok, status, reason = MODULE.download_archive(
+                    "https://api.github.com/repos/example/repo/actions/artifacts/404/zip",
+                    destination,
+                )
+            self.assertFalse(ok)
+            self.assertEqual(status, 403)
+            self.assertEqual(reason, "artifact-download-unavailable")
+            self.assertFalse(destination.exists())
+            sleep.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,1559 @@
+{
+  "schema_version": 1,
+  "scope": "Exact historical Gitleaks rule/origin/member/line matches only. No secret values, raw log lines, or Gitleaks Match/Secret fields are stored. New locations require explicit review.",
+  "baseline_run_id": 46049216815,
+  "baseline_findings": 363,
+  "classification_count": 155,
+  "classifications": [
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943290768/artifact:15173770856/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946756046/artifact:15175340767/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943293894/artifact:15173474041/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45953538532/artifact:15177812423/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943290768/artifact:15173770856/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45955978804/artifact:15178668071/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45948145595/artifact:15175497744/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45955978804/artifact:15178668071/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943293894/artifact:15173474041/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45953538532/artifact:15177812423/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946786855/artifact:15175241077/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946786855/artifact:15175241077/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45957895168/artifact:15179597661/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946756046/artifact:15175340767/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961284138/artifact:15180084211/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961237219/artifact:15180139056/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961284138/artifact:15180084211/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961237219/artifact:15180139056/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45948145595/artifact:15175497744/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45959219560/artifact:15180845005/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960327675/artifact:15181200490/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962145283/artifact:15181271217/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962145283/artifact:15181271217/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960327675/artifact:15181200490/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960396103/artifact:15180661917/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45959219560/artifact:15180845005/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963000564/artifact:15181646626/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963773147/artifact:15181652505/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45957895168/artifact:15179597661/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960396103/artifact:15180661917/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962172957/artifact:15181740168/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963773147/artifact:15181652505/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962172957/artifact:15181740168/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965857490/artifact:15181894545/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962958472/artifact:15181986305/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964682124/artifact:15182008823/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964653832/artifact:15182288328/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963000564/artifact:15181646626/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965964281/artifact:15182284283/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965857490/artifact:15181894545/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964682124/artifact:15182008823/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965430484/artifact:15182608156/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965430484/artifact:15182608156/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962958472/artifact:15181986305/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964653832/artifact:15182288328/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965964281/artifact:15182284283/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965502766/artifact:15182985390/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45986904199/artifact:15191688405/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45986904199/artifact:15191688405/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965502766/artifact:15182985390/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45990913512/artifact:15193093843/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45988732641/artifact:15192134119/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45989860822/artifact:15193257885/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45990913512/artifact:15193093843/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45989860822/artifact:15193257885/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992640250/artifact:15193799855/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992229373/artifact:15195235161/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001559368/artifact:15197744693/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001559368/artifact:15197744693/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002313302/artifact:15198472826/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45988732641/artifact:15192134119/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992640250/artifact:15193799855/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002639087/artifact:15199047610/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992229373/artifact:15195235161/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002313302/artifact:15198472826/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001862388/artifact:15199705031/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002639087/artifact:15199047610/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004600937/artifact:15200846231/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004844108/artifact:15201770326/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004600937/artifact:15200846231/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001862388/artifact:15199705031/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004844108/artifact:15201770326/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031625010/artifact:15213999089/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032531048/artifact:15214374609/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46030743468/artifact:15214407724/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031636686/artifact:15215095726/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032050910/artifact:15214683093/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031626462/artifact:15215405303/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46033715714/artifact:15215257964/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032531048/artifact:15214374609/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46030743468/artifact:15214407724/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46033715714/artifact:15215257964/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 222,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031626462/artifact:15215405303/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032542294/artifact:15215511212/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032050910/artifact:15214683093/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032542294/artifact:15215511212/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031625010/artifact:15213999089/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031636686/artifact:15215095726/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004221069/artifact:15199602495/database-test-logs",
+      "member": "db-container.log",
+      "line": 11944,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46047417346/artifact:15223102479/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46048168420/artifact:15223313657/database-test-logs",
+      "member": "http-integration.log",
+      "line": 10,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46048168420/artifact:15223313657/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943290768/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1304,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46003593569/artifact:15200315481/database-test-logs",
+      "member": "db-container.log",
+      "line": 11942,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032050910/artifact:15214683093/database-test-logs",
+      "member": "db-container.log",
+      "line": 12004,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46047417346/artifact:15223102479/database-test-logs",
+      "member": "local-integrations.log",
+      "line": 224,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_RECOMMENDATION_DIAGNOSTIC",
+      "rationale": "Historical disposable local-Supabase recommendation integration diagnostics emitted synthetic seed-key and row-identifier metadata. The diagnostic is now restricted to aggregate counts, types, statuses and an error-present boolean."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45943293894/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1316,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004600937/artifact:15200846231/database-test-logs",
+      "member": "db-container.log",
+      "line": 11986,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45955978804/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1315,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946786855/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1319,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45946756046/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1303,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004844108/artifact:15201770326/database-test-logs",
+      "member": "db-container.log",
+      "line": 11965,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45953538532/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1338,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960396103/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1239,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46033715714/artifact:15215257964/database-test-logs",
+      "member": "db-container.log",
+      "line": 11978,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46030743468/artifact:15214407724/database-test-logs",
+      "member": "db-container.log",
+      "line": 12007,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961237219/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1251,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031636686/artifact:15215095726/database-test-logs",
+      "member": "db-container.log",
+      "line": 11946,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032542294/artifact:15215511212/database-test-logs",
+      "member": "db-container.log",
+      "line": 12012,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45957895168/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1306,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032531048/artifact:15214374609/database-test-logs",
+      "member": "db-container.log",
+      "line": 11946,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45948145595/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1315,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962145283/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1260,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45960327675/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1240,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962958472/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1230,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031625010/artifact:15213999089/database-test-logs",
+      "member": "db-container.log",
+      "line": 11950,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45959219560/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1317,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964653832/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1261,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963773147/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1235,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45962172957/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1235,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45988732641/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1249,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965430484/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1247,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45961284138/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1230,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965964281/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1257,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965857490/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1263,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45965502766/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1252,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46047417346/artifact:15223102479/database-test-logs",
+      "member": "db-container.log",
+      "line": 12007,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45986904199/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1258,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992229373/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1267,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031626462/artifact:15215405303/database-test-logs",
+      "member": "db-container.log",
+      "line": 12022,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45963000564/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1238,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45989860822/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1239,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46048168420/artifact:15223313657/database-test-logs",
+      "member": "db-container.log",
+      "line": 12004,
+      "baseline_occurrences": 1,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_SQL_FIXTURE_METADATA",
+      "rationale": "Historical disposable local-Supabase PostgreSQL container output. The generic detector matched SQL fixture metadata referring to opportunity seed-key identifiers, not a credential. Container-log collection is removed from CI diagnostics."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002313302/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1248,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46002639087/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1249,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45964682124/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1247,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45990913512/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1236,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004600937/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1256,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "supabase-secret-key",
+      "origin": "run:46014793121/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 861,
+      "baseline_occurrences": 1,
+      "classification": "LOCAL_EPHEMERAL_SUPABASE_KEY",
+      "verdict": "LOCAL_EPHEMERAL_NOT_HOSTED",
+      "rationale": "Historical database job log came from supabase start for the disposable local stack: loopback endpoints, Region local and the local-development security notice are present in the same run. This is not a hosted Supabase project key."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001559368/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1254,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46047417346/logs",
+      "member": "database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency)/9_Database tests (local stack only, fails on any error).txt",
+      "line": 1097,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031636686/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1298,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46001862388/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1252,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46030743468/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1267,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:45992640250/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1249,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46047417346/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1282,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031626462/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1278,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032050910/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1274,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46048168420/logs",
+      "member": "database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency)/9_Database tests (local stack only, fails on any error).txt",
+      "line": 1136,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46031625010/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1289,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032531048/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1324,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46048168420/logs",
+      "member": "0_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1321,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46033715714/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1259,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46032542294/logs",
+      "member": "1_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1307,
+      "baseline_occurrences": 2,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    },
+    {
+      "rule_id": "generic-api-key",
+      "origin": "run:46004844108/logs",
+      "member": "2_database (disposable local Supabase - migrations, pgTAP, RLS, storage, concurrency).txt",
+      "line": 1281,
+      "baseline_occurrences": 3,
+      "verdict": "NON_SECRET_SYNTHETIC_TEST_DATA",
+      "classification": "SYNTHETIC_LOCAL_INTEGRATION_FIXTURE_OUTPUT",
+      "rationale": "Historical database workflow output from the disposable local-Supabase integration suite. The generic detector matched synthetic fixture identifiers and metadata, not an independently authenticated credential. The source diagnostic no longer emits raw identifiers or response bodies."
+    }
+  ]
+}

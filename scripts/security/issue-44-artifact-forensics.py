@@ -662,6 +662,115 @@ def scan_gitleaks(gitleaks: str, config: Path, exposure: Path,
     return findings
 
 
+
+def deferred_run_records(runs: list[dict[str, Any]], current_run_id: int) -> list[dict[str, Any]]:
+    """Describe active runs in this incremental snapshot without treating them as scan failures."""
+    records = []
+    for run in runs:
+        if run.get("status") == "completed":
+            continue
+        records.append({
+            "run_id": int(run["id"]),
+            "status": safe_text(run.get("status"), 40),
+            "workflow": safe_text(run.get("name"), 120),
+            "created_at": safe_text(run.get("created_at"), 40),
+            "is_current_run": int(run["id"]) == current_run_id,
+        })
+    return sorted(records, key=lambda item: item["run_id"])
+
+
+def finding_identity(finding: dict[str, Any], exposure: Path,
+                     file_manifest: dict[str, dict[str, str]]):
+    """Resolve a redacted Gitleaks finding to its exact Actions source location."""
+    reported_file = str(finding.get("File", ""))
+    try:
+        candidate = Path(reported_file)
+        relative = (
+            candidate.resolve().relative_to(exposure.resolve()).as_posix()
+            if candidate.is_absolute() else candidate.as_posix()
+        )
+    except (OSError, ValueError):
+        return None, None
+    source = file_manifest.get(relative)
+    if not source:
+        return None, None
+    try:
+        line = int(finding.get("StartLine"))
+    except (TypeError, ValueError):
+        return None, source
+    rule_id = str(finding.get("RuleID", ""))
+    if not rule_id:
+        return None, source
+    return (rule_id, source["origin"], source["member"], line), source
+
+
+def load_finding_classifications(path: Path):
+    """Load exact source-location verdicts; never allow a rule-wide or path-wide suppression."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ForensicsError("finding classification manifest is missing or invalid JSON") from error
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        raise ForensicsError("unsupported finding classification manifest schema")
+    entries = payload.get("classifications")
+    if not isinstance(entries, list):
+        raise ForensicsError("finding classification manifest omitted classifications")
+    allowed_verdicts = {"NON_SECRET_SYNTHETIC_TEST_DATA", "LOCAL_EPHEMERAL_NOT_HOSTED"}
+    index = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ForensicsError("finding classification entry is not an object")
+        try:
+            key = (
+                str(entry["rule_id"]), str(entry["origin"]),
+                str(entry["member"]), int(entry["line"]),
+            )
+            classification = str(entry["classification"])
+            verdict = str(entry["verdict"])
+            rationale = str(entry["rationale"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ForensicsError("finding classification entry is missing required fields") from error
+        if not all(key) or not classification or not rationale or verdict not in allowed_verdicts:
+            raise ForensicsError("finding classification entry contains an invalid value")
+        if key in index:
+            raise ForensicsError("finding classification manifest contains duplicate source keys")
+        index[key] = {
+            "rule_id": key[0], "origin": key[1], "member": key[2], "line": key[3],
+            "classification": classification, "verdict": verdict, "rationale": rationale,
+            "baseline_occurrences": int(entry.get("baseline_occurrences", 0)),
+            "observed_count": 0,
+        }
+    return index
+
+
+def classify_gitleaks_findings(findings: list[dict[str, Any]], exposure: Path,
+                               file_manifest: dict[str, dict[str, str]],
+                               classification_index: dict):
+    """Classify only exact rule/origin/member/line matches; everything else remains unclassified."""
+    classified = {}
+    unclassified = []
+    for finding in findings:
+        key, source = finding_identity(finding, exposure, file_manifest)
+        if key is None:
+            unclassified.append({
+                "rule_id": safe_text(finding.get("RuleID"), 100),
+                "origin": safe_text((source or {}).get("origin", "UNMAPPED"), 300),
+                "member": safe_text((source or {}).get("member", finding.get("File", "UNMAPPED")), 300),
+                "line": finding.get("StartLine", ""),
+            })
+            continue
+        entry = classification_index.get(key)
+        if entry is None:
+            unclassified.append({
+                "rule_id": safe_text(key[0], 100), "origin": safe_text(key[1], 300),
+                "member": safe_text(key[2], 300), "line": key[3],
+            })
+            continue
+        if key not in classified:
+            classified[key] = dict(entry)
+        classified[key]["observed_count"] += 1
+    return list(classified.values()), unclassified
+
 def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["GITHUB_TOKEN"]
@@ -709,6 +818,8 @@ def main() -> int:
         os.chmod(directory, 0o700)
 
     state = ScanState(exposure)
+    deferred_runs = []
+    deferred_artifacts = []
 
     # Snapshot all completed workflow runs first. Logs are ZIP archives too, and
     # the previous audit's aggregate unsafe-entry count covered both logs and artifacts.
@@ -737,15 +848,23 @@ def main() -> int:
         )
         noncompleted_runs_skipped = len(noncompleted_runs)
         newer_runs = 0
-        for run in noncompleted_runs:
-            state.record_incomplete(
-                f"run:{int(run['id'])}/logs", "<archive>", "workflow-run-not-completed-at-scan"
-            )
+        # Active runs are deferred and re-scanned on workflow completion. Their transient
+        # in-progress state is not a corrupt archive or failed download.
+        deferred_runs = deferred_run_records(runs_all, current_run_id)
         print(
             f"RUNS_AT_OR_BEFORE_PRIOR_CUTOFF={runs_at_or_before_cutoff} "
-            f"NONCOMPLETED_AFTER_CUTOFF={noncompleted_runs_skipped}",
+            f"NONCOMPLETED_AFTER_CUTOFF={noncompleted_runs_skipped} "
+            f"DEFERRED_RUNS={len(deferred_runs)}",
             flush=True,
         )
+        for item in deferred_runs:
+            print(
+                "DEFERRED_RUN id=" + str(item["run_id"]) +
+                " status=" + item["status"] +
+                " workflow=" + item["workflow"] +
+                " current=" + str(item["is_current_run"]).lower(),
+                flush=True,
+            )
     else:
         selected_runs, current_run_skipped, noncompleted_runs_skipped, newer_runs = (
             select_completed_runs_snapshot(runs_all, run_snapshot_cutoff, current_run_id)
@@ -826,7 +945,33 @@ def main() -> int:
                     "<archive>", "artifact-expired-after-prior-cutoff",
                 )
         print(f"ARTIFACTS_AT_OR_BEFORE_PRIOR_CUTOFF={artifacts_at_or_before_cutoff}", flush=True)
+        deferred_run_ids = {item["run_id"] for item in deferred_runs}
+        deferred_artifacts = []
+        artifacts_to_scan = []
+        for artifact in selected_artifacts:
+            workflow_run = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
+            source_run_id = int(workflow_run.get("id", 0) or 0)
+            if source_run_id in deferred_run_ids:
+                deferred_artifacts.append(artifact)
+            else:
+                artifacts_to_scan.append(artifact)
+        selected_artifacts = artifacts_to_scan
+        for artifact in deferred_artifacts:
+            workflow_run = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
+            print(
+                "DEFERRED_ARTIFACT id=" + str(int(artifact["id"])) +
+                " run_id=" + str(int(workflow_run.get("id", 0))) +
+                " name=" + safe_text(artifact.get("name"), 160),
+                flush=True,
+            )
+        print(
+            f"DEFERRED_ARTIFACTS={len(deferred_artifacts)} "
+            f"DEFERRED_ITEMS={len(deferred_runs) + len(deferred_artifacts)}",
+            flush=True,
+        )
     else:
+        deferred_runs = []
+        deferred_artifacts = []
         selected_artifacts, expired_artifacts, artifacts_newer_than_cutoff = select_artifacts_snapshot(
             artifacts_all, snapshot_cutoff
         )
@@ -889,6 +1034,47 @@ def main() -> int:
         json.dumps(inventory, separators=(",", ":")), encoding="utf-8"
     )
     findings = scan_gitleaks(gitleaks, config, exposure, reports, state)
+    classified_findings = []
+    unclassified_findings = []
+    if incremental_mode:
+        classification_path = workspace / "scripts/security/issue-44-findings-classification.json"
+        classification_index = load_finding_classifications(classification_path)
+        classified_findings, unclassified_findings = classify_gitleaks_findings(
+            findings, exposure, state.manifest, classification_index
+        )
+        classified_occurrences = sum(item["observed_count"] for item in classified_findings)
+        print(
+            f"FINDINGS_CLASSIFIED={classified_occurrences}/{len(findings)} "
+            f"UNCLASSIFIED={len(unclassified_findings)}",
+            flush=True,
+        )
+        for item in classified_findings:
+            print(
+                "CLASSIFIED_FINDING rule=" + safe_text(item["rule_id"], 100) +
+                " classification=" + safe_text(item["classification"], 100) +
+                " verdict=" + safe_text(item["verdict"], 100) +
+                " occurrences=" + str(item["observed_count"]) +
+                " origin=" + safe_text(item["origin"], 300) +
+                " member=" + safe_text(item["member"], 300) +
+                " line=" + str(item["line"]),
+                flush=True,
+            )
+            if item["rule_id"] == "supabase-secret-key":
+                print(
+                    "SUPABASE_SECRET_KEY_VERDICT=" + safe_text(item["verdict"], 100) +
+                    " origin=" + safe_text(item["origin"], 300) +
+                    " member=" + safe_text(item["member"], 300) +
+                    " line=" + str(item["line"]),
+                    flush=True,
+                )
+        for item in unclassified_findings:
+            print(
+                "UNCLASSIFIED_FINDING rule=" + safe_text(item["rule_id"], 100) +
+                " origin=" + safe_text(item["origin"], 300) +
+                " member=" + safe_text(item["member"], 300) +
+                " line=" + str(item["line"]),
+                flush=True,
+            )
 
     print(
         f"ACTIONS_RUN_LOGS_LISTED={len(selected_runs)} DOWNLOADED={run_logs_downloaded} "
@@ -948,8 +1134,45 @@ def main() -> int:
         f"- Files extracted: {state.total_files}; uncompressed bytes: {state.total_bytes}.",
         f"- Unsafe member paths quarantined and scanned: {len(state.quarantined)}.",
         f"- Items that could not be fully scanned: {len(state.incomplete)}.",
+        f"- Deferred active runs: {len(deferred_runs)}; logs are scheduled for a completion-triggered scan.",
+        f"- Artifacts deferred with active runs: {len(deferred_artifacts)}.",
         f"- Gitleaks findings: {len(findings)}.",
     ]
+    for item in deferred_runs:
+        summary.append(
+            "- DEFERRED RUN: id=" + str(item["run_id"]) +
+            "; status=" + item["status"] + "; workflow=" + item["workflow"] +
+            ("; current scanner run." if item["is_current_run"] else "; will be scanned after completion.")
+        )
+    for artifact in deferred_artifacts:
+        workflow_run = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
+        summary.append(
+            "- DEFERRED ARTIFACT: id=" + str(int(artifact["id"])) +
+            "; run_id=" + str(int(workflow_run.get("id", 0))) +
+            "; name=" + safe_text(artifact.get("name"), 160) + "."
+        )
+    if incremental_mode:
+        summary.append(
+            f"- Findings classified: {sum(item['observed_count'] for item in classified_findings)} / "
+            f"{len(findings)}; unclassified: {len(unclassified_findings)}."
+        )
+        for item in classified_findings:
+            summary.append(
+                "- CLASSIFIED FINDING: rule=" + safe_text(item["rule_id"], 100) +
+                "; classification=" + safe_text(item["classification"], 100) +
+                "; verdict=" + safe_text(item["verdict"], 100) +
+                "; occurrences=" + str(item["observed_count"]) +
+                "; origin=" + safe_text(item["origin"], 300) +
+                "; member=" + safe_text(item["member"], 300) +
+                "; line=" + str(item["line"]) + "."
+            )
+        for item in unclassified_findings:
+            summary.append(
+                "- UNCLASSIFIED FINDING: rule=" + safe_text(item["rule_id"], 100) +
+                "; origin=" + safe_text(item["origin"], 300) +
+                "; member=" + safe_text(item["member"], 300) +
+                "; line=" + str(item["line"]) + "."
+            )
     for item in state.quarantined:
         summary.append(
             "- Quarantined: " + safe_text(item["origin"]) + " :: " +
@@ -984,6 +1207,12 @@ def main() -> int:
     if state.incomplete:
         print("ARTIFACT_FORENSICS_VERDICT=INCOMPLETE", flush=True)
         return 2
+    if incremental_mode:
+        if unclassified_findings:
+            print("ARTIFACT_FORENSICS_VERDICT=UNCLASSIFIED_FINDINGS_REQUIRE_TRIAGE", flush=True)
+            return 1
+        print("ARTIFACT_FORENSICS_VERDICT=COMPLETE_ALL_FINDINGS_CLASSIFIED", flush=True)
+        return 0
     if findings:
         print("ARTIFACT_FORENSICS_VERDICT=FINDINGS_REQUIRE_TRIAGE", flush=True)
         return 1

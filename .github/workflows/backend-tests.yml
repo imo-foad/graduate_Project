@@ -32,18 +32,6 @@ jobs:
           { bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh && node --check tests/integration/cv-cleanup.integration.mjs && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/cv-parser-robustness.integration.mjs && node --check tests/integration/career-cohort.integration.mjs && node --check tests/integration/onboarding.integration.mjs && node --check tests/integration/rate-limits.integration.mjs && node --check tests/integration/university-dataset.integration.mjs && node --check scripts/seed-university-demo.mjs && node --check scripts/provision-university-demo-users.mjs && node --check scripts/provision-demo-users.mjs && node --check scripts/evaluate-cv-parser-local.mjs && node --check scripts/cv-parser-metrics.mjs && node --check scripts/cv-fixture-generator.mjs && bash -n scripts/run-university-seed-smoke.sh; } 2>&1 | tee .ci-logs/syntax-check.log || status=1
           { python3 -m unittest tests/workflow_lint.py -v; } 2>&1 | tee .ci-logs/workflow-lint.log || status=1
           exit "$status"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: static-test-logs
-          path: |
-            .ci-logs/static-npm-test.log
-            .ci-logs/openapi-contract.log
-            .ci-logs/syntax-check.log
-            .ci-logs/workflow-lint.log
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
 
   university-seed-smoke:
     name: "synthetic university seed (isolated disposable local Supabase)"
@@ -80,26 +68,6 @@ jobs:
           grep -q "First-pass counts:" .ci-logs/university-seed-apply.log
           grep -q "Second-pass counts:" .ci-logs/university-seed-apply.log
           grep -q "^UNIVERSITY DATASET HTTP INTEGRATION PASSED:" .ci-logs/university-dataset-integration.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: synthetic-university-seed-smoke
-          path: |
-            .ci-logs/university-seed-smoke.log
-            .ci-logs/university-seed-supabase-start.log
-            .ci-logs/university-seed-db-reset.log
-            .ci-logs/university-seed-build.log
-            .ci-logs/graduate-demo-provision.log
-            .ci-logs/university-seed-apply.log
-            .ci-logs/university-seed-verification.log
-            .ci-logs/university-dataset-integration.log
-            .ci-logs/university-seed-functions-serve.log
-            .ci-logs/cv-parser-evaluation.log
-            .ci-logs/cv-parser-evaluation.json
-            .ci-logs/supabase-stop.log
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
       - name: Stop disposable local Supabase
         if: always()
         run: timeout 120s supabase stop --no-backup || true
@@ -164,16 +132,6 @@ jobs:
           }
           supabase status 2>&1 | redact_log > .ci-logs/supabase-status.txt || true
           docker ps -a 2>&1 | redact_log > .ci-logs/docker-ps.txt || true
-          docker logs supabase_db_alumni-connect-backend 2>&1 | redact_log > .ci-logs/db-container.log || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: database-test-logs
-          path: .ci-logs/
-          # .ci-logs is a dot-directory: upload-artifact v4 skips hidden files unless this is set.
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - security/issue-44-audit-main-2026-11-27
+  workflow_run:
+    workflows:
+      - backend-tests
+      - issue-44-artifact-forensics
+      - issue-44-public-secret-audit
+      - issue-44-incremental-unscanned-artifact-audit
+    types:
+      - completed
+    branches:
+      - security/issue-44-audit-main-2026-11-27
   workflow_dispatch:
 
 permissions:
@@ -11,11 +21,12 @@ permissions:
   actions: read
 
 concurrency:
-  group: issue-44-incremental-artifact-audit-${{ github.sha }}
+  group: issue-44-incremental-artifact-audit-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
   incremental:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'security/issue-44-audit-main-2026-11-27' && github.event.workflow_run.head_repository.full_name == github.repository && (github.event.workflow_run.name != 'issue-44-incremental-unscanned-artifact-audit' || github.event.workflow_run.event == 'push'))
     name: Scan Actions artifacts and logs newer than prior forensic cutoff
     runs-on: ubuntu-24.04
     timeout-minutes: 350
@@ -23,6 +34,7 @@ jobs:
       - name: Checkout audit scanner
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 1
           persist-credentials: false
 

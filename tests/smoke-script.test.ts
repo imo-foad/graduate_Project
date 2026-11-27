@@ -144,6 +144,8 @@ test("rate-limit probe cleanup uses the owner RPC and drains the CV Storage clea
   const integration = readFileSync(join(ROOT, "tests/integration/rate-limits.integration.mjs"), "utf8");
   assert.ok(integration.includes('"/rest/v1/rpc/delete_cv_document"'),
     "authenticated test users must delete CV metadata through the owner-scoped RPC");
+  assert.ok(integration.includes("const preexistingCleanup = await request"),
+    "earlier CV/cohort queue entries must be drained before probe IDs are created");
   assert.ok(integration.includes('"/functions/v1/cleanup-cv-objects"'),
     "the rate-limit integration must drain its durable Storage cleanup queue");
   assert.ok(integration.includes("headers(service"),

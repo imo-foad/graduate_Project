@@ -41,6 +41,19 @@ assert.equal(login.status, 200, "rate-limit probe graduate must authenticate");
 const token = login.json.access_token;
 const graduateId = login.json.user.id;
 
+// Earlier CV and career-cohort integrations deliberately enqueue metadata cleanup.
+// Drain that known backlog first so the assertions below measure only this test's probes.
+const preexistingCleanup = await request("/functions/v1/cleanup-cv-objects", {
+  method: "POST",
+  headers: headers(service, { "Content-Type": "application/json" }),
+  body: "{}",
+});
+assert.equal(preexistingCleanup.status, 200,
+  "pre-test CV cleanup worker must drain earlier integration artifacts: " +
+  JSON.stringify(preexistingCleanup.json ?? preexistingCleanup.text));
+assert.equal(preexistingCleanup.json?.failed, 0,
+  "pre-test cleanup queue must not contain failures");
+
 const insertedIds = [];
 try {
   // CV_PARSE has a five-token initial bucket. This dedicated user starts with a fresh bucket,

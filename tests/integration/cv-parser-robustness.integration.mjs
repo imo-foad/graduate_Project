@@ -56,6 +56,7 @@ async function login(email, credential = password) {
 
 const syntheticPrefix = "cv-robust-" + randomUUID().slice(0, 8);
 const accounts = [];
+const cleanupIssues = [];
 const parsedDocuments = [];
 async function newAccount() {
   const index = accounts.length;
@@ -331,8 +332,13 @@ try {
     if (drained.status !== 200 || (drained.json?.processed ?? 0) === 0) break;
   }
   for (const account of accounts) {
-    await request("/auth/v1/admin/users/" + account.id, { method: "DELETE", headers: headers(service) }).catch(() => {});
+    const removed = await request("/auth/v1/admin/users/" + account.id, { method: "DELETE", headers: headers(service) }).catch(() => null);
+    const after = await request("/auth/v1/admin/users/" + account.id, { headers: headers(service) }).catch(() => null);
+    if (!after || after.status !== 404) {
+      cleanupIssues.push(`${account.email}: delete=${removed?.status ?? "error"} read=${after?.status ?? "error"}`);
+    }
   }
 }
 
+assert.deepEqual(cleanupIssues, [], "temporary robustness Auth users were not fully deleted: " + cleanupIssues.join("; "));
 console.log("CV PARSER ROBUSTNESS INTEGRATION PASSED: " + passed + " checks");

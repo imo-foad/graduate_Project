@@ -122,6 +122,7 @@ async function worker() {
 }
 
 const accounts = [await login(userEmail)];
+const cleanupIssues = [];
 const uploaded = [];
 const records = [];
 try {
@@ -185,12 +186,21 @@ try {
   }
   for (const account of accounts) {
     if (!account.synthetic) continue;
-    await request("/auth/v1/admin/users/" + account.id, {
+    const removed = await request("/auth/v1/admin/users/" + account.id, {
       method: "DELETE",
       headers: headers(service, service),
-    }).catch(() => {});
+    }).catch(() => null);
+    const after = await request("/auth/v1/admin/users/" + account.id, { headers: headers(service, service) }).catch(() => null);
+    if (!after || after.status !== 404) {
+      cleanupIssues.push(`${account.email}: delete=${removed?.status ?? "error"} read=${after?.status ?? "error"}`);
+    }
   }
+  // The seeded benchmark identity is shared with other suites and must survive this run.
+  const seeded = await request("/auth/v1/admin/users/" + accounts[0].id, { headers: headers(service, service) });
+  if (seeded.status !== 200) cleanupIssues.push("seeded benchmark account is missing: read=" + seeded.status);
 }
+
+assert.deepEqual(cleanupIssues, [], "CV evaluation cleanup left Auth users in an unexpected state: " + cleanupIssues.join("; "));
 
 const expectedIds = corpus.scenarios.map((scenario) => scenario.id).sort();
 const evaluatedIds = records.map((record) => record.id).sort();

@@ -412,11 +412,19 @@ UPLOAD_PATH_LOCK="$(P "select pg_catalog.hashtextextended('$UPLOAD_PATH', 180820
 # acquired the production path advisory lock; metadata deletion must wait for it to commit.
 UPLOAD_BARRIER=918180000000001102
 P "create schema issue18_storage_race;
+   create table issue18_storage_race.upload_first_insert_events (
+     storage_path text primary key,
+     backend_pid integer not null,
+     txid bigint not null,
+     inserted_at timestamptz not null default now()
+   );
    create function issue18_storage_race.pause_storage_insert()
    returns trigger language plpgsql security definer set search_path = ''
    as \$pause\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
+       insert into issue18_storage_race.upload_first_insert_events(storage_path, backend_pid, txid)
+       values (new.name, pg_catalog.pg_backend_pid(), pg_catalog.txid_current());
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
        perform pg_catalog.pg_advisory_unlock($UPLOAD_BARRIER);
      end if;
@@ -456,11 +464,13 @@ if [ "$UPLOAD_HTTP_STATUS" != "200" ] && [ "$UPLOAD_HTTP_STATUS" != "201" ]; the
   sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first.body" | head -c 1200
   echo
 fi
+UPLOAD_FIRST_TRIGGER_EVENTS="$(P "select count(*) from issue18_storage_race.upload_first_insert_events where storage_path = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_OBJECTS_BEFORE_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")"
 UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER="$(download_status "$UPLOAD_PATH" "upload-first-before-worker")"
-echo "UPLOAD_FIRST_DIAGNOSTICS http=$UPLOAD_HTTP_STATUS upload_wait=$UPLOAD_WAIT_STATUS delete_exit=$DELETE_STATUS objects=$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER pending_queue=$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER live_metadata=$UPLOAD_FIRST_METADATA_BEFORE_WORKER download=$UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER"
+echo "UPLOAD_FIRST_DIAGNOSTICS http=$UPLOAD_HTTP_STATUS upload_wait=$UPLOAD_WAIT_STATUS delete_exit=$DELETE_STATUS trigger_events=$UPLOAD_FIRST_TRIGGER_EVENTS objects=$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER pending_queue=$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER live_metadata=$UPLOAD_FIRST_METADATA_BEFORE_WORKER download=$UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER"
+check "upload-first INSERT reaches and commits the post-RLS AFTER INSERT trigger" "1" "$UPLOAD_FIRST_TRIGGER_EVENTS"
 check "upload-first Storage API request commits after winning the path lock" "1" \
   "$(case "$UPLOAD_HTTP_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
 check "upload-first metadata deletion commits after waiting for the Storage upload lock" "0" "$DELETE_STATUS"

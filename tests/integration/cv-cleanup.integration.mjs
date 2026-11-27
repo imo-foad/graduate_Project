@@ -523,12 +523,6 @@ try {
     const meta = await createMetadata(target.token, targetId, path, bytes);
     pass("account-deletion CV " + (index + 1) + " metadata exists", meta.status === 201 && meta.json?.length === 1, meta);
   }
-  // Snapshot the actual Storage rows before the account-deletion handler starts cleanup.
-  const accountObjectCountBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
-  pass("both account-deletion objects exist before the worker",
-    accountObjectCountBeforeWorker === 2 && accountPaths.every((path) => storageObjectCount(path) === 1),
-    { total: accountObjectCountBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
-
   const requested = await request("/rest/v1/rpc/request_account_deletion", {
     method: "POST",
     headers: headers(target.token, { "Content-Type": "application/json" }),
@@ -550,25 +544,32 @@ try {
     body: JSON.stringify({ p_request_id: requested.json, p_decision: "APPROVE", p_note: "local synthetic cleanup test" }),
   });
   pass("the platform admin approves the account deletion", approved.status === 200 && approved.json === "APPROVED", approved);
-  const deleted = await request("/functions/v1/delete-graduate", {
-    method: "POST",
-    headers: headers(admin.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ request_id: requested.json }),
+  // Delete the Auth account directly on this disposable local stack. The Auth/profile cascade
+  // removes CV metadata and enqueues cleanup rows, but Storage bytes are external and remain
+  // until the actual worker removes them. This proves the worker's delete, not only API denial.
+  const deleted = await request("/auth/v1/admin/users/" + targetId, {
+    method: "DELETE",
+    headers: headers(service),
   });
-  pass("delete-graduate completes the supported account lifecycle",
-    deleted.status === 200 && deleted.json?.status === "COMPLETED", deleted);
+  pass("service-role account deletion commits the Auth/profile cascade",
+    deleted.status === 200 || deleted.status === 204, { status: deleted.status });
   pass("all account CV metadata is deleted",
     sqlInt("select count(*) from public.cv_documents where graduate_id = " + quote(targetId)) === 0);
   const accountQueues = accountPaths.map((path) => queue(path));
   pass("every associated Storage path is enqueued exactly once",
     accountQueues.every((rows) => rows.length === 1 && rows[0].status === "PENDING"), accountQueues);
-  const accountObjectCountAfterDeletionBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
-  pass("delete-graduate removes both account CV objects before the worker runs",
-    accountObjectCountAfterDeletionBeforeWorker === 0 && accountPaths.every((path) => storageObjectCount(path) === 0),
-    { afterAccountDeletion: accountObjectCountAfterDeletionBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
+  const accountObjectCountBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
+  const accountServiceDownloadsBeforeWorker = await Promise.all(accountPaths.map((path) => download(service, path)));
+  pass("both account-deletion Storage objects exist before worker",
+    accountObjectCountBeforeWorker === 2 &&
+    accountPaths.every((path) => storageObjectCount(path) === 1) &&
+    accountServiceDownloadsBeforeWorker.every((result) => result.status === 200),
+    { beforeWorker: accountObjectCountBeforeWorker, perPath: accountPaths.map(storageObjectCount),
+      serviceRoleStatuses: accountServiceDownloadsBeforeWorker.map((result) => result.status) });
   const accountDrain = await worker();
   pass("account deletion: service-role/SQL confirms both objects exist before worker and are absent after",
-    accountObjectCountBeforeWorker === 2 && accountObjectCountAfterDeletionBeforeWorker === 0 &&
+    accountDrain.status === 200 && accountDrain.json?.failed === 0 &&
+    accountObjectCountBeforeWorker === 2 &&
     accountPaths.every((path) => storageObjectCount(path) === 0) &&
     accountPaths.every((path) => queue(path).length === 1 &&
       queue(path)[0]?.status === "DONE" && queue(path)[0]?.attempts === 1),

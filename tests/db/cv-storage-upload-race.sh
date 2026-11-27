@@ -337,7 +337,7 @@ check "delete-first tombstone is committed with no live CV metadata" "0" \
 UPLOAD_BARRIER=918180000000001102
 P "create function issue18_storage_race.pause_storage_insert()
    returns trigger language plpgsql security definer set search_path = ''
-   as \\$pause\\$
+   as \$pause\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
@@ -345,7 +345,7 @@ P "create function issue18_storage_race.pause_storage_insert()
      end if;
      return new;
    end
-   \\$pause\\$;
+   \$pause\$;
    create trigger zz_issue18_pause_storage_insert
    after insert on storage.objects
    for each row execute function issue18_storage_race.pause_storage_insert();" >/dev/null

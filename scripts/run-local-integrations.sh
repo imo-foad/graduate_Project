@@ -113,6 +113,8 @@ node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/univer
 
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+# Real Storage object lifecycle: owner deletion, replacement, retry, lease, exhaustion, account deletion.
+timeout 300s node tests/integration/cv-cleanup.integration.mjs | tee "$LOG_DIR/cv-cleanup-integration.log"
 timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"

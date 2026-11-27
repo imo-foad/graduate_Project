@@ -144,6 +144,12 @@ class Scripts(unittest.TestCase):
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
+        self.assertIn("cv-cleanup.integration.mjs", runner)
+        cleanup_http = code(open(os.path.join(ROOT, "tests/integration/cv-cleanup.integration.mjs")).read())
+        for needle in ("/functions/v1/cleanup-cv-objects", "delete_cv_document", "PATH_REUSED_CLEANUP_CANCELLED",
+                       "UNSAFE_STORAGE_PATH", "claim_cv_cleanup", "retry_cv_cleanup", "/functions/v1/delete-graduate",
+                       "assertLocalDbUrl"):
+            self.assertIn(needle, cleanup_http)
         self.assertIn("onboarding.integration.mjs", runner)
         self.assertIn("rate-limits.integration.mjs", runner)
         onboarding_http = code(open(os.path.join(ROOT, "tests/integration/onboarding.integration.mjs")).read())

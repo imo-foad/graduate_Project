@@ -13,9 +13,35 @@ for t in node supabase psql curl timeout; do need "$t"; done
 node scripts/assert-local-db.mjs "${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}" >/dev/null
 LOCAL_ENV="$(mktemp)"
 FUNCTION_PID=""
+CURRENT_SUITE=""
+note_suite() { CURRENT_SUITE="$1"; }
+# The decisive lines of the CV suites are published to the public job summary: workflow logs need
+# repository-admin credentials, and a passing run must still be inspectable from outside.
+publish_suite_result() {
+  local log="$LOG_DIR/$1" last
+  [ -f "$log" ] || return 0
+  last="$(grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 1 | cut -c1-400)"
+  # A public run annotation makes the decisive line readable outside the admin-only logs.
+  [ -n "$last" ] && printf '::notice title=CV_PARSER_SUITE::%s | %s\n' "$1" "$last"
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+  { printf '**%s**\n\n```\n' "$1"
+    grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 12 | cut -c1-300
+    printf '```\n\n'; } >> "$GITHUB_STEP_SUMMARY"
+}
 cleanup() {
+  local status=$?
+  trap - EXIT
+  # Workflow logs need repository-admin credentials; publish the failing suite (and a short,
+  # credential-filtered tail) as a public run annotation so the failure is diagnosable.
+  if [ "$status" -ne 0 ]; then
+    local tail_text detail
+    tail_text="$(tail -n 60 "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey|password|secret|token' | tail -n 3 | tr '\n' ' ' | cut -c1-600)"
+    detail="$(grep -a -m1 -E 'AssertionError|DIAGNOSTIC|Error:' "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey' | cut -c1-500 | tr '\n' ' ')"
+    printf '::error title=INTEGRATION_FAILED::%s (exit %s) | %s | %s\n' "${CURRENT_SUITE:-unknown suite}" "$status" "$detail" "$tail_text"
+  fi
   if [ -n "$FUNCTION_PID" ]; then kill "$FUNCTION_PID" >/dev/null 2>&1 || true; wait "$FUNCTION_PID" >/dev/null 2>&1 || true; fi
   rm -f "$LOCAL_ENV"
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -42,9 +68,11 @@ NODE
 # Disposable password: never write it to the repository, CI logs or artifacts.
 export DEMO_PASSWORD="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(24).toString("base64url"))')"
 echo "Provisioning synthetic Auth demo users (password omitted from logs)"
-node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-first.log"
+note_suite "demo-provision-first.log"
+node scripts/provision-demo-users.mjs 2>&1 | tee "$LOG_DIR/demo-provision-first.log"
 # The second pass verifies that provisioning is idempotent for already-created users.
-node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-second.log"
+note_suite "demo-provision-second.log"
+node scripts/provision-demo-users.mjs 2>&1 | tee "$LOG_DIR/demo-provision-second.log"
 
 npm run build:seed > "$LOG_DIR/integration-build-seed.log"
 DEMO_SEED="supabase/seed/03_demo_profiles.sql"
@@ -103,19 +131,33 @@ done
 # The first-admin bootstrap test must run before the synthetic university seed creates
 # its ten local platform-admin fixtures. The integration deletes its temporary bootstrap
 # account and leaves the one-time bootstrap slot empty for the subsequent synthetic seed.
-timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
+note_suite "onboarding-integration.log"
+timeout 300s node tests/integration/onboarding.integration.mjs 2>&1 | tee "$LOG_DIR/onboarding-integration.log"
 
 # Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
 echo "Provisioning and applying synthetic university dataset (local only)"
-node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+note_suite "university-seed.log"
+node scripts/seed-university-demo.mjs 2>&1 | tee "$LOG_DIR/university-seed.log"
 # Verify Student/Faculty academic-record privacy and server-owned platform-admin authorization.
-node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
+note_suite "university-dataset-integration.log"
+node tests/integration/university-dataset.integration.mjs 2>&1 | tee "$LOG_DIR/university-dataset-integration.log"
 
-timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
-timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
-timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
+note_suite "http-integration.log"
+timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
+note_suite "cv-parse-integration.log"
+timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
+# Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
+note_suite "cv-parser-robustness.log"
+timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"
+publish_suite_result "cv-parser-robustness.log"
+note_suite "cv-parser-evaluation.log"
+timeout 300s node scripts/evaluate-cv-parser-local.mjs 2>&1 | tee "$LOG_DIR/cv-parser-evaluation.log"
+publish_suite_result "cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
-timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"
-timeout 900s node tests/integration/career-cohort.integration.mjs round2 | tee "$LOG_DIR/career-cohort-round2.log"
+note_suite "career-cohort-round1.log"
+timeout 900s node tests/integration/career-cohort.integration.mjs round1 2>&1 | tee "$LOG_DIR/career-cohort-round1.log"
+note_suite "career-cohort-round2.log"
+timeout 900s node tests/integration/career-cohort.integration.mjs round2 2>&1 | tee "$LOG_DIR/career-cohort-round2.log"
 # Run after the other demo-account journeys because this deliberately exhausts rate-limit buckets.
-timeout 300s node tests/integration/rate-limits.integration.mjs | tee "$LOG_DIR/rate-limits-integration.log"
+note_suite "rate-limits-integration.log"
+timeout 300s node tests/integration/rate-limits.integration.mjs 2>&1 | tee "$LOG_DIR/rate-limits-integration.log"

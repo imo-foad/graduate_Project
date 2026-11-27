@@ -169,6 +169,38 @@ class Scripts(unittest.TestCase):
         self.assertIn("name: career-cohort-reports", WF_TEXT)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
 
+    def test_cv_parser_corpus_and_quality_gates_are_enforced(self):
+        evaluator = code(open(os.path.join(ROOT, "scripts/evaluate-cv-parser-local.mjs")).read())
+        metrics = code(open(os.path.join(ROOT, "scripts/cv-parser-metrics.mjs")).read())
+        generator = code(open(os.path.join(ROOT, "scripts/cv-fixture-generator.mjs")).read())
+        robustness = code(open(os.path.join(ROOT, "tests/integration/cv-parser-robustness.integration.mjs")).read())
+        runner = SCRIPTS["scripts/run-local-integrations.sh"]
+        for needle in ("tests/fixtures/cv-parser/corpus.v1.json", "validateCorpus", "scoreScenario",
+                       "aggregateScores", "gateReport", "cv-fixture-generator.mjs", "PENDING",
+                       "delete_cv_document", "confirmation_required"):
+            self.assertIn(needle, evaluator)
+        # The old aggregate-only 0.75 recall threshold must not return.
+        self.assertNotIn("recall>=0.75", evaluator.replace(" ", ""))
+        for needle in ("QUALITY_GATES", "precision", "recall", "experience_fields",
+                       "certification_fields", "course_fields", "negative_violation"):
+            self.assertIn(needle, metrics)
+        for needle in ("buildPdf", "buildDocx", "columns", "table"):
+            self.assertIn(needle, generator)
+        for needle in ("CV_FILE_TYPE_MISMATCH", "CV_INVALID_FILE", "CV_NO_TEXT_FOUND", "CV_TOO_MANY_PAGES",
+                       "DOCTYPE", "Encrypt", "PENDING", "another graduate"):
+            self.assertIn(needle, robustness)
+        self.assertIn("cv-parser-robustness.integration.mjs", runner)
+        self.assertIn("evaluate-cv-parser-local.mjs", runner)
+        corpus = __import__("json").load(open(os.path.join(ROOT, "tests/fixtures/cv-parser/corpus.v1.json")))
+        ids = [scenario["id"] for scenario in corpus["scenarios"]]
+        self.assertGreaterEqual(len(ids), 10, "the synthetic corpus must keep at least 10 scenarios")
+        self.assertEqual(len(ids), len(set(ids)), "corpus scenario ids must be unique")
+        self.assertGreaterEqual(sum(1 for scenario in corpus["scenarios"] if scenario["id"].startswith("negative-")), 2,
+                                "the corpus must keep at least two negative fixtures")
+        self.assertIn("ar-docx-attached-skills-v1", ids)
+        self.assertIn("en-pdf-two-column-sidebar-v1", ids)
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "tests/fixtures/cv-parser/README.md")))
+
     def test_all_pgtap_files_are_expected_by_the_runner(self):
         on_disk = sorted(f[:-len(".test.sql")] for f in os.listdir(os.path.join(ROOT, "supabase/tests/database")) if f.endswith(".test.sql"))
         s = SCRIPTS["scripts/run-db-tests.sh"]

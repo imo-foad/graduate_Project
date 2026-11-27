@@ -31,6 +31,30 @@ redact_ci_logs_on_exit() {
   if [ -d "$LOG_DIR" ]; then
     while IFS= read -r -d '' file; do redact_ci_file "$file"; done < <(find "$LOG_DIR" -type f -print0)
   fi
+  # Job logs and summaries are not readable without repository-admin credentials. A workflow error
+  # annotation is rendered on the public run page, so announce the failing stage (and a short
+  # redacted tail) there. Only already-redacted logs are quoted.
+  if [ "$status" -ne 0 ]; then
+    local announce=""
+    for file in "$LOG_DIR"/supabase-start.log "$LOG_DIR"/db-reset.log "$LOG_DIR"/pgtap.log "$LOG_DIR"/local-integrations.log; do
+      [ -s "$file" ] && announce="$(tail -n 4 "$file" | tr '\n' ' ' | cut -c1-700)"
+    done
+    printf '::error title=DB_TESTS_FAILED::exit %s after %s | %s\n' "$status" "${STAGE:-unknown stage}" "$announce"
+  fi
+  if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "## Database job failed (exit $status)"
+      for file in "$LOG_DIR"/environment.txt "$LOG_DIR"/supabase-start.log "$LOG_DIR"/db-reset.log \
+                  "$LOG_DIR"/pgtap-15-focused.log "$LOG_DIR"/pgtap.log "$LOG_DIR"/concurrency.log \
+                  "$LOG_DIR"/local-integrations.log; do
+        [ -s "$file" ] || continue
+        echo "### $(basename "$file")"
+        echo '```'
+        tail -n 30 "$file"
+        echo '```'
+      done
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
   exit "$status"
 }
 trap redact_ci_logs_on_exit EXIT
@@ -46,6 +70,7 @@ echo "=== environment"
   echo "node $(node -v)"; echo "supabase CLI $(supabase --version)"; psql --version; } | tee "$LOG_DIR/environment.txt"
 docker info >/dev/null 2>&1 || fail "Docker daemon is not reachable"
 
+STAGE="A supabase start"
 # ---- A. start local stack and wait for PostgreSQL
 echo "=== A. supabase start"
 START_LOG="$(mktemp)"
@@ -59,6 +84,7 @@ ready=0; for _ in $(seq 1 30); do q "select 1" >/dev/null 2>&1 && { ready=1; bre
 [ "$ready" = 1 ] || fail "PostgreSQL did not become ready on $ACTUAL_PORT"
 echo "PostgreSQL server_version: $(q 'show server_version')" | tee -a "$LOG_DIR/environment.txt"
 
+STAGE="B db reset"
 # ---- B. clean reset applies EVERY migration (checked in the CLI output AND in the migration table)
 echo "=== B. supabase db reset"
 supabase db reset 2>&1 | tee "$LOG_DIR/db-reset.log"
@@ -80,6 +106,7 @@ GOT="$(q "select coalesce(string_agg(version, ',' order by version), '') from su
 [ "$WANT" = "$GOT" ] || fail "migration table has [$GOT], expected [$WANT]"
 echo "migrations applied: $GOT"
 
+STAGE="C seeds"
 # ---- C. seeds (loaded twice: must be idempotent) + integrity checks
 echo "=== C. seeds"
 npm run build:seed
@@ -95,6 +122,7 @@ WANT_OPPS="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("fixture
 [ "$(q 'select count(*) from public.opportunity_skills os left join public.skills s on s.id = os.skill_id where s.id is null')" = "0" ] || fail "opportunity_skills reference unknown skills"
 echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on second load)"
 
+STAGE="D pgTAP"
 # ---- D. pgTAP: all eighteen files must run and pass
 echo "=== D. supabase test db"
 EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle)
@@ -113,10 +141,12 @@ if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fa
 grep -Eq '^Files=18, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 18 files with a non-empty TAP plan"
 grep -Fxq 'Result: PASS' "$LOG_DIR/pgtap.log" || fail "full pgTAP TAP plan did not pass"
 
+STAGE="E concurrency"
 # ---- E. real concurrent sessions
 echo "=== E. concurrency"
 bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
 
+STAGE="F integrations"
 # ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function
 echo "=== F. local Supabase HTTP integration"
 bash scripts/run-local-integrations.sh 2>&1 | tee "$LOG_DIR/local-integrations.log"

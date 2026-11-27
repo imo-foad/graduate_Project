@@ -302,15 +302,13 @@ test("Auth phone constraint failures reveal only masked requested/profile phone 
   assert.doesNotMatch(diagnostic, /\+12345678901|12345678901|11111111-1111/);
 });
 
-test("local CV evaluation cleanup authenticates metadata DELETE as service_role", () => {
+test("local CV evaluation cleanup uses the owner RPC and an authenticated service-role worker", () => {
   const cvScript = readFileSync(new URL("../scripts/evaluate-cv-parser-local.mjs", import.meta.url), "utf8");
-  const start = cvScript.indexOf("async function cleanup(");
-  const end = cvScript.indexOf("\n}\n", start);
-  assert.ok(start >= 0 && end > start, "CV cleanup function must exist");
-  const cleanup = cvScript.slice(start, end + 3);
-  assert.match(cleanup, /method:"DELETE",headers:headers\(service,service,/);
-  assert.doesNotMatch(cleanup, /method:"DELETE",headers:headers\(service,null,/);
-  assert.match(cleanup, /headers:headers\(service,service,/);
+  // Cleanup must not bypass the supported owner deletion path or call the worker without a JWT.
+  assert.match(cvScript, /rpc\/delete_cv_document/);
+  assert.match(cvScript, /headers: headers\(anon, item\.account\.token,/);
+  assert.match(cvScript, /headers: headers\(service, service, \{ "Content-Type": "application\/json" \}\)/);
+  assert.doesNotMatch(cvScript, /headers\(service, null/);
 });
 
 test("local phone/password Auth has an SMS transport without enabling public signup", () => {

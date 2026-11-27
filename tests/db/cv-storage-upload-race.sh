@@ -61,23 +61,38 @@ check() {
 }
 
 wait_for_app_lock_wait() {
-  local app="$1" diagnostic_log="${2:-}" count
+  local app="$1" diagnostic_log="${2:-}" lock_key="${3:-}" count
   for _ in $(seq 1 1000); do
-    count="$(P "select count(*) from pg_catalog.pg_stat_activity
-                 where application_name = '$app'
-                   and state = 'active'
-                   and wait_event_type = 'Lock'
-                   and wait_event = 'advisory'")"
+    if [ -n "$lock_key" ]; then
+      count="$(P "select count(*) from pg_catalog.pg_stat_activity a
+                   join pg_catalog.pg_locks l on l.pid = a.pid
+                  where a.application_name = '$app'
+                    and a.state = 'active'
+                    and a.wait_event_type = 'Lock'
+                    and a.wait_event = 'advisory'
+                    and l.locktype = 'advisory'
+                    and not l.granted
+                    and l.objsubid = 1
+                    and ((l.classid::bigint << 32) | l.objid::bigint) = $lock_key::bigint")"
+    else
+      count="$(P "select count(*) from pg_catalog.pg_stat_activity
+                   where application_name = '$app'
+                     and state = 'active'
+                     and wait_event_type = 'Lock'
+                     and wait_event = 'advisory'")"
+    fi
     [ "$count" -ge 1 ] && return 0
     sleep 0.01
   done
-  echo "TIMEOUT waiting for PostgreSQL lock wait: $app" >&2
-  P "select application_name || ' | ' || coalesce(state,'') || ' | ' ||
-          coalesce(wait_event_type,'') || ' | ' || coalesce(wait_event,'') || ' | ' ||
-          left(query, 500)
-     from pg_catalog.pg_stat_activity
-    where state = 'active' and pid <> pg_backend_pid()
-    order by application_name" >&2 || true
+  echo "TIMEOUT waiting for PostgreSQL advisory lock wait: $app (key ${lock_key:-any})" >&2
+  P "select a.application_name || ' | ' || coalesce(a.state,'') || ' | ' ||
+          coalesce(a.wait_event_type,'') || ' | ' || coalesce(a.wait_event,'') || ' | ' ||
+          coalesce(l.classid::text,'') || ':' || coalesce(l.objid::text,'') || ':' ||
+          coalesce(l.objsubid::text,'') || ' | ' || left(a.query, 500)
+     from pg_catalog.pg_stat_activity a
+     left join pg_catalog.pg_locks l on l.pid = a.pid and l.locktype = 'advisory' and not l.granted
+    where a.state = 'active' and a.pid <> pg_backend_pid()
+    order by a.application_name" >&2 || true
   if [ -n "$diagnostic_log" ] && [ -s "$diagnostic_log" ]; then
     echo "BLOCKED SESSION SQL LOG ($app):" >&2
     tail -n 40 "$diagnostic_log" >&2
@@ -86,17 +101,30 @@ wait_for_app_lock_wait() {
 }
 
 wait_for_storage_insert_lock_wait() {
-  local count
+  local lock_key="$1" count
   for _ in $(seq 1 1000); do
-    count="$(P "select count(*) from pg_catalog.pg_stat_activity
-                 where state = 'active'
-                   and wait_event_type = 'Lock'
-                   and wait_event = 'advisory'
-                   and query ~* 'insert.*storage.*objects'")"
+    count="$(P "select count(*) from pg_catalog.pg_stat_activity a
+                 join pg_catalog.pg_locks l on l.pid = a.pid
+                where a.state = 'active'
+                  and a.wait_event_type = 'Lock'
+                  and a.wait_event = 'advisory'
+                  and l.locktype = 'advisory'
+                  and not l.granted
+                  and l.objsubid = 1
+                  and ((l.classid::bigint << 32) | l.objid::bigint) = $lock_key::bigint
+                  and a.query ~* 'insert.*storage.*objects'")"
     [ "$count" -ge 1 ] && return 0
     sleep 0.01
   done
-  echo "TIMEOUT waiting for actual Storage API INSERT to block on an advisory lock" >&2
+  echo "TIMEOUT waiting for Storage API INSERT on exact advisory lock key: $lock_key" >&2
+  P "select a.application_name || ' | ' || coalesce(a.state,'') || ' | ' ||
+          coalesce(a.wait_event_type,'') || ' | ' || coalesce(a.wait_event,'') || ' | ' ||
+          coalesce(l.classid::text,'') || ':' || coalesce(l.objid::text,'') || ':' ||
+          coalesce(l.objsubid::text,'') || ' | ' || left(a.query, 500)
+     from pg_catalog.pg_stat_activity a
+     left join pg_catalog.pg_locks l on l.pid = a.pid and l.locktype = 'advisory' and not l.granted
+    where a.state = 'active' and a.pid <> pg_backend_pid()
+    order by a.application_name" >&2 || true
   return 1
 }
 
@@ -343,6 +371,7 @@ check "upload-first object path starts without a Storage object row" "0" \
   "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 
 # Ordering A: deletion acquires the shared path lock and remains uncommitted.
+DELETE_PATH_LOCK="$(P "select pg_catalog.hashtextextended('$DELETE_PATH', 18082026::bigint)")"
 DELETE_BARRIER=918180000000001101
 start_barrier "$DELETE_BARRIER" "DELETE_BARRIER_READY"
 PGAPPNAME="issue18-storage-delete-first" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \
@@ -358,10 +387,10 @@ select pg_catalog.pg_advisory_lock($DELETE_BARRIER);
 commit;
 SQL
 DELETE_PID=$!
-wait_for_app_lock_wait "issue18-storage-delete-first"
+wait_for_app_lock_wait "issue18-storage-delete-first" "" "$DELETE_PATH_LOCK"
 
 upload_in_background "$DELETE_PATH" "delete-first-upload"
-wait_for_storage_insert_lock_wait
+wait_for_storage_insert_lock_wait "$DELETE_PATH_LOCK"
 release_barrier "DELETE_BARRIER_RELEASED"
 set +e
 wait "$DELETE_PID"; DELETE_STATUS=$?
@@ -377,6 +406,7 @@ check "storage upload blocks on the path lock while deletion is uncommitted, the
 check "delete-first tombstone is committed with no live CV metadata" "0" \
   "$(P "select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path where q.storage_path = '$DELETE_PATH'")"
 
+UPLOAD_PATH_LOCK="$(P "select pg_catalog.hashtextextended('$UPLOAD_PATH', 18082026::bigint)")"
 # Ordering B: the real Storage API INSERT passes its RLS WITH CHECK first. A temporary
 # AFTER INSERT trigger pauses that same transaction before commit. The RLS policy has already
 # acquired the production path advisory lock; metadata deletion must wait for it to commit.
@@ -399,7 +429,7 @@ P "create schema issue18_storage_race;
 
 start_barrier "$UPLOAD_BARRIER" "UPLOAD_BARRIER_READY"
 upload_in_background "$UPLOAD_PATH" "upload-first"
-wait_for_storage_insert_lock_wait
+wait_for_storage_insert_lock_wait "$UPLOAD_BARRIER"
 
 PGAPPNAME="issue18-storage-delete-after-upload" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \
   >"$TMP/delete-after-upload.log" 2>&1 <<SQL &
@@ -413,7 +443,7 @@ reset role;
 commit;
 SQL
 DELETE_PID=$!
-wait_for_app_lock_wait "issue18-storage-delete-after-upload" "$TMP/delete-after-upload.log"
+wait_for_app_lock_wait "issue18-storage-delete-after-upload" "$TMP/delete-after-upload.log" "$UPLOAD_PATH_LOCK"
 release_barrier "UPLOAD_BARRIER_RELEASED"
 set +e
 wait "$UPLOAD_PID"; UPLOAD_WAIT_STATUS=$?

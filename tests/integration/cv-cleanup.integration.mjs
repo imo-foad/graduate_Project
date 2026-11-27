@@ -233,7 +233,7 @@ try {
 
   // ---- B2. Immutable Storage paths: a retired key is rejected in every queue state ----------------
   const retiredPath = ownerPrefix + "-retired.pdf";
-  const retiredBytes = buildPdf("RETIRED CV\\nReact");
+  const retiredBytes = buildPdf("RETIRED CV\nReact");
   staleObjects.push(retiredPath);
   const retiredUpload = await upload(owner.token, retiredPath, retiredBytes);
   pass("the original private object uploads before retirement",
@@ -262,7 +262,7 @@ try {
     { response: retiredDrain.json, rows: retiredRows });
 
   const freshPath = ownerPrefix + "-fresh-replacement.pdf";
-  const freshBytes = buildPdf("FRESH REPLACEMENT CV\\nPython and SQL");
+  const freshBytes = buildPdf("FRESH REPLACEMENT CV\nPython and SQL");
   staleObjects.push(freshPath);
   const freshUpload = await upload(owner.token, freshPath, freshBytes);
   pass("a replacement CV uploads under a different fresh path",

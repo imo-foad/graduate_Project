@@ -31,6 +31,22 @@ redact_ci_logs_on_exit() {
   if [ -d "$LOG_DIR" ]; then
     while IFS= read -r -d '' file; do redact_ci_file "$file"; done < <(find "$LOG_DIR" -type f -print0)
   fi
+  # Job logs need repository-admin credentials to download; a short redacted tail in the public
+  # job summary keeps a failed stage diagnosable without exposing keys, JWTs or CV content.
+  if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "## Database job failed (exit $status)"
+      for file in "$LOG_DIR"/environment.txt "$LOG_DIR"/supabase-start.log "$LOG_DIR"/db-reset.log \
+                  "$LOG_DIR"/pgtap-15-focused.log "$LOG_DIR"/pgtap.log "$LOG_DIR"/concurrency.log \
+                  "$LOG_DIR"/local-integrations.log; do
+        [ -s "$file" ] || continue
+        echo "### $(basename "$file")"
+        echo '```'
+        tail -n 30 "$file"
+        echo '```'
+      done
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
   exit "$status"
 }
 trap redact_ci_logs_on_exit EXIT

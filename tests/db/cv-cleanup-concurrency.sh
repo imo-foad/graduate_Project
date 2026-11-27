@@ -40,8 +40,8 @@ cleanup() {
   [ -n "$B_PID" ] && wait "$B_PID" >/dev/null 2>&1
   psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -c \
     "drop schema if exists issue18_concurrency cascade;
-     delete from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$REVERSE_PATH');
-     delete from auth.users where id = '$OWNER';" >/dev/null 2>&1
+     delete from auth.users where id = '$OWNER';
+     delete from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$REVERSE_PATH');" >/dev/null 2>&1
   rm -rf "$TMP"
   if [ "$status" -ne 0 ]; then exit "$status"; fi
   [ "$FAILS" -eq 0 ] || exit 1

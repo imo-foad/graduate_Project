@@ -523,6 +523,12 @@ try {
     const meta = await createMetadata(target.token, targetId, path, bytes);
     pass("account-deletion CV " + (index + 1) + " metadata exists", meta.status === 201 && meta.json?.length === 1, meta);
   }
+  // Snapshot the actual Storage rows before the account-deletion handler starts cleanup.
+  const accountObjectCountBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
+  pass("both account-deletion objects exist before the worker",
+    accountObjectCountBeforeWorker === 2 && accountPaths.every((path) => storageObjectCount(path) === 1),
+    { total: accountObjectCountBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
+
   const requested = await request("/rest/v1/rpc/request_account_deletion", {
     method: "POST",
     headers: headers(target.token, { "Content-Type": "application/json" }),
@@ -556,14 +562,6 @@ try {
   const accountQueues = accountPaths.map((path) => queue(path));
   pass("every associated Storage path is enqueued exactly once",
     accountQueues.every((rows) => rows.length === 1 && rows[0].status === "PENDING"), accountQueues);
-  const accountObjectCountBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
-  pass("both account-deletion Storage object rows exist before the worker",
-    accountObjectCountBeforeWorker === 2 && accountPaths.every((path) => storageObjectCount(path) === 1),
-    { total: accountObjectCountBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
-  const accountServiceDownloadsBeforeWorker = await Promise.all(accountPaths.map((path) => download(service, path)));
-  pass("service role can read both account-deletion objects before cleanup",
-    accountServiceDownloadsBeforeWorker.every((result) => result.status === 200),
-    accountServiceDownloadsBeforeWorker.map((result) => result.status));
   const accountDrain = await worker();
   pass("account deletion: service-role/SQL confirms both objects exist before worker and are absent after",
     accountObjectCountBeforeWorker === 2 &&

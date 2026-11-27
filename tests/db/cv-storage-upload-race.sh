@@ -335,20 +335,24 @@ wait "$DELETE_PID"; DELETE_STATUS=$?
 set -e
 UPLOAD_PID=""; DELETE_PID=""
 UPLOAD_HTTP_STATUS="$(cat "$TMP/upload-first.status" 2>/dev/null || echo 000)"
-if [ "$UPLOAD_HTTP_STATUS" != "200" ]; then
+if [ "$UPLOAD_HTTP_STATUS" != "200" ] && [ "$UPLOAD_HTTP_STATUS" != "201" ]; then
   echo "UPLOAD_FIRST_STORAGE_ERROR_BODY (test-only response):"
   sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first.body" | head -c 1200
   echo
 fi
-check "upload-first Storage API request completes before deletion commits" "200" "$UPLOAD_HTTP_STATUS"
+UPLOAD_FIRST_OBJECTS_BEFORE_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
+UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")"
+UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
+check "upload-first Storage API request completes before deletion commits" "1" \
+  "$(case "$UPLOAD_HTTP_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
 check "upload-first metadata deletion commits after waiting for the upload lock" "0" "$DELETE_STATUS"
-check "upload that wins the lock leaves one object and one tombstone before worker" "1" \
-  "$([ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "1" ] && \
-     [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")" = "1" ] && \
-     [ "$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")" = "0" ] && \
+check "upload-first metadata tombstone exists while the uploaded object is still present" "1" \
+  "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
+     [ "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER" = "1" ] && \
+     [ "$UPLOAD_FIRST_METADATA_BEFORE_WORKER" = "0" ] && \
      [ "$(download_status "$UPLOAD_PATH" "upload-first-before-worker")" = "200" ] && echo 1 || echo 0)"
 
-# The worker must remove the actual local Storage object bytes after the tombstone is committed.
+# The worker must remove a proven successful Storage upload after its tombstone commits.
 WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
   -X POST "$SUPABASE_URL/functions/v1/cleanup-cv-objects" \
   -H "apikey: $SUPABASE_ANON_KEY" \
@@ -357,8 +361,14 @@ WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
   --data '{}')"
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
 check "upload that wins the lock is still removed by the worker after tombstone" "1" \
-  "$([ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \
-     [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \
-     [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0)"
+  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]) && \
+   [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
+   [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \
+   [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \
+   [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0"
 
-echo "CV STORAGE UPLOAD RACE PASSED"
+if [ "$FAILS" -eq 0 ]; then
+  echo "CV STORAGE UPLOAD RACE PASSED"
+else
+  echo "CV STORAGE UPLOAD RACE FAILED: $FAILS checks"
+fi

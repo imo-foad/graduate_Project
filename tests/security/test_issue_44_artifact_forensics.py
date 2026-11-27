@@ -6,6 +6,7 @@ import unittest
 from unittest import mock
 import zipfile
 from pathlib import Path
+from datetime import datetime
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/security/issue-44-artifact-forensics.py"
 SPEC = importlib.util.spec_from_file_location("issue44_artifact_forensics", SCRIPT)
@@ -158,6 +159,33 @@ class ArtifactForensicsTests(unittest.TestCase):
             MODULE.select_completed_runs_snapshot(
                 [{"id": 1, "status": "completed"}],
                 "2026-11-27T05:00:00Z", 99,
+            )
+
+    def test_workflow_run_time_ranges_split_below_the_search_limit(self):
+        start = datetime(2026, 1, 1, tzinfo=MODULE.timezone.utc)
+        end = start + MODULE.timedelta(seconds=600)
+        midpoint = start + MODULE.timedelta(seconds=300)
+
+        def count_range(left, right):
+            if left == start and right == end:
+                return 1005
+            if right <= midpoint:
+                return 500
+            if left > midpoint:
+                return 505
+            return 1005
+
+        partitions = MODULE.partition_time_range(start, end, count_range)
+        self.assertEqual(len(partitions), 2)
+        self.assertEqual([item[2] for item in partitions], [500, 505])
+        self.assertTrue(all(item[2] <= MODULE.MAX_RUNS_PER_SEARCH for item in partitions))
+        self.assertEqual(partitions[0][1] + MODULE.timedelta(seconds=1), partitions[1][0])
+
+    def test_workflow_run_time_range_fails_when_single_second_exceeds_limit(self):
+        start = datetime(2026, 1, 1, tzinfo=MODULE.timezone.utc)
+        with self.assertRaisesRegex(MODULE.ForensicsError, "one-second timestamp"):
+            MODULE.partition_time_range(
+                start, start, lambda _left, _right: 1001
             )
 
     def test_inventory_retry_recovers_from_transient_pagination_drift(self):

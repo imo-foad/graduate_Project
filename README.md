@@ -30,7 +30,7 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 
 ## Layout
 
-- `supabase/migrations/0001..0034` — schema, catalogue, activity, RLS/storage, social feed, identity, company rules, recommendation availability, CV cleanup and typed synthetic university academic records
+- `supabase/migrations/0001..0040` — schema, catalogue, activity, RLS/storage, social feed, identity, company rules, recommendation availability, durable CV cleanup/retry and permanently retired Storage-path tombstones with transaction-level advisory locking, plus typed synthetic university academic records
 - `fixtures/*.json` -> `npm run build:seed` -> four generated SQL seeds for skills, active catalogue, the four existing graduate demos and local synthetic university accounts
 - `supabase/functions/_shared/` — deterministic scoring, opportunity filtering and recommendation orchestration
 - `supabase/functions/recommend/` — authenticated Edge Function

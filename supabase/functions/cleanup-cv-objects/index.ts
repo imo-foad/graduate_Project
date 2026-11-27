@@ -2,18 +2,19 @@
 //
 // Ordinary metadata deletion is handled by the owner-scoped RPC delete_cv_document, which writes a
 // durable row to private.cv_cleanup_queue. This function drains that queue through the real Storage API:
-//   claim (transactional, SKIP LOCKED) -> storage.remove (idempotent) -> complete/fail.
+//   claim (transactional, SKIP LOCKED) -> path validation -> storage.remove (idempotent) -> complete/fail.
 // It never touches storage.objects with SQL, never logs storage paths, and is safe to run repeatedly.
 // Authorization: operator/cron only. The caller must present the service-role JWT, and the queue RPCs
 // are executable by service_role only.
+import { drainCvCleanup, type CvCleanupItem } from "../_shared/cv-cleanup-runner.ts";
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 const env = (key: string) => Deno.env.get(key) ?? "";
-
-interface CleanupItem { id: string; storage_path: string; attempts: number }
+const STORAGE_TIMEOUT_MS = 20_000;
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -27,47 +28,42 @@ Deno.serve(async (req) => {
 
   // Deno's Supabase client is already used elsewhere in this project; keep the dependency identical.
   const { createClient } = await import("npm:@supabase/supabase-js@2");
+  // A hung Storage or PostgREST request must not hold a queue lease indefinitely.
+  const fetchWithTimeout: typeof fetch = (input, init) =>
+    fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(STORAGE_TIMEOUT_MS) });
   const admin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: fetchWithTimeout },
   });
 
-  let processed = 0, done = 0, failed = 0;
-  for (let batch = 0; batch < 5; batch++) {
-    const { data: claimed, error: claimError } = await admin.rpc("claim_cv_cleanup", { p_limit: 50 });
-    if (claimError) {
-      console.error("CV cleanup claim failed", { code: claimError.code });
-      return json({ error: "CLEANUP_CLAIM_FAILED", processed, done, failed }, 503);
-    }
-    const items = (Array.isArray(claimed) ? claimed : []) as CleanupItem[];
-    if (items.length === 0) break;
-    let failedThisBatch = false;
-    for (const item of items) {
-      processed++;
-      const { error: storageError } = await admin.storage.from("cv-documents").remove([item.storage_path]);
-      if (storageError) {
-        failed++;
-        failedThisBatch = true;
-        const { error: markError } = await admin.rpc("fail_cv_cleanup", {
-          p_id: item.id,
-          // Do not persist provider error text: it can echo a private object key/path.
-          // The durable queue stores a stable code; operators can correlate provider logs by request time.
-          p_error: "STORAGE_DELETE_FAILED",
-        });
-        if (markError) console.error("CV cleanup failure could not be recorded", { code: markError.code });
-        continue;
-      }
-      const { data: completed, error: completeError } = await admin.rpc("complete_cv_cleanup", { p_id: item.id });
-      if (completeError || completed !== true) {
-        failed++;
-        failedThisBatch = true;
-        console.error("CV cleanup completion could not be recorded", { code: completeError?.code ?? "NO_ROW" });
-        continue;
-      }
-      done++;
-    }
-    // Never reclaim a just-failed item again in the same invocation. It becomes eligible on the
-    // next worker run, and an unrecorded completion is recovered after its lease expires.
-    if (items.length < 50 || failedThisBatch) break;
+  const result = await drainCvCleanup({
+    async claim(limit) {
+      const { data, error } = await admin.rpc("claim_cv_cleanup", { p_limit: limit });
+      if (error) return { items: [], errorCode: error.code ?? "CLAIM_ERROR" };
+      return { items: (Array.isArray(data) ? data : []) as CvCleanupItem[] };
+    },
+    async remove(path) {
+      const { error } = await admin.storage.from("cv-documents").remove([path]);
+      // Supabase Storage treats an already-absent object as a successful delete, which keeps the
+      // operation idempotent. Any returned error is recorded by the caller as a stable code only.
+      return { errorCode: error ? "STORAGE_DELETE_ERROR" : null };
+    },
+    async complete(id) {
+      const { data, error } = await admin.rpc("complete_cv_cleanup", { p_id: id });
+      return { completed: !error && data === true, ...(error ? { errorCode: error.code ?? "COMPLETE_ERROR" } : {}) };
+    },
+    async fail(id, errorCode) {
+      const { data, error } = await admin.rpc("fail_cv_cleanup", { p_id: id, p_error: errorCode });
+      return { completed: !error && data === true, ...(error ? { errorCode: error.code ?? "FAIL_ERROR" } : {}) };
+    },
+    log(event, meta) {
+      // Never include a storage path, file name, or CV content in operator logs.
+      console.error(event, meta ?? {});
+    },
+  });
+
+  if (!result.ok) {
+    return json({ error: "CLEANUP_CLAIM_FAILED", processed: result.processed, done: result.done, failed: result.failed }, 503);
   }
-  return json({ processed, done, failed }, 200);
+  return json({ processed: result.processed, done: result.done, failed: result.failed }, 200);
 });

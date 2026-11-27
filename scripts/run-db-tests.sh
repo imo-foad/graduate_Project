@@ -45,7 +45,7 @@ redact_ci_logs_on_exit() {
     {
       echo "## Database job failed (exit $status)"
       for file in "$LOG_DIR"/environment.txt "$LOG_DIR"/supabase-start.log "$LOG_DIR"/db-reset.log \
-                  "$LOG_DIR"/pgtap-15-focused.log "$LOG_DIR"/pgtap.log "$LOG_DIR"/concurrency.log \
+                  "$LOG_DIR"/pgtap-15-focused.log "$LOG_DIR"/pgtap.log "$LOG_DIR"/concurrency.log "$LOG_DIR"/cv-cleanup-concurrency.log \
                   "$LOG_DIR"/local-integrations.log; do
         [ -s "$file" ] || continue
         echo "### $(basename "$file")"
@@ -125,7 +125,7 @@ echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on seco
 STAGE="D pgTAP"
 # ---- D. pgTAP: all eighteen files must run and pass
 echo "=== D. supabase test db"
-EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle)
+EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle 21_cv_cleanup_lifecycle)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 # Run the historically fragile auth/catalogue test alone first; require a real TAP plan.
 echo "=== D1. focused Test 15"
@@ -138,13 +138,16 @@ echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi
-grep -Eq '^Files=18, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 18 files with a non-empty TAP plan"
+grep -Eq '^Files=19, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 18 files with a non-empty TAP plan"
 grep -Fxq 'Result: PASS' "$LOG_DIR/pgtap.log" || fail "full pgTAP TAP plan did not pass"
 
 STAGE="E concurrency"
 # ---- E. real concurrent sessions
 echo "=== E. concurrency"
 bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
+
+STAGE="E2 CV Storage immutable-path concurrency"
+bash tests/db/cv-cleanup-concurrency.sh 2>&1 | tee "$LOG_DIR/cv-cleanup-concurrency.log"
 
 STAGE="F integrations"
 # ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function

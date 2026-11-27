@@ -97,11 +97,16 @@ select is((select last_error from private.cv_cleanup_queue where storage_path = 
   'STORAGE_DELETE_FAILED:timeout', 'the last error is retained for reconciliation');
 select is(((public.get_cv_cleanup_report()) ->> 'failed')::int, 1,
   'the reconciliation report exposes the failed backlog before retry');
-select ok((select next_attempt_at <= now() from private.cv_cleanup_queue
+select ok((select next_attempt_at > now() from private.cv_cleanup_queue
   where storage_path = tests.id('cv_owner')::text || '/cv2.pdf'),
-  'a failed cleanup is immediately eligible for the next worker run');
+  'a failed cleanup is scheduled with bounded backoff instead of retried immediately');
+select is(jsonb_array_length(public.claim_cv_cleanup(10)), 0,
+  'a scheduled FAILED row is not reclaimed before its next_attempt_at');
+-- Controlled test clock: make the retry due, as an operator wait would.
+update private.cv_cleanup_queue set next_attempt_at = now() - interval '1 second'
+ where storage_path = tests.id('cv_owner')::text || '/cv2.pdf';
 select is(jsonb_array_length(public.claim_cv_cleanup(10)), 1,
-  'FAILED rows are retried by the next worker run');
+  'FAILED rows are retried once their scheduled attempt is due');
 select is(((public.get_cv_cleanup_report()) ->> 'processing')::int, 1,
   'a claimed retry is counted as PROCESSING, not FAILED');
 

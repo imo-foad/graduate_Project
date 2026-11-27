@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -200,6 +200,29 @@ class Scripts(unittest.TestCase):
         self.assertIn("ar-docx-attached-skills-v1", ids)
         self.assertIn("en-pdf-two-column-sidebar-v1", ids)
         self.assertTrue(os.path.exists(os.path.join(ROOT, "tests/fixtures/cv-parser/README.md")))
+
+    def test_cv_storage_cleanup_retirement_and_real_race_are_required(self):
+        runner = SCRIPTS["scripts/run-db-tests.sh"]
+        local = SCRIPTS["scripts/run-local-integrations.sh"]
+        integration = code(open(os.path.join(ROOT, "tests/integration/cv-cleanup.integration.mjs")).read())
+        pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
+        migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
+        race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
+        for needle in ("21_cv_cleanup_lifecycle", "Files=19", "bash tests/db/cv-cleanup-concurrency.sh"):
+            self.assertIn(needle, runner)
+        self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
+        self.assertIn("createdUsers.push(targetId)", integration)
+        self.assertIn("login(email, targetPassword)", integration)
+        self.assertIn("async function login(email, accountPassword = password)", integration)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", migration)
+        self.assertIn("pg_advisory_xact_lock", migration)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", pgtap)
+        for status in ("PENDING", "PROCESSING", "FAILED", "DONE"):
+            self.assertIn(status, pgtap)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", race)
+        self.assertIn("pg_stat_activity", race)
+        self.assertIn("wait_for_lock_wait", race)
+        self.assertIn("CV CLEANUP CONCURRENCY PASSED", race)
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):
         on_disk = sorted(f[:-len(".test.sql")] for f in os.listdir(os.path.join(ROOT, "supabase/tests/database")) if f.endswith(".test.sql"))

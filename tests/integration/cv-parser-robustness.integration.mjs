@@ -229,7 +229,8 @@ try {
   });
   pass("the private CV bucket rejects an oversized upload", [400, 413].includes(oversizedUpload.upload.status),
     oversizedUpload.upload.status);
-  const invalidType = await uploadAndRegister(primary, validPdf, "pdf", PDF_MIME, { fileType: "txt" });
+  const invalidType = await uploadAndRegister(primary, validPdf, "pdf", PDF_MIME,
+    { fileType: "txt", expectMetadataStatus: 400 });
   pass("invalid CV metadata file_type is rejected by the database", invalidType.metadata.status === 400,
     invalidType.metadata.text);
 

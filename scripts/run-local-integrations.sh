@@ -21,9 +21,10 @@ cleanup() {
   # Workflow logs need repository-admin credentials; publish the failing suite (and a short,
   # credential-filtered tail) as a public run annotation so the failure is diagnosable.
   if [ "$status" -ne 0 ]; then
-    local tail_text
-    tail_text="$(tail -n 40 "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey|password|secret|token' | tail -n 6 | tr '\n' ' ' | cut -c1-900)"
-    printf '::error title=INTEGRATION_FAILED::%s (exit %s) | %s\n' "${CURRENT_SUITE:-unknown suite}" "$status" "$tail_text"
+    local tail_text detail
+    tail_text="$(tail -n 60 "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey|password|secret|token' | tail -n 3 | tr '\n' ' ' | cut -c1-600)"
+    detail="$(grep -a -m1 -E 'AssertionError|DIAGNOSTIC|Error:' "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey' | cut -c1-500 | tr '\n' ' ')"
+    printf '::error title=INTEGRATION_FAILED::%s (exit %s) | %s | %s\n' "${CURRENT_SUITE:-unknown suite}" "$status" "$detail" "$tail_text"
   fi
   if [ -n "$FUNCTION_PID" ]; then kill "$FUNCTION_PID" >/dev/null 2>&1 || true; wait "$FUNCTION_PID" >/dev/null 2>&1 || true; fi
   rm -f "$LOCAL_ENV"

@@ -60,7 +60,7 @@ check() {
 }
 
 wait_for_app_lock_wait() {
-  local app="$1" count
+  local app="$1" diagnostic_log="${2:-}" count
   for _ in $(seq 1 1000); do
     count="$(P "select count(*) from pg_catalog.pg_stat_activity
                  where application_name = '$app'
@@ -70,6 +70,16 @@ wait_for_app_lock_wait() {
     sleep 0.01
   done
   echo "TIMEOUT waiting for PostgreSQL lock wait: $app" >&2
+  P "select application_name || ' | ' || coalesce(state,'') || ' | ' ||
+          coalesce(wait_event_type,'') || ' | ' || coalesce(wait_event,'') || ' | ' ||
+          left(query, 500)
+     from pg_catalog.pg_stat_activity
+    where state = 'active' and pid <> pg_backend_pid()
+    order by application_name" >&2 || true
+  if [ -n "$diagnostic_log" ] && [ -s "$diagnostic_log" ]; then
+    echo "BLOCKED SESSION SQL LOG ($app):" >&2
+    tail -n 40 "$diagnostic_log" >&2
+  fi
   return 1
 }
 
@@ -336,7 +346,7 @@ reset role;
 commit;
 SQL
 DELETE_PID=$!
-wait_for_app_lock_wait "issue18-storage-delete-after-upload"
+wait_for_app_lock_wait "issue18-storage-delete-after-upload" "$TMP/delete-after-upload.log"
 release_barrier "UPLOAD_BARRIER_RELEASED"
 set +e
 wait "$UPLOAD_PID"; UPLOAD_WAIT_STATUS=$?

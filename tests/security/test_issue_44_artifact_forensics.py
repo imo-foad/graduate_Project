@@ -111,6 +111,15 @@ class ArtifactForensicsTests(unittest.TestCase):
             MODULE.validate_inventory([{"id": 1}, {"id": 1}], 2)
         MODULE.validate_inventory([{"id": 1}, {"id": 2}], 2)
 
+    def test_only_completed_runs_enter_the_artifact_snapshot(self):
+        completed, skipped = MODULE.completed_runs_snapshot([
+            {"id": 1, "status": "completed"},
+            {"id": 2, "status": "in_progress"},
+            {"id": 3, "status": "queued"},
+        ])
+        self.assertEqual([item["id"] for item in completed], [1])
+        self.assertEqual(skipped, 2)
+
     def test_gitleaks_exit_code_must_match_report(self):
         self.assertEqual(MODULE.validate_gitleaks_result(0, True, []), [])
         self.assertEqual(

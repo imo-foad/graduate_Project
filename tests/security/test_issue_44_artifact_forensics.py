@@ -68,7 +68,7 @@ class ArtifactForensicsTests(unittest.TestCase):
             MODULE.inspect_zip(outer, exposure / "55", "run:10/artifact:55/bundle", state)
             self.assertEqual(state.incomplete, [])
             self.assertTrue(any(
-                "inner.zip!/nested/credential.txt" in item["origin"]
+                "inner.zip" in item["origin"] and item["member"] == "nested/credential.txt"
                 for item in state.manifest.values()
             ))
             payloads = list((exposure / "55").rglob("credential.txt"))

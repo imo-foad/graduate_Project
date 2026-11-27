@@ -79,7 +79,8 @@ wait_for_storage_insert_lock_wait() {
     count="$(P "select count(*) from pg_catalog.pg_stat_activity
                  where state = 'active'
                    and wait_event_type = 'Lock'
-                   and query ilike '%storage.objects%'")"
+                   and wait_event = 'advisory'
+                   and query ~* 'insert.*storage.*objects'")"
     [ "$count" -ge 1 ] && return 0
     sleep 0.01
   done

@@ -188,6 +188,15 @@ class ArtifactForensicsTests(unittest.TestCase):
                 start, start, lambda _left, _right: 1001
             )
 
+    def test_current_workflow_run_id_is_parsed_and_validated(self):
+        self.assertEqual(MODULE.parse_current_run_id(None), 0)
+        self.assertEqual(MODULE.parse_current_run_id(""), 0)
+        self.assertEqual(MODULE.parse_current_run_id("45943075360"), 45943075360)
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.parse_current_run_id("not-an-id")
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.parse_current_run_id("-1")
+
     def test_inventory_retry_recovers_from_transient_pagination_drift(self):
         attempts = {"count": 0}
 

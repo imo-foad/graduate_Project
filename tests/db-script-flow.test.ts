@@ -124,7 +124,7 @@ test("local HTTP integration failure fails the database runner", () => assert.no
 test("immutable CV Storage path race failure fails the database runner", () => {
   const r = run({ FAKE_CV_CLEANUP_CONC_EXIT: "1" });
   assert.equal(r.status, 1, out(r));
-  assert.ok(out(r).includes("bash tests/db/cv-cleanup-concurrency.sh"));
+  assert.ok(out(r).includes("exit 1 after E2 CV Storage immutable-path concurrency"));
 });
 
 test("concurrency harness creates only active TRAINING opportunities and fails fast on setup errors", () => {

@@ -336,6 +336,80 @@ def api_json(url: str):
         return 0, None
 
 
+MAX_RUNS_PER_SEARCH = 900
+
+
+def partition_time_range(start, end, count_provider, max_results: int = MAX_RUNS_PER_SEARCH):
+    """Split a GitHub created-time query until each result set stays below its 1,000 cap."""
+    if start > end:
+        raise ForensicsError("workflow run time range is inverted")
+    expected = count_provider(start, end)
+    if not isinstance(expected, int) or expected < 0:
+        raise ForensicsError("workflow run count probe returned an invalid count")
+    if expected <= max_results:
+        return [(start, end, expected)]
+    duration = int((end - start).total_seconds())
+    if duration < 1:
+        raise ForensicsError(
+            "more than the GitHub workflow-run search limit share a one-second timestamp"
+        )
+    midpoint = start + timedelta(seconds=duration // 2)
+    right_start = midpoint + timedelta(seconds=1)
+    left = partition_time_range(start, midpoint, count_provider, max_results)
+    right = partition_time_range(right_start, end, count_provider, max_results)
+    return left + right
+
+
+def list_workflow_runs_partitioned(api: str, cutoff: str):
+    """Enumerate every workflow run using disjoint created-time ranges below GitHub's 1,000 cap."""
+    try:
+        end = datetime.fromisoformat(cutoff.replace("Z", "+00:00")).replace(microsecond=0)
+    except ValueError as error:
+        raise ForensicsError("invalid workflow-run snapshot cutoff") from error
+    start = datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+    def count_provider(range_start, range_end):
+        url = (
+            api + "/actions/runs?created=" +
+            range_start.strftime("%Y-%m-%dT%H:%M:%SZ") + ".." +
+            range_end.strftime("%Y-%m-%dT%H:%M:%SZ") +
+            "&per_page=1&page=1"
+        )
+        status, payload = api_json(url)
+        if status != 200 or not isinstance(payload, dict):
+            raise ForensicsError(
+                f"workflow run range count probe failed: http={status}"
+            )
+        count = payload.get("total_count")
+        if not isinstance(count, int) or count < 0:
+            raise ForensicsError("workflow run range count probe omitted total_count")
+        return count
+
+    partitions = partition_time_range(start, end, count_provider)
+    all_runs = []
+    expected_total = 0
+    for range_start, range_end, probed_count in partitions:
+        if probed_count == 0:
+            continue
+        url = (
+            api + "/actions/runs?created=" +
+            range_start.strftime("%Y-%m-%dT%H:%M:%SZ") + ".." +
+            range_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+        )
+        range_runs, actual_count = retry_inventory_call(
+            lambda: list_endpoint(url, "workflow_runs")
+        )
+        if actual_count != probed_count:
+            raise ForensicsError(
+                "workflow run range total_count changed between probe and pagination"
+            )
+        all_runs.extend(range_runs)
+        expected_total += probed_count
+
+    validate_inventory(all_runs, expected_total)
+    return all_runs, expected_total, len(partitions)
+
+
 def retry_inventory_call(fetch, attempts: int = 5):
     """Retry only inventory-drift errors; never suppress authorization, HTTP, or schema failures."""
     for attempt in range(attempts):
@@ -502,21 +576,23 @@ def main() -> int:
 
     # Snapshot all completed workflow runs first. Logs are ZIP archives too, and
     # the previous audit's aggregate unsafe-entry count covered both logs and artifacts.
-    runs_url = api + "/actions/runs?created=2000-01-01T00:00:00Z.." + run_snapshot_cutoff
-    runs_all, expected_runs = retry_inventory_call(
-        lambda: list_endpoint(runs_url, "workflow_runs")
+    runs_all, expected_runs, run_partition_count = retry_inventory_call(
+        lambda: list_workflow_runs_partitioned(api, run_snapshot_cutoff)
     )
-    runs_confirmation, confirmed_runs_total = retry_inventory_call(
-        lambda: list_endpoint(runs_url, "workflow_runs")
+    runs_confirmation, confirmed_runs_total, confirmed_partitions = retry_inventory_call(
+        lambda: list_workflow_runs_partitioned(api, run_snapshot_cutoff)
     )
     if expected_runs != confirmed_runs_total:
         raise ForensicsError("Actions run total_count changed during snapshot confirmation")
+    if run_partition_count != confirmed_partitions:
+        raise ForensicsError("workflow run search partition count changed during snapshot confirmation")
     validate_stable_inventory(runs_all, runs_confirmation)
     selected_runs, current_run_skipped, noncompleted_runs_skipped, newer_runs = (
         select_completed_runs_snapshot(runs_all, run_snapshot_cutoff, current_run_id)
     )
     print(
         f"ACTIONS_RUNS_ENUMERATED={len(runs_all)}/{expected_runs} "
+        f"RUN_SEARCH_PARTITIONS={run_partition_count} "
         f"RUN_SNAPSHOT_CUTOFF={run_snapshot_cutoff} "
         f"COMPLETED_RUNS_IN_SNAPSHOT={len(selected_runs)} "
         f"CURRENT_RUN_SKIPPED={current_run_skipped} "
@@ -670,7 +746,7 @@ def main() -> int:
         "# Issue #44 — retained Actions logs and artifact forensics", "",
         f"- Artifact snapshot cutoff UTC: {snapshot_cutoff}.",
         f"- Workflow-run snapshot cutoff UTC: {run_snapshot_cutoff}.",
-        f"- Actions runs enumerated: {len(runs_all)} / {expected_runs}; completed logs selected: {len(selected_runs)}.",
+        f"- Actions runs enumerated: {len(runs_all)} / {expected_runs} across {run_partition_count} disjoint time partitions; completed logs selected: {len(selected_runs)}.",
         f"- Current forensic run skipped: {current_run_skipped}; non-completed runs skipped: {noncompleted_runs_skipped}; newer runs: {newer_runs}.",
         f"- Run logs downloaded: {run_logs_downloaded} / {len(selected_runs)}.",
         f"- Repository artifacts enumerated: {artifacts_listed} / {expected_artifacts}.",

@@ -147,7 +147,12 @@ echo "=== E. concurrency"
 bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
 
 STAGE="E2 CV Storage immutable-path concurrency"
-bash tests/db/cv-cleanup-concurrency.sh 2>&1 | tee "$LOG_DIR/cv-cleanup-concurrency.log"
+echo "=== E2. immutable CV Storage path concurrency"
+# Name the failing command on stdout so the public run annotation (and the control-flow tests) can point at
+# the stage that died even though `set -e` would otherwise abort silently.
+if ! bash tests/db/cv-cleanup-concurrency.sh 2>&1 | tee "$LOG_DIR/cv-cleanup-concurrency.log"; then
+  fail "bash tests/db/cv-cleanup-concurrency.sh failed"
+fi
 
 STAGE="F integrations"
 # ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function

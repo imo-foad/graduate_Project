@@ -147,7 +147,10 @@ echo "=== E. concurrency"
 bash tests/db/concurrency.sh 2>&1 | tee "$LOG_DIR/concurrency.log"
 
 STAGE="E2 CV Storage immutable-path concurrency"
-bash tests/db/cv-cleanup-concurrency.sh 2>&1 | tee "$LOG_DIR/cv-cleanup-concurrency.log"
+for attempt in 1 2 3; do
+  echo "=== CV cleanup metadata concurrency pass $attempt/3"
+  bash tests/db/cv-cleanup-concurrency.sh 2>&1 | tee -a "$LOG_DIR/cv-cleanup-concurrency.log"
+done
 
 STAGE="F integrations"
 # ---- F. local HTTP integration: Auth provisioning + demo seed + Storage API + Edge Function

@@ -73,6 +73,12 @@ cleanup() {
   else
     marker="SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
   fi
+  # Public annotation for the same reason as the DB runner: logs/summaries need admin credentials.
+  if [ "$status" -ne 0 ]; then
+    local announce
+    announce="$(tail -n 4 "$LOG_FILE" | tr '\n' ' ' | cut -c1-700)"
+    printf '::error title=UNIVERSITY_SEED_SMOKE_FAILED::exit %s | %s\n' "$status" "$announce"
+  fi
   # Job logs need repository-admin credentials to download; a short redacted tail in the public
   # job summary keeps a failed stage diagnosable without exposing keys, JWTs or CV content.
   if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then

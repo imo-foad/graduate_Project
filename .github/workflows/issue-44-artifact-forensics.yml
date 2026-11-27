@@ -29,7 +29,7 @@ concurrency:
 jobs:
   artifacts:
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/security/issue-44-artifact-forensics'
-    name: Forensic scan of every retained Actions artifact
+    name: Forensic scan of all retained Actions run logs and artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
@@ -97,7 +97,7 @@ jobs:
           python3 -m py_compile scripts/security/issue-44-artifact-forensics.py
           python3 -m unittest discover -s tests/security -p 'test_issue_44_artifact_forensics.py' -v
 
-      - name: Download and inspect retained artifacts without unsafe extraction
+      - name: Download and inspect retained Actions run logs and artifacts without unsafe extraction
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

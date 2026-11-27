@@ -132,34 +132,120 @@ select ok((select claimed_at > now() - interval '1 minute' from private.cv_clean
 select is(jsonb_array_length(public.claim_cv_cleanup(10)), 0,
   'another worker cannot claim a row that is currently leased');
 
--- ---- A path that metadata references again must never be deleted -----------------------------------
+-- ---- Storage paths become immutable retired tombstones in every queue state -----------------------
 select tests.clear_queue();
-select tests.add_cv('reused', tests.id('owner'), tests.id('owner')::text || '/reused.pdf');
+select tests.add_cv('retired_pending', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf');
 select tests.login_owner('owner');
-select public.delete_cv_document(tests.id('reused'));
+select public.delete_cv_document(tests.id('retired_pending'));
 reset role;
-select is((select status from private.cv_cleanup_queue where storage_path = tests.id('owner')::text || '/reused.pdf'),
-  'PENDING', 'deleting metadata queues its Storage path');
-select tests.add_cv('reused_again', tests.id('owner'), tests.id('owner')::text || '/reused.pdf');
-select is((select status from private.cv_cleanup_queue where storage_path = tests.id('owner')::text || '/reused.pdf'),
-  'DONE', 're-creating metadata for the same object key cancels queued cleanup');
-select is((select last_error from private.cv_cleanup_queue where storage_path = tests.id('owner')::text || '/reused.pdf'),
-  'PATH_REUSED_CLEANUP_CANCELLED', 'the cancellation reason is observable');
-select is(jsonb_array_length(public.claim_cv_cleanup(10)), 0,
-  'cancelled cleanup is never handed to the worker');
-
--- A tampered/legacy queue row for a live path is resolved at claim time as well.
-insert into private.cv_cleanup_queue (storage_path, graduate_id, reason)
-values (tests.id('owner')::text || '/reused.pdf', tests.id('owner'), 'METADATA_DELETE');
-select is(jsonb_array_length(public.claim_cv_cleanup(10)), 0,
-  'claiming refuses a path that current metadata still references');
 select is((select status from private.cv_cleanup_queue
-            where storage_path = tests.id('owner')::text || '/reused.pdf'
-              and last_error = 'PATH_STILL_REFERENCED'),
-  'DONE', 'the live-path guard resolves the row without a Storage call');
+            where storage_path = tests.id('owner')::text || '/retired-pending.pdf'),
+  'PENDING', 'deleting metadata creates a PENDING tombstone');
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'retired_pending_again', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'a PENDING path cannot be registered again');
+
+update private.cv_cleanup_queue
+   set status = 'PROCESSING', attempts = 1, claimed_at = now()
+ where storage_path = tests.id('owner')::text || '/retired-pending.pdf';
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'retired_processing_again', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'a PROCESSING path cannot be registered again');
+
+update private.cv_cleanup_queue
+   set status = 'FAILED', claimed_at = null, next_attempt_at = now() + interval '60 seconds'
+ where storage_path = tests.id('owner')::text || '/retired-pending.pdf';
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'retired_failed_again', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'a FAILED path cannot be registered again');
+
+update private.cv_cleanup_queue
+   set status = 'DONE', claimed_at = null, next_attempt_at = null
+ where storage_path = tests.id('owner')::text || '/retired-pending.pdf';
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'retired_done_again', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'a DONE path remains a permanent tombstone');
+
 select is((select count(*)::int from public.cv_documents
-            where storage_path = tests.id('owner')::text || '/reused.pdf'), 1,
-  'the live metadata row is untouched by the guard');
+            where storage_path = tests.id('owner')::text || '/retired-pending.pdf'), 0,
+  'no active metadata row references the retired path');
+select is((select count(*)::int from private.cv_cleanup_queue
+            where storage_path = tests.id('owner')::text || '/retired-pending.pdf'), 1,
+  'the retired Storage path has exactly one permanent queue record');
+
+-- An expired lease is recovered and re-claimed without removing its tombstone.
+update private.cv_cleanup_queue
+   set status = 'PROCESSING', attempts = 1, claimed_at = now() - interval '16 minutes'
+ where storage_path = tests.id('owner')::text || '/retired-pending.pdf';
+create table tests.retired_lease_claim as select public.claim_cv_cleanup(10) as body;
+select is(jsonb_array_length((select body from tests.retired_lease_claim)), 1,
+  'an expired lease is recovered and the retired item is re-claimed');
+select is((select body -> 0 ->> 'attempts' from tests.retired_lease_claim)::int, 2,
+  'expired-lease recovery preserves the attempt count');
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'retired_after_lease', tests.id('owner'), tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'an expired/reclaimed worker lease cannot make a path reusable');
+select is((select status from private.cv_cleanup_queue
+            where storage_path = tests.id('owner')::text || '/retired-pending.pdf'),
+  'PROCESSING', 'lease recovery does not remove the path tombstone');
+
+-- A never-used key is accepted and a path replacement queues only the superseded key.
+select tests.add_cv('fresh_path', tests.id('owner'), tests.id('owner')::text || '/fresh-after-retirement.pdf');
+select is((select count(*)::int from public.cv_documents
+            where storage_path = tests.id('owner')::text || '/fresh-after-retirement.pdf'), 1,
+  'a fresh never-used Storage path registers normally');
+
+select tests.add_cv('replace_path', tests.id('owner'), tests.id('owner')::text || '/replace-old.pdf');
+update public.cv_documents
+   set storage_path = tests.id('owner')::text || '/replace-new.pdf'
+ where id = tests.id('replace_path');
+select is((select count(*)::int from private.cv_cleanup_queue
+            where storage_path = tests.id('owner')::text || '/replace-old.pdf'), 1,
+  'replacing a CV queues the old Storage path exactly once');
+select is((select count(*)::int from private.cv_cleanup_queue
+            where storage_path = tests.id('owner')::text || '/replace-new.pdf'), 0,
+  'replacing a CV does not queue the new Storage path');
+select is((select count(*)::int from public.cv_documents
+            where id = tests.id('replace_path')
+              and storage_path = tests.id('owner')::text || '/replace-new.pdf'), 1,
+  'the new CV metadata remains active on its fresh path');
+select throws_ok(
+  format('select tests.add_cv(%L, %L::uuid, %L)',
+    'replace_old_reuse', tests.id('owner'), tests.id('owner')::text || '/replace-old.pdf'),
+  '23514', 'CV_STORAGE_PATH_RETIRED',
+  'a superseded path cannot be registered again');
+
+-- Every queue insert is serialized with metadata writes and must never overlap active metadata.
+select throws_ok(
+  format('insert into private.cv_cleanup_queue (storage_path, graduate_id, reason) values (%L, %L::uuid, %L)',
+    tests.id('owner')::text || '/fresh-after-retirement.pdf', tests.id('owner'), 'METADATA_DELETE'),
+  '23514', 'CV_STORAGE_PATH_LIVE',
+  'the queue cannot retire a path that still has live metadata');
+select is((select count(*)::int
+            from public.cv_documents d
+            join private.cv_cleanup_queue q on q.storage_path = d.storage_path), 0,
+  'no active metadata row references any cleanup-queue path');
+
+select throws_ok(
+  format('update private.cv_cleanup_queue set storage_path = %L where storage_path = %L',
+    tests.id('owner')::text || '/mutated-tombstone.pdf',
+    tests.id('owner')::text || '/retired-pending.pdf'),
+  '23514', 'CV_CLEANUP_STORAGE_PATH_IMMUTABLE',
+  'a queue tombstone path itself cannot be changed');
+select is(has_table_privilege('authenticated', 'private.cv_cleanup_queue', 'insert'), false,
+  'authenticated cannot insert or inspect private cleanup queue rows');
+select is(has_function_privilege('authenticated', 'private.lock_cv_storage_paths(text[])', 'execute'), false,
+  'authenticated cannot execute the advisory-lock helper');
 
 -- ---- Worker RPC privileges remain service-role only -----------------------------------------------
 select is(has_function_privilege('authenticated', 'public.claim_cv_cleanup(integer)', 'execute'), false,

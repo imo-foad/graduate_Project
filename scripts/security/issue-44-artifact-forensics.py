@@ -81,6 +81,40 @@ def select_artifacts_snapshot(
     return selected, expired, newer
 
 
+def select_completed_runs_snapshot(
+    runs: list[dict[str, Any]], cutoff: str, current_run_id: int
+) -> tuple[list[dict[str, Any]], int, int, int]:
+    """Select completed historical runs and count active/current/out-of-snapshot runs."""
+    try:
+        cutoff_time = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ForensicsError("invalid Actions run snapshot cutoff") from error
+
+    selected = []
+    current_skipped = 0
+    noncompleted_skipped = 0
+    newer = 0
+    for run in runs:
+        created_at = run.get("created_at")
+        if not isinstance(created_at, str):
+            raise ForensicsError("Actions run inventory item is missing created_at")
+        try:
+            created_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ForensicsError("Actions run inventory item has invalid created_at") from error
+        if created_time.tzinfo is None:
+            raise ForensicsError("Actions run created_at must include a timezone")
+        if created_time > cutoff_time:
+            newer += 1
+        elif int(run["id"]) == current_run_id:
+            current_skipped += 1
+        elif run.get("status") != "completed":
+            noncompleted_skipped += 1
+        else:
+            selected.append(run)
+    return selected, current_skipped, noncompleted_skipped, newer
+
+
 def validate_stable_inventory(
     first: list[dict[str, Any]], second: list[dict[str, Any]], id_key: str = "id"
 ) -> None:
@@ -433,6 +467,61 @@ def main() -> int:
         os.chmod(directory, 0o700)
 
     state = ScanState(exposure)
+
+    # Snapshot all completed workflow runs first. Logs are ZIP archives too, and
+    # the previous audit's aggregate unsafe-entry count covered both logs and artifacts.
+    runs_url = api + "/actions/runs?created=2000-01-01T00:00:00Z.." + snapshot_cutoff
+    runs_all, expected_runs = list_endpoint(runs_url, "workflow_runs")
+    runs_confirmation, confirmed_runs_total = list_endpoint(runs_url, "workflow_runs")
+    if expected_runs != confirmed_runs_total:
+        raise ForensicsError("Actions run total_count changed during snapshot confirmation")
+    validate_stable_inventory(runs_all, runs_confirmation)
+    selected_runs, current_run_skipped, noncompleted_runs_skipped, newer_runs = (
+        select_completed_runs_snapshot(runs_all, snapshot_cutoff, current_run_id)
+    )
+    print(
+        f"ACTIONS_RUNS_ENUMERATED={len(runs_all)}/{expected_runs} "
+        f"COMPLETED_RUNS_IN_SNAPSHOT={len(selected_runs)} "
+        f"CURRENT_RUN_SKIPPED={current_run_skipped} "
+        f"NONCOMPLETED_RUNS_SKIPPED={noncompleted_runs_skipped} "
+        f"NEWER_RUNS={newer_runs}",
+        flush=True,
+    )
+
+    run_logs_downloaded = 0
+    run_log_inventory = []
+    for index, run in enumerate(selected_runs, start=1):
+        run_id = int(run["id"])
+        origin = f"run:{run_id}/logs"
+        archive_path = downloads / f"run-{run_id}-logs.zip"
+        ok, http_status, reason = download_archive(
+            api + "/actions/runs/" + str(run_id) + "/logs", archive_path
+        )
+        if not ok:
+            state.record_incomplete(
+                origin, "<archive>", reason + "-http-" + str(http_status)
+            )
+            run_log_inventory.append({"run_id": run_id, "downloaded": False})
+            continue
+
+        before_quarantine = len(state.quarantined)
+        before_incomplete = len(state.incomplete)
+        inspect_zip(archive_path, exposure / "logs" / str(run_id), origin, state)
+        archive_path.unlink(missing_ok=True)
+        run_logs_downloaded += 1
+        run_log_inventory.append({
+            "run_id": run_id,
+            "downloaded": True,
+            "quarantined_entries": len(state.quarantined) - before_quarantine,
+            "incomplete_entries": len(state.incomplete) - before_incomplete,
+        })
+        if index % 100 == 0:
+            print(f"ACTIONS_RUN_LOGS_PROCESSED={index} DOWNLOADED={run_logs_downloaded}", flush=True)
+
+    (root / "run-log-inventory.json").write_text(
+        json.dumps(run_log_inventory, separators=(",", ":")), encoding="utf-8"
+    )
+
     artifacts_all, expected_artifacts = list_endpoint(api + "/actions/artifacts", "artifacts")
     confirmation, confirmation_total = list_endpoint(api + "/actions/artifacts", "artifacts")
     if expected_artifacts != confirmation_total:
@@ -493,6 +582,11 @@ def main() -> int:
     findings = scan_gitleaks(gitleaks, config, exposure, reports, state)
 
     print(
+        f"ACTIONS_RUN_LOGS_LISTED={len(selected_runs)} DOWNLOADED={run_logs_downloaded} "
+        f"CURRENT_SKIPPED={current_run_skipped} NONCOMPLETED_SKIPPED={noncompleted_runs_skipped}",
+        flush=True,
+    )
+    print(
         f"ARTIFACTS_LISTED={artifacts_listed} DOWNLOADED={artifacts_downloaded} "
         f"NEWER_THAN_SNAPSHOT={artifacts_newer_than_cutoff}",
         flush=True,
@@ -525,15 +619,18 @@ def main() -> int:
             relative = ""
         source = state.manifest.get(relative, {})
         print(
-            "ARTIFACT_FINDING rule=" + safe_text(finding.get("RuleID"), 100) +
+            "FORENSIC_FINDING rule=" + safe_text(finding.get("RuleID"), 100) +
             " origin=" + safe_text(source.get("origin", "UNMAPPED")) +
             " member=" + safe_text(source.get("member", reported_file)) +
             " line=" + str(finding.get("StartLine", ""),), flush=True
         )
 
     summary = [
-        "# Issue #44 — retained Actions artifact forensics", "",
+        "# Issue #44 — retained Actions logs and artifact forensics", "",
         f"- Snapshot cutoff UTC: {snapshot_cutoff}.",
+        f"- Actions runs enumerated: {len(runs_all)} / {expected_runs}; completed logs selected: {len(selected_runs)}.",
+        f"- Current forensic run skipped: {current_run_skipped}; non-completed runs skipped: {noncompleted_runs_skipped}; newer runs: {newer_runs}.",
+        f"- Run logs downloaded: {run_logs_downloaded} / {len(selected_runs)}.",
         f"- Repository artifacts enumerated: {artifacts_listed} / {expected_artifacts}.",
         f"- Artifacts in snapshot / downloaded: {len(selected_artifacts)} / {artifacts_downloaded}.",
         f"- Expired artifacts: {expired_artifacts}; created after snapshot cutoff: {artifacts_newer_than_cutoff}.",

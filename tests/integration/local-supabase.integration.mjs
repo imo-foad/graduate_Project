@@ -253,9 +253,13 @@ try {
   const inOneDay = new Date(Date.now() + 86_400_000).toISOString();
   const inOneWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
   const availabilityEvents = [
-    { key: "full", body: { title: "CI full training (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
-    { key: "waitlist", body: { title: "CI waitlist training", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
-    { key: "upcoming", body: { title: "CI upcoming training registration", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+    { key: "full", type: "TRAINING", body: { title: "CI full training (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "waitlist", type: "TRAINING", body: { title: "CI waitlist training", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
+    { key: "upcoming", type: "TRAINING", body: { title: "CI upcoming training registration", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+    { key: "job-full", type: "JOB", body: { title: "CI job at capacity", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "internship-full", type: "INTERNSHIP", body: { title: "CI internship at capacity", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "job-future", type: "JOB", body: { title: "CI job with future registration timestamp", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+    { key: "internship-future", type: "INTERNSHIP", body: { title: "CI internship with future registration timestamp", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
   ];
   for (const event of availabilityEvents) {
     const created = await request("/rest/v1/opportunities", {
@@ -263,7 +267,7 @@ try {
       headers: headers(service, { "Content-Type": "application/json", Prefer: "return=representation" }),
       body: JSON.stringify({
         seed_key: `ci-availability-${event.key}-${randomUUID()}`,
-        type: "TRAINING",
+        type: event.type,
         title: event.body.title,
         description: "Temporary training created by the local HTTP integration test.",
         location: "Cairo",
@@ -293,15 +297,29 @@ try {
     itemFor("waitlist")?.availability_status === "WAITLIST_ONLY");
   pass("recommendations keep a future registration window as UPCOMING",
     itemFor("upcoming")?.availability_status === "UPCOMING");
+  // JOB/INTERNSHIP use applications: Training-only capacity and registration-window fields must not
+  // exclude them or make the API report FULL/UPCOMING.
+  for (const key of ["job-full", "internship-full", "job-future", "internship-future"]) {
+    pass(`recommendations keep ${key} despite Training-only fields`,
+      Boolean(itemFor(key)) && itemFor(key)?.availability_status === null,
+      { item: itemFor(key) ?? null });
+  }
   const cachedAvailability = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   const cachedItems = Array.isArray(cachedAvailability.json?.items) ? cachedAvailability.json.items : [];
+  const cachedItemFor = (key) => cachedItems.find((item) =>
+    item.opportunity_id === availabilityEvents.find((e) => e.key === key)?.id);
   pass("cached recommendations apply the same availability filter",
     cachedAvailability.status === 200 && cachedAvailability.json?.source === "cache" &&
-    !cachedItems.some((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === "full")?.id) &&
-    cachedItems.some((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === "waitlist")?.id &&
-      item.availability_status === "WAITLIST_ONLY"));
+    !cachedItemFor("full") &&
+    cachedItemFor("waitlist")?.availability_status === "WAITLIST_ONLY" &&
+    cachedItemFor("upcoming")?.availability_status === "UPCOMING");
+  for (const key of ["job-full", "internship-full", "job-future", "internship-future"]) {
+    pass(`cached recommendations keep ${key} with null availability`,
+      Boolean(cachedItemFor(key)) && cachedItemFor(key)?.availability_status === null,
+      { item: cachedItemFor(key) ?? null });
+  }
 
   // Storage API upload as A, then prove that B cannot read, upload into, or delete A's object.
   const uploadA = await request(`/storage/v1/object/${bucket}/${encodePath(objectPath)}`, {

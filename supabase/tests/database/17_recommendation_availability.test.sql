@@ -40,6 +40,9 @@ do $$ begin
   perform tests.mk_opp('e_wait', 'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
   perform tests.mk_opp('e_full', 'TRAINING', '{"capacity":1,"deadline_days":5}');
   perform tests.mk_opp('j_job', 'JOB', '{"deadline_days":5}');
+  perform tests.mk_opp('j_capacity', 'JOB', '{"capacity":1,"deadline_days":5}');
+  perform tests.mk_opp('i_capacity', 'INTERNSHIP', '{"capacity":1,"deadline_days":5}');
+  perform tests.mk_opp('j_closed', 'JOB', '{"status":"CLOSED","deadline_days":5}');
   perform tests.mk_opp('e_closed', 'TRAINING', '{"capacity":5,"status":"CLOSED","deadline_days":5}');
 end $$;
 
@@ -48,6 +51,10 @@ reset role;
 update public.opportunities set registration_opens_at = now() + interval '1 day' where id = tests.id('e_upcoming');
 update public.opportunities set registered_count = 1 where id = tests.id('e_wait');
 update public.opportunities set registered_count = 1 where id = tests.id('e_full');
+-- Training-only fields are populated on application-workflow types on purpose.
+update public.opportunities
+   set registered_count = 1, registration_opens_at = now() + interval '1 day'
+ where id in (tests.id('j_capacity'), tests.id('i_capacity'));
 
 create table tests.candidates as
   select public.get_recommendation_candidates(tests.id('u1')) as body;
@@ -94,8 +101,38 @@ select is((tests.cand((select body from tests.candidates), 'e_full') ->> 'waitli
 
 select is(tests.cand((select body from tests.candidates), 'e_closed'), null,
        'closed opportunities never reach the recommendation projection');
+select is(tests.cand((select body from tests.candidates), 'j_closed'), null,
+       'closed JOB opportunities never reach the recommendation projection');
 select is(tests.cand((select body from tests.candidates), 'j_job') ->> 'capacity', null,
        'non-registrable opportunities carry no registration capacity');
+
+-- JOB/INTERNSHIP use applications: populated Training-only fields must stay visible to the Edge Function
+-- but must not be interpreted as registration availability.
+select ok(tests.cand((select body from tests.candidates), 'j_capacity') is not null,
+       'JOB at capacity with a future registration window remains a candidate');
+select is(tests.cand((select body from tests.candidates), 'j_capacity') ->> 'type', 'JOB',
+       'JOB candidate keeps its application-workflow type');
+select is((tests.cand((select body from tests.candidates), 'j_capacity') ->> 'capacity')::int, 1,
+       'JOB candidate exposes its capacity-like field');
+select is((tests.cand((select body from tests.candidates), 'j_capacity') ->> 'registered_count')::int, 1,
+       'JOB candidate exposes its registered_count-like field');
+select ok((tests.cand((select body from tests.candidates), 'j_capacity') ->> 'registration_opens_at')::timestamptz > now(),
+       'JOB candidate exposes its future registration_opens_at');
+select is((tests.cand((select body from tests.candidates), 'j_capacity') ->> 'waitlist_enabled')::boolean, false,
+       'JOB candidate exposes its waitlist_enabled-like field');
+
+select ok(tests.cand((select body from tests.candidates), 'i_capacity') is not null,
+       'INTERNSHIP at capacity with a future registration window remains a candidate');
+select is(tests.cand((select body from tests.candidates), 'i_capacity') ->> 'type', 'INTERNSHIP',
+       'INTERNSHIP candidate keeps its application-workflow type');
+select is((tests.cand((select body from tests.candidates), 'i_capacity') ->> 'capacity')::int, 1,
+       'INTERNSHIP candidate exposes its capacity-like field');
+select is((tests.cand((select body from tests.candidates), 'i_capacity') ->> 'registered_count')::int, 1,
+       'INTERNSHIP candidate exposes its registered_count-like field');
+select ok((tests.cand((select body from tests.candidates), 'i_capacity') ->> 'registration_opens_at')::timestamptz > now(),
+       'INTERNSHIP candidate exposes its future registration_opens_at');
+select is((tests.cand((select body from tests.candidates), 'i_capacity') ->> 'waitlist_enabled')::boolean, false,
+       'INTERNSHIP candidate exposes its waitlist_enabled-like field');
 
 -- Capacity and registration-window changes must invalidate cached rankings.
 reset role;

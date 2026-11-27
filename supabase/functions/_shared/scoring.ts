@@ -1,10 +1,11 @@
 // Deterministic match scoring (BR-016/017/022). Pure TypeScript: no Deno/Node APIs, so it is unit-testable.
 // The LLM never produces the score. Weights come from the business doc (6.5) except where marked ASSUMPTION.
-import { isActiveOpportunityType, registrationAvailability } from "./opportunity-state.ts";
+import { isActiveOpportunityType, isOpportunityOpen, registrationAvailability } from "./opportunity-state.ts";
 import type { AvailabilityStatus } from "./opportunity-state.ts";
 
-// v6: the active scope is JOB/INTERNSHIP/TRAINING only, so every cached ranking must be recomputed.
-export const MODEL_VERSION = "deterministic-v6-three-type-scope";
+// v7: registration availability is TRAINING-only, so cached v6 rankings may be missing JOB/INTERNSHIP
+// rows that were wrongly excluded by capacity-like fields. Bump forces every cache to recompute.
+export const MODEL_VERSION = "deterministic-v7-training-only-availability";
 
 export type Band = "HIGH" | "GOOD" | "MEDIUM" | "LOW";
 export interface GradSkill { skill_id: string; level: number }
@@ -21,7 +22,7 @@ export interface GraduateInput {
 export interface OppSkill { skill_id: string; importance: number; min_level: number; is_required: boolean }
 export interface OpportunityInput {
   id: string; type: string; title: string;
-  // Required by registrationAvailability(): without these, a valid SQL candidate is treated as CLOSED.
+  // Lifecycle fields drive universal closure; registration fields are only consumed for TRAINING.
   status?: string | null; deadline?: string | null; end_at?: string | null;
   description?: string | null;
   location?: string | null; attendance_mode?: string | null;
@@ -149,8 +150,8 @@ function audienceScore(g: GraduateInput, o: OpportunityInput): number | null {
 function gapFill(sa: ReturnType<typeof skillAnalysis>, o: OpportunityInput): number | null {
   return o.skills.length === 0 ? null : sa.gaps.length / o.skills.length;
 }
-// Registration availability (issue #16). The candidate projection is the source of truth; this maps the
-// resulting state to a score. FULL/CLOSED items are dropped before scoring (scoreOpportunity returns null).
+// TRAINING registration availability (issue #16). The candidate projection is the source of truth; this
+// maps the resulting state to a score. Closed and full-without-waitlist items are dropped before scoring.
 const AVAILABILITY_SCORE: Record<AvailabilityStatus, number> = {
   OPEN: 1, WAITLIST_ONLY: 0.5, UPCOMING: 0, FULL: 0, CLOSED: 0,
 };
@@ -168,11 +169,12 @@ export function scoreOpportunity(g: GraduateInput, o: OpportunityInput, now: Dat
   // Cancelled product lines are never scored, even if a legacy row is still ACTIVE.
   if (!isActiveOpportunityType(o.type)) return null;
   if (o.eligibility_failures.length > 0) return null;
-  // Availability is a hard gate, not just a weight: recommending a full event without a waitlist would
-  // always end in EVENT_FULL. Closed opportunities are already excluded by the SQL predicate and by the
-  // cached-read filter, so scoring keeps them scoreable and only drops capacity failures here.
+  // Universal closure rule for every type, including a direct call that bypassed the SQL candidate filter.
+  if (!isOpportunityOpen(o, now)) return null;
+  // Registration availability is a TRAINING-only hard gate: a full programme without a waitlist would
+  // always end in TRAINING_FULL. JOB/INTERNSHIP return null here and are governed by their applications.
   const availability = registrationAvailability(o, now);
-  if (availability === "FULL" || availability === "CLOSED") return null;
+  if (availability === "FULL") return null;
   if (o.minimum_experience_required && o.minimum_experience_years !== null
       && o.minimum_experience_years !== undefined && g.experience_years < o.minimum_experience_years) return null;
   const sa = skillAnalysis(g, o);

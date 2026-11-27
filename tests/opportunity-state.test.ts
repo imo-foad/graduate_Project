@@ -45,6 +45,24 @@ test("registration availability is null when no registration data is present", (
   assert.equal(registrationAvailability(null, NOW), null);
 });
 
+test("registration availability is TRAINING-only: JOB and INTERNSHIP never become FULL/UPCOMING", () => {
+  for (const type of ["JOB", "INTERNSHIP"]) {
+    const base = { type, status: "ACTIVE", deadline: iso(86_400_000) };
+    assert.equal(registrationAvailability({ ...base, capacity: 1, registered_count: 1 }, NOW), null, `${type} full`);
+    assert.equal(registrationAvailability({ ...base, capacity: 1, registered_count: 1, waitlist_enabled: true }, NOW), null, `${type} waitlist`);
+    assert.equal(registrationAvailability({ ...base, registration_opens_at: iso(1000) }, NOW), null, `${type} upcoming`);
+    assert.equal(registrationAvailability({ ...base, capacity: 1, registered_count: 1, registration_opens_at: iso(1000) }, NOW), null, `${type} combined`);
+  }
+});
+
+test("missing or unsupported types never inherit TRAINING availability", () => {
+  for (const type of [undefined, null, "", "SOMETHING_NEW", "job", "TRAINING ", "Training"]) {
+    assert.equal(registrationAvailability({
+      type, status: "ACTIVE", capacity: 1, registered_count: 1, registration_opens_at: iso(1000),
+    }, NOW), null, String(type));
+  }
+});
+
 test("active types: exactly JOB, INTERNSHIP and TRAINING, case-sensitive and exact", () => {
   assert.deepEqual([...ACTIVE_OPPORTUNITY_TYPES], ["JOB", "INTERNSHIP", "TRAINING"]);
   for (const t of ACTIVE_OPPORTUNITY_TYPES) {
@@ -119,6 +137,24 @@ test("cached recommendations: values SQL rejects are dropped too (unknown, case,
     { id: "padded", opportunity: { type: "JOB ", status: "ACTIVE" } },
     { id: "empty", opportunity: { type: "", status: "ACTIVE" } },
     { id: "missing", opportunity: { status: "ACTIVE" } },
+  ];
+  assert.deepEqual(filterAvailableRecommendations(cached, NOW).map((r) => r.id), ["job"]);
+});
+test("cached recommendations: JOB/INTERNSHIP capacity-like fields never exclude them", () => {
+  const cached = [
+    { id: "job-full", opportunity: { type: "JOB", status: "ACTIVE", capacity: 1, registered_count: 5, registration_opens_at: iso(1000), waitlist_enabled: false } },
+    { id: "internship-full", opportunity: { type: "INTERNSHIP", status: "ACTIVE", capacity: 1, registered_count: 5, registration_opens_at: iso(1000) } },
+    { id: "training-full", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 1, registered_count: 1 } },
+  ];
+  assert.deepEqual(filterAvailableRecommendations(cached, NOW).map((r) => r.id), ["job-full", "internship-full"]);
+});
+test("cached recommendations: a deleted opportunity or closed JOB does not leak through", () => {
+  const cached = [
+    { id: "job", opportunity: { type: "JOB", status: "ACTIVE" } },
+    { id: "job-closed", opportunity: { type: "JOB", status: "CLOSED", capacity: 1, registered_count: 1 } },
+    { id: "job-expired", opportunity: { type: "JOB", status: "ACTIVE", deadline: iso(-1000) } },
+    { id: "gone", opportunity: null },
+    { id: "missing-opportunity", opportunity: undefined },
   ];
   assert.deepEqual(filterAvailableRecommendations(cached, NOW).map((r) => r.id), ["job"]);
 });

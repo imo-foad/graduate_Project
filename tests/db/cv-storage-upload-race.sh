@@ -306,8 +306,39 @@ UPLOAD_POLICY_PROBE="$(P "begin;
 UPLOAD_POLICY_ALLOWED="$(printf '%s\n' "$UPLOAD_POLICY_PROBE" | tail -n 1 | cut -d'|' -f2)"
 check "authenticated RLS helper allows a fresh unretired upload path" "true" "$UPLOAD_POLICY_ALLOWED"
 
+# Prove the HTTP Storage API accepts the exact path already referenced by a live cv_documents row.
+# This isolates a possible upload-policy issue from the later concurrent tombstone ordering.
+upload_in_background "$UPLOAD_PATH" "upload-first-exact-path-preflight"
+set +e
+wait "$UPLOAD_PID"; EXACT_PATH_UPLOAD_WAIT=$?
+set -e
+UPLOAD_PID=""
+EXACT_PATH_UPLOAD_STATUS="$(cat "$TMP/upload-first-exact-path-preflight.status" 2>/dev/null || echo 000)"
+if [ "$EXACT_PATH_UPLOAD_STATUS" != "200" ] && [ "$EXACT_PATH_UPLOAD_STATUS" != "201" ]; then
+  echo "EXACT_PATH_STORAGE_PRECHECK_BODY:"
+  sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first-exact-path-preflight.body" | head -c 1200
+  echo
+fi
+check "Storage API accepts upload to the live CV metadata path before any tombstone" "1" \
+  "$(case "$EXACT_PATH_UPLOAD_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
+check "exact-path preflight uploaded bytes are readable" "200" \
+  "$(download_status "$UPLOAD_PATH" "upload-first-exact-path-download")"
+EXACT_PATH_DELETE_STATUS="$(curl -sS -o "$TMP/upload-first-exact-path-delete.body" -w '%{http_code}' \
+  -X DELETE "$SUPABASE_URL/storage/v1/object/cv-documents/$UPLOAD_PATH" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $USER_TOKEN" 2>"$TMP/upload-first-exact-path-delete.curl.err")" || EXACT_PATH_DELETE_STATUS="000"
+check "exact-path preflight object deletes cleanly before the race" "1" \
+  "$(case "$EXACT_PATH_DELETE_STATUS" in 200|204) echo 1 ;; *) echo 0 ;; esac)"
+check "exact-path preflight leaves no Storage row before the race" "0" \
+  "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
+[ "$EXACT_PATH_UPLOAD_WAIT" -eq 0 ] && [ "$EXACT_PATH_UPLOAD_STATUS" = "200" ] && \
+  { [ "$EXACT_PATH_DELETE_STATUS" = "200" ] || [ "$EXACT_PATH_DELETE_STATUS" = "204" ]; } || {
+  echo "PREREQUISITE FAILED: Storage API does not support upload on the live metadata path" >&2
+  exit 2
+}
+
 # The second object path has live CV metadata but no Storage row yet. Its HTTP upload is
-# paused by a BEFORE INSERT trigger after taking the same path advisory lock as the RLS policy.
+# paused by an AFTER INSERT trigger after the production RLS policy has acquired the path lock.
 check "upload-first object path starts without a Storage object row" "0" \
   "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 

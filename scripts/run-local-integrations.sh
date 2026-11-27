@@ -55,10 +55,10 @@ NODE
 export DEMO_PASSWORD="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(24).toString("base64url"))')"
 echo "Provisioning synthetic Auth demo users (password omitted from logs)"
 note_suite "demo-provision-first.log"
-node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-first.log"
+node scripts/provision-demo-users.mjs 2>&1 | tee "$LOG_DIR/demo-provision-first.log"
 # The second pass verifies that provisioning is idempotent for already-created users.
 note_suite "demo-provision-second.log"
-node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-second.log"
+node scripts/provision-demo-users.mjs 2>&1 | tee "$LOG_DIR/demo-provision-second.log"
 
 npm run build:seed > "$LOG_DIR/integration-build-seed.log"
 DEMO_SEED="supabase/seed/03_demo_profiles.sql"
@@ -118,30 +118,30 @@ done
 # its ten local platform-admin fixtures. The integration deletes its temporary bootstrap
 # account and leaves the one-time bootstrap slot empty for the subsequent synthetic seed.
 note_suite "onboarding-integration.log"
-timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
+timeout 300s node tests/integration/onboarding.integration.mjs 2>&1 | tee "$LOG_DIR/onboarding-integration.log"
 
 # Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
 echo "Provisioning and applying synthetic university dataset (local only)"
 note_suite "university-seed.log"
-node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+node scripts/seed-university-demo.mjs 2>&1 | tee "$LOG_DIR/university-seed.log"
 # Verify Student/Faculty academic-record privacy and server-owned platform-admin authorization.
 note_suite "university-dataset-integration.log"
-node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
+node tests/integration/university-dataset.integration.mjs 2>&1 | tee "$LOG_DIR/university-dataset-integration.log"
 
 note_suite "http-integration.log"
-timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
+timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
 note_suite "cv-parse-integration.log"
-timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
 note_suite "cv-parser-robustness.log"
-timeout 300s node tests/integration/cv-parser-robustness.integration.mjs | tee "$LOG_DIR/cv-parser-robustness.log"
+timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"
 note_suite "cv-parser-evaluation.log"
-timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
+timeout 300s node scripts/evaluate-cv-parser-local.mjs 2>&1 | tee "$LOG_DIR/cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 note_suite "career-cohort-round1.log"
-timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"
+timeout 900s node tests/integration/career-cohort.integration.mjs round1 2>&1 | tee "$LOG_DIR/career-cohort-round1.log"
 note_suite "career-cohort-round2.log"
-timeout 900s node tests/integration/career-cohort.integration.mjs round2 | tee "$LOG_DIR/career-cohort-round2.log"
+timeout 900s node tests/integration/career-cohort.integration.mjs round2 2>&1 | tee "$LOG_DIR/career-cohort-round2.log"
 # Run after the other demo-account journeys because this deliberately exhausts rate-limit buckets.
 note_suite "rate-limits-integration.log"
-timeout 300s node tests/integration/rate-limits.integration.mjs | tee "$LOG_DIR/rate-limits-integration.log"
+timeout 300s node tests/integration/rate-limits.integration.mjs 2>&1 | tee "$LOG_DIR/rate-limits-integration.log"

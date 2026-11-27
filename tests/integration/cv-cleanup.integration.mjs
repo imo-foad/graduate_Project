@@ -128,7 +128,30 @@ function quote(value) {
   return "'" + String(value).replace(/'/g, "''") + "'";
 }
 const metadataCount = (id) => sqlInt("select count(*) from public.cv_documents where id = " + quote(id));
+const storageObjectCount = (path) => sqlInt(
+  "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = " + quote(path),
+);
 const queueTotal = () => sqlInt("select count(*) from private.cv_cleanup_queue");
+
+function installStorageDeleteFailureTrigger(path) {
+  sql(
+    "drop trigger if exists issue18_cv_storage_delete_failure on storage.objects; " +
+    "create or replace function public.issue18_cv_storage_delete_failure() returns trigger " +
+    "language plpgsql set search_path = '' as $issue18_failure$ begin " +
+    "if old.bucket_id = 'cv-documents' and old.name = " + quote(path) + " then " +
+    "raise exception using errcode = 'P0001', message = 'ISSUE18_TEST_STORAGE_DELETE_FAILURE'; " +
+    "end if; return old; end $issue18_failure$; " +
+    "create trigger issue18_cv_storage_delete_failure before delete on storage.objects " +
+    "for each row execute function public.issue18_cv_storage_delete_failure()",
+  );
+}
+
+function dropStorageDeleteFailureTrigger() {
+  sql(
+    "drop trigger if exists issue18_cv_storage_delete_failure on storage.objects; " +
+    "drop function if exists public.issue18_cv_storage_delete_failure()",
+  );
+}
 
 function escapePdfLiteral(value) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -355,19 +378,38 @@ try {
   const retryBytes = buildPdf("RETRY CV\nDocker");
   staleObjects.push(retryPath);
   pass("retry fixture object uploads", (await upload(owner.token, retryPath, retryBytes)).status < 300);
-  sql("insert into private.cv_cleanup_queue (storage_path, graduate_id, reason, status, attempts, last_error, next_attempt_at) values (" +
-    quote(retryPath) + ", " + quote(owner.id) + ", 'METADATA_DELETE', 'FAILED', 1, 'STORAGE_DELETE_FAILED', now() + interval '5 minutes')");
-  const scheduledDrain = await worker();
-  const scheduledQueue = queue(retryPath);
-  pass("a failed cleanup is not retried before its scheduled attempt",
-    scheduledDrain.status === 200 && scheduledQueue[0]?.status === "FAILED" &&
-    (await download(owner.token, retryPath)).status === 200, { response: scheduledDrain.json, rows: scheduledQueue });
+  const retryMeta = await createMetadata(owner.token, owner.id, retryPath, retryBytes);
+  const retryId = retryMeta.json?.[0]?.id;
+  pass("retry fixture metadata exists", retryMeta.status === 201 && Boolean(retryId), retryMeta);
+  const retryDelete = await deleteMetadata(owner.token, retryId);
+  pass("retry fixture metadata deletion creates its queue row",
+    retryDelete.status === 200 && queue(retryPath)[0]?.status === "PENDING", retryDelete);
+
+  installStorageDeleteFailureTrigger(retryPath);
+  let failureDrain;
+  try {
+    failureDrain = await worker();
+  } finally {
+    dropStorageDeleteFailureTrigger();
+  }
+  const failureQueue = queue(retryPath);
+  const failureTime = Date.parse(failureQueue[0]?.next_attempt_at ?? "");
+  pass("real Storage failure leaves a retryable FAILED row with backoff",
+    failureDrain.status === 200 && failureQueue.length === 1 &&
+    failureQueue[0]?.status === "FAILED" && failureQueue[0]?.attempts === 1 &&
+    failureQueue[0]?.last_error === "STORAGE_DELETE_FAILED" &&
+    Number.isFinite(failureTime) && failureTime > Date.now() &&
+    storageObjectCount(retryPath) === 1 && (await download(owner.token, retryPath)).status === 200,
+    { response: failureDrain.json, rows: failureQueue, storageObjects: storageObjectCount(retryPath) });
+
   sql("update private.cv_cleanup_queue set next_attempt_at = now() - interval '1 second' where storage_path = " + quote(retryPath));
   const retriedDrain = await worker();
   const retriedQueue = queue(retryPath);
-  pass("the retry deletes the original object once its schedule is due",
-    retriedDrain.status === 200 && retriedQueue[0]?.status === "DONE" && retriedQueue[0]?.attempts === 2 &&
-    (await download(owner.token, retryPath)).status !== 200, { response: retriedDrain.json, rows: retriedQueue });
+  pass("worker records a real Storage delete failure and a later run recovers",
+    retriedDrain.status === 200 && retriedQueue.length === 1 &&
+    retriedQueue[0]?.status === "DONE" && retriedQueue[0]?.attempts === 2 &&
+    storageObjectCount(retryPath) === 0 && (await download(owner.token, retryPath)).status !== 200,
+    { response: retriedDrain.json, rows: retriedQueue, storageObjects: storageObjectCount(retryPath) });
   pass("the reconciliation report is service-role readable and has no failed backlog",
     (await serviceRpc("get_cv_cleanup_report", {})).json?.failed === 0, (await serviceRpc("get_cv_cleanup_report", {})).json);
 
@@ -407,15 +449,34 @@ try {
   const exhaustedPath = ownerPrefix + "-exhausted.pdf";
   const exhaustedBytes = buildPdf("EXHAUSTED CV\nTableau");
   staleObjects.push(exhaustedPath);
-  pass("exhausted fixture object uploads", (await upload(owner.token, exhaustedPath, exhaustedBytes)).status < 300);
-  sql("insert into private.cv_cleanup_queue (storage_path, graduate_id, reason, status, attempts, last_error, next_attempt_at) values (" +
-    quote(exhaustedPath) + ", " + quote(owner.id) + ", 'METADATA_DELETE', 'FAILED', 10, 'STORAGE_DELETE_FAILED', now())");
+  pass("exhaustion fixture object uploads", (await upload(owner.token, exhaustedPath, exhaustedBytes)).status < 300);
+  const exhaustedMeta = await createMetadata(owner.token, owner.id, exhaustedPath, exhaustedBytes);
+  const exhaustedIdValue = exhaustedMeta.json?.[0]?.id;
+  pass("exhaustion fixture metadata exists", exhaustedMeta.status === 201 && Boolean(exhaustedIdValue), exhaustedMeta);
+  const exhaustedDelete = await deleteMetadata(owner.token, exhaustedIdValue);
+  pass("exhaustion fixture creates a pending cleanup row",
+    exhaustedDelete.status === 200 && queue(exhaustedPath)[0]?.status === "PENDING", exhaustedDelete);
   const exhaustedId = sql("select id from private.cv_cleanup_queue where storage_path = " + quote(exhaustedPath));
-  const exhaustedDrain = await worker();
+  sql("update private.cv_cleanup_queue set status = 'FAILED', attempts = 9, " +
+    "last_error = 'STORAGE_DELETE_FAILED', next_attempt_at = now() - interval '1 second' " +
+    "where storage_path = " + quote(exhaustedPath));
+
+  installStorageDeleteFailureTrigger(exhaustedPath);
+  let exhaustedDrain;
+  try {
+    exhaustedDrain = await worker();
+  } finally {
+    dropStorageDeleteFailureTrigger();
+  }
   const exhaustedQueue = queue(exhaustedPath);
-  pass("an exhausted row is never claimed automatically",
-    exhaustedDrain.status === 200 && exhaustedQueue[0]?.status === "FAILED" && exhaustedQueue[0]?.attempts === 10 &&
-    (await download(owner.token, exhaustedPath)).status === 200, { response: exhaustedDrain.json, rows: exhaustedQueue });
+  const exhaustedRetryAt = Date.parse(exhaustedQueue[0]?.next_attempt_at ?? "");
+  pass("worker transitions attempt nine to ten and leaves the row exhausted",
+    exhaustedDrain.status === 200 && exhaustedQueue.length === 1 &&
+    exhaustedQueue[0]?.status === "FAILED" && exhaustedQueue[0]?.attempts === 10 &&
+    exhaustedQueue[0]?.last_error === "STORAGE_DELETE_FAILED" &&
+    Number.isFinite(exhaustedRetryAt) && exhaustedRetryAt > Date.now() &&
+    storageObjectCount(exhaustedPath) === 1 && (await download(owner.token, exhaustedPath)).status === 200,
+    { response: exhaustedDrain.json, rows: exhaustedQueue, storageObjects: storageObjectCount(exhaustedPath) });
   const report = await serviceRpc("get_cv_cleanup_report", {});
   pass("the report exposes the exhausted row", report.status === 200 && (report.json?.exhausted ?? 0) >= 1, report.json);
 
@@ -495,13 +556,29 @@ try {
   const accountQueues = accountPaths.map((path) => queue(path));
   pass("every associated Storage path is enqueued exactly once",
     accountQueues.every((rows) => rows.length === 1 && rows[0].status === "PENDING"), accountQueues);
-  pass("every old account object is already inaccessible",
-    (await download(target.token, accountPaths[0])).status !== 200 &&
-    (await download(target.token, accountPaths[1])).status !== 200);
+  const accountObjectCountBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
+  pass("both account-deletion Storage object rows exist before the worker",
+    accountObjectCountBeforeWorker === 2 && accountPaths.every((path) => storageObjectCount(path) === 1),
+    { total: accountObjectCountBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
+  const accountServiceDownloadsBeforeWorker = await Promise.all(accountPaths.map((path) => download(service, path)));
+  pass("service role can read both account-deletion objects before cleanup",
+    accountServiceDownloadsBeforeWorker.every((result) => result.status === 200),
+    accountServiceDownloadsBeforeWorker.map((result) => result.status));
   const accountDrain = await worker();
-  pass("the worker resolves the account-deletion cleanup rows",
-    accountDrain.status === 200 && accountPaths.every((path) => queue(path)[0]?.status === "DONE"),
-    { response: accountDrain.json, rows: accountQueues });
+  pass("account deletion: service-role/SQL confirms both objects exist before worker and are absent after",
+    accountObjectCountBeforeWorker === 2 &&
+    accountPaths.every((path) => storageObjectCount(path) === 0) &&
+    accountPaths.every((path) => queue(path).length === 1 &&
+      queue(path)[0]?.status === "DONE" && queue(path)[0]?.attempts === 1),
+    {
+      beforeWorker: accountObjectCountBeforeWorker,
+      afterWorker: accountPaths.map(storageObjectCount),
+      queueRows: accountPaths.map(queue),
+      response: accountDrain.json,
+    });
+  pass("service-role Storage reads no longer find either account-deletion object",
+    (await Promise.all(accountPaths.map((path) => download(service, path))))
+      .every((result) => result.status !== 200));
   pass("an unrelated graduate's object survives account deletion",
     (await download(other.token, sentinelPath)).status === 200);
   const repeatDeletion = await request("/functions/v1/delete-graduate", {
@@ -549,6 +626,8 @@ try {
     workerBody.status === 200 && Object.keys(workerBody.json ?? {}).sort().join(",") === "done,failed,processed",
     workerBody.json);
 } finally {
+  // A Storage failure trigger is test-only and must never leak into a later suite.
+  dropStorageDeleteFailureTrigger();
   // Remove metadata through the owner RPC so every leftover fixture is queued, then drain it.
   for (const path of staleObjects) {
     const id = sql("select coalesce(max(id::text), '') from public.cv_documents where storage_path = " + quote(path));

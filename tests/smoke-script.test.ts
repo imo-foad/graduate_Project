@@ -138,3 +138,18 @@ test("first-admin onboarding runs before the synthetic university seed creates p
   assert.ok(universitySeed > onboarding && universityIntegration > universitySeed,
     "one-time bootstrap must run before synthetic university admins are provisioned");
 });
+
+
+test("rate-limit probe cleanup uses the owner RPC and drains the CV Storage cleanup queue", () => {
+  const integration = readFileSync(join(ROOT, "tests/integration/rate-limits.integration.mjs"), "utf8");
+  assert.ok(integration.includes('"/rest/v1/rpc/delete_cv_document"'),
+    "authenticated test users must delete CV metadata through the owner-scoped RPC");
+  assert.ok(integration.includes('"/functions/v1/cleanup-cv-objects"'),
+    "the rate-limit integration must drain its durable Storage cleanup queue");
+  assert.ok(integration.includes("headers(service"),
+    "the Storage cleanup worker must be called with the service-role credential");
+  assert.ok(integration.includes("storageCleanup.json?.failed, 0"),
+    "the integration must assert that no cleanup job failed");
+  assert.doesNotMatch(integration, /method: "DELETE"[\\s\\S]*?cv_documents/,
+    "authenticated PostgREST DELETE is intentionally revoked for CV metadata");
+});

@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 
 const base = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
 const anon = process.env.SUPABASE_ANON_KEY ?? "";
+const service = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const password = process.env.DEMO_PASSWORD ?? "";
-assert.ok(base && anon && password, "local rate-limit integration environment is incomplete");
+assert.ok(base && anon && service && password, "local rate-limit integration environment is incomplete");
 assert.ok(["127.0.0.1", "localhost", "::1"].includes(new URL(base).hostname),
   "refusing to run against a non-local Supabase URL");
 
@@ -126,13 +127,35 @@ try {
   console.log("PASS forced recommendation returns 429 with Retry-After");
   console.log("PASS recommendation rejects untrusted/invalid body fields");
 } finally {
+  // Direct DELETE is intentionally revoked for authenticated users. Use the owner-scoped RPC,
+  // which deletes metadata and records each private Storage object in the durable cleanup queue.
   for (const id of insertedIds) {
-    const cleanup = await request("/rest/v1/cv_documents?id=eq." + id, {
-      method: "DELETE",
-      headers: headers(token),
-    }).catch(() => ({ ok: false }));
-    assert.ok(cleanup.ok, "rate-limit probe metadata cleanup must succeed");
+    const cleanup = await request("/rest/v1/rpc/delete_cv_document", {
+      method: "POST",
+      headers: headers(token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_cv_document_id: id }),
+    }).catch(() => ({ ok: false, json: null, status: 0, text: "request failed" }));
+    assert.ok(cleanup.ok && cleanup.json?.deleted === true,
+      "rate-limit probe metadata cleanup must use the owner RPC: HTTP " +
+      cleanup.status + " " + JSON.stringify(cleanup.json ?? cleanup.text));
   }
+
+  // Drain the durable queue with the real service-role worker. Probe paths have no uploaded bytes,
+  // so this also proves that cleanup is idempotent for already-missing Storage objects.
+  const storageCleanup = await request("/functions/v1/cleanup-cv-objects", {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: "{}",
+  }).catch(() => ({ ok: false, json: null, status: 0, text: "request failed" }));
+  assert.equal(storageCleanup.status, 200,
+    "CV cleanup worker must accept the service-role request: " +
+    JSON.stringify(storageCleanup.json ?? storageCleanup.text));
+  assert.equal(storageCleanup.json?.processed, insertedIds.length,
+    "cleanup worker must process every rate-limit probe object");
+  assert.equal(storageCleanup.json?.done, insertedIds.length,
+    "cleanup worker must complete every queued rate-limit probe object");
+  assert.equal(storageCleanup.json?.failed, 0,
+    "rate-limit probe cleanup must leave no failed Storage cleanup rows");
 }
 
 console.log("RATE-LIMIT HTTP INTEGRATION PASSED");

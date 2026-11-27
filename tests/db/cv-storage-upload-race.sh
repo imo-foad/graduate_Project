@@ -297,7 +297,7 @@ P "create schema issue18_storage_race;
      end if;
      return new;
    end
-   \\$pause\\$;
+   \$pause\$;
    create trigger zz_issue18_pause_storage_insert
    after insert on storage.objects
    for each row execute function issue18_storage_race.pause_storage_insert();" >/dev/null

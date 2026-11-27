@@ -387,7 +387,7 @@ select pg_catalog.pg_advisory_lock($DELETE_BARRIER);
 commit;
 SQL
 DELETE_PID=$!
-wait_for_app_lock_wait "issue18-storage-delete-first" "" "$DELETE_PATH_LOCK"
+wait_for_app_lock_wait "issue18-storage-delete-first"
 
 upload_in_background "$DELETE_PATH" "delete-first-upload"
 wait_for_storage_insert_lock_wait "$DELETE_PATH_LOCK"

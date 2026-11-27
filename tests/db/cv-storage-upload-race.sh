@@ -35,6 +35,7 @@ OWNER=""
 USER_TOKEN=""
 DELETE_PATH=""
 UPLOAD_PATH=""
+PREFLIGHT_PATH=""
 DELETE_DOC=""
 UPLOAD_DOC=""
 BARRIER_PID=""
@@ -174,7 +175,7 @@ cleanup() {
      drop schema if exists issue18_storage_race cascade;" >/dev/null 2>&1
 
   if [ -n "$USER_TOKEN" ]; then
-    for object_path in "$DELETE_PATH" "$UPLOAD_PATH"; do
+    for object_path in "$DELETE_PATH" "$UPLOAD_PATH" "$PREFLIGHT_PATH"; do
       [ -n "$object_path" ] || continue
       curl -sS -o /dev/null -X DELETE \
         "$SUPABASE_URL/storage/v1/object/cv-documents/$object_path" \
@@ -196,7 +197,7 @@ cleanup() {
   check "test-only Storage insert trigger is absent after cleanup" "0" \
     "$(P "select count(*) from pg_catalog.pg_trigger where tgname = 'zz_issue18_pause_storage_insert' and not tgisinternal")"
   check "no test Storage object rows remain after cleanup" "0" \
-    "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name in ('$DELETE_PATH', '$UPLOAD_PATH')")"
+    "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name in ('$DELETE_PATH', '$UPLOAD_PATH', '$PREFLIGHT_PATH')")"
   check "no test CV metadata or cleanup tombstones remain after cleanup" "0" \
     "$(P "select (select count(*) from public.cv_documents where storage_path in ('$DELETE_PATH', '$UPLOAD_PATH')) + (select count(*) from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$UPLOAD_PATH'))")"
 
@@ -255,6 +256,7 @@ printf '%%PDF-1.4\n%% Issue 18 synthetic local Storage race\n1 0 obj << /Type /C
 chmod 600 "$TMP/cv.pdf"
 DELETE_PATH="$OWNER/issue18-delete-first-$TAG.pdf"
 UPLOAD_PATH="$OWNER/issue18-upload-first-$TAG.pdf"
+PREFLIGHT_PATH="$OWNER/issue18-preflight-$TAG.pdf"
 
 P "insert into public.cv_documents (graduate_id, storage_path, file_type, size_bytes)
    values ('$OWNER', '$DELETE_PATH', 'pdf', 128)
@@ -268,6 +270,40 @@ UPLOAD_DOC="$(tr -d '[:space:]' < "$TMP/upload-doc.id")"
   echo "PREREQUISITE FAILED: could not create both CV metadata fixtures" >&2
   exit 2
 }
+
+# Verify the disposable user's JWT and the fresh-path Storage policy independently of the race.
+upload_in_background "$PREFLIGHT_PATH" "preflight-upload"
+set +e
+wait "$UPLOAD_PID"; PREFLIGHT_WAIT_STATUS=$?
+set -e
+UPLOAD_PID=""
+PREFLIGHT_HTTP_STATUS="$(cat "$TMP/preflight-upload.status" 2>/dev/null || echo 000)"
+check "authenticated Storage API accepts a fresh user-owned path before the race" "1" \
+  "$(case "$PREFLIGHT_HTTP_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
+check "preflight Storage bytes are readable" "200" "$(download_status "$PREFLIGHT_PATH" "preflight-download")"
+PREFLIGHT_DELETE_STATUS="$(curl -sS -o "$TMP/preflight-delete.body" -w '%{http_code}' \
+  -X DELETE "$SUPABASE_URL/storage/v1/object/cv-documents/$PREFLIGHT_PATH" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $USER_TOKEN" 2>"$TMP/preflight-delete.curl.err")" || PREFLIGHT_DELETE_STATUS="000"
+check "preflight object cleanup succeeds through Storage API" "1" \
+  "$(case "$PREFLIGHT_DELETE_STATUS" in 200|204) echo 1 ;; *) echo 0 ;; esac)"
+check "preflight object bytes are gone before race fixtures start" "0" \
+  "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$PREFLIGHT_PATH'")"
+[ "$PREFLIGHT_WAIT_STATUS" -eq 0 ] && [ "$PREFLIGHT_HTTP_STATUS" = "200" ] || {
+  echo "PREREQUISITE FAILED: authenticated Storage upload preflight did not succeed" >&2
+  exit 2
+}
+
+# Check the exact authenticated INSERT policy helper against the upload-first path before starting
+# either transaction. This separates a baseline auth/RLS failure from a tombstone race.
+UPLOAD_POLICY_PROBE="$(P "begin;
+  set local role authenticated;
+  select set_config('request.jwt.claims',
+    jsonb_build_object('sub', '$OWNER', 'role', 'authenticated')::text, true);
+  select auth.uid()::text || '|' || private.check_cv_upload_allowed('$UPLOAD_PATH')::text;
+  rollback")"
+UPLOAD_POLICY_ALLOWED="$(printf '%s\n' "$UPLOAD_POLICY_PROBE" | tail -n 1 | cut -d'|' -f2)"
+check "authenticated RLS helper allows a fresh unretired upload path" "t" "$UPLOAD_POLICY_ALLOWED"
 
 # The second object path has live CV metadata but no Storage row yet. Its HTTP upload is
 # paused by a BEFORE INSERT trigger after taking the same path advisory lock as the RLS policy.
@@ -387,7 +423,9 @@ check "upload that wins the lock is still removed by the worker after tombstone"
     [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] &&
     echo 1 || echo 0
   )"
-echo "CV STORAGE UPLOAD RACE PASSED"
+if [ "$FAILS" -eq 0 ]; then
+  echo "CV STORAGE UPLOAD RACE PASSED"
 else
-  echo "CV STORAGE UPLOAD RACE FAILED: $FAILS checks"
+  echo "CV STORAGE UPLOAD RACE FAILED: $FAILS checks" >&2
+  exit 1
 fi

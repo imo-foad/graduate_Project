@@ -3,6 +3,7 @@ import importlib.util
 import io
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 from pathlib import Path
 
@@ -158,6 +159,36 @@ class ArtifactForensicsTests(unittest.TestCase):
                 [{"id": 1, "status": "completed"}],
                 "2026-11-27T05:00:00Z", 99,
             )
+
+    def test_inventory_retry_recovers_from_transient_pagination_drift(self):
+        attempts = {"count": 0}
+
+        def flaky_inventory():
+            attempts["count"] += 1
+            if attempts["count"] < 3:
+                raise MODULE.ForensicsError("total_count changed during workflow_runs pagination")
+            return ([{"id": 7}], 1)
+
+        with mock.patch.object(MODULE.time, "sleep") as sleep:
+            result = MODULE.retry_inventory_call(flaky_inventory, attempts=4)
+
+        self.assertEqual(result, ([{"id": 7}], 1))
+        self.assertEqual(attempts["count"], 3)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_inventory_retry_does_not_hide_nontransient_failures(self):
+        attempts = {"count": 0}
+
+        def denied_inventory():
+            attempts["count"] += 1
+            raise MODULE.ForensicsError("inventory endpoint failed: http=403")
+
+        with unittest.mock.patch.object(MODULE.time, "sleep") as sleep:
+            with self.assertRaisesRegex(MODULE.ForensicsError, "http=403"):
+                MODULE.retry_inventory_call(denied_inventory, attempts=4)
+
+        self.assertEqual(attempts["count"], 1)
+        sleep.assert_not_called()
 
     def test_repository_inventory_confirmation_rejects_concurrent_changes(self):
         original = [{"id": 10}, {"id": 11}]

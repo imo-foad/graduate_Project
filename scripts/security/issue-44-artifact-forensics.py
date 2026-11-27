@@ -5,6 +5,7 @@ Unsafe ZIP paths are quarantined under generated names and their bytes are scann
 Any archive/member that cannot be completely inspected fails closed as INCOMPLETE.
 """
 import json, os, re, shutil, stat, subprocess, sys, time
+from datetime import datetime, timedelta, timezone
 import urllib.error, urllib.request, zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -47,6 +48,12 @@ def validate_inventory(items: list[dict[str, Any]], expected: int, id_key: str =
         raise ForensicsError(f"inventory contains an item without {id_key}")
     if len(set(identifiers)) != len(identifiers):
         raise ForensicsError(f"inventory contains duplicate {id_key} values")
+
+
+def completed_runs_snapshot(runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Only scan completed runs; an in-progress workflow can still publish artifacts later."""
+    completed = [run for run in runs if run.get("status") == "completed"]
+    return completed, len(runs) - len(completed)
 
 
 def validate_gitleaks_result(exit_code: int, report_exists: bool, findings: Any):
@@ -363,7 +370,9 @@ def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
     runner_temp = Path(os.environ["RUNNER_TEMP"])
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    current_run_id = int(os.environ.get("GITHUB_RUN_ID", "0") or "0")
+    # Freeze the run inventory at a fixed creation-time boundary. Runs created after
+    # this cutoff cannot shift pagination while the long artifact scan is underway.
+    snapshot_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     api = "https://api.github.com/repos/" + repo
     config = workspace / "scripts/security/issue-44-gitleaks.toml"
     root = runner_temp / "issue-44-artifact-forensics"
@@ -387,16 +396,21 @@ def main() -> int:
         os.chmod(directory, 0o700)
 
     state = ScanState(exposure)
-    runs, expected_runs = list_endpoint(api + "/actions/runs", "workflow_runs")
-    print(f"ACTIONS_RUNS_ENUMERATED={len(runs)}/{expected_runs}", flush=True)
+    runs, expected_runs = list_endpoint(
+        api + "/actions/runs?created=2000-01-01T00:00:00Z.." + snapshot_cutoff,
+        "workflow_runs",
+    )
+    completed_runs, noncompleted_runs_skipped = completed_runs_snapshot(runs)
+    print(
+        f"ACTIONS_RUNS_ENUMERATED={len(runs)}/{expected_runs} "
+        f"COMPLETED_RUNS={len(completed_runs)} NONCOMPLETED_SKIPPED={noncompleted_runs_skipped}",
+        flush=True,
+    )
 
-    artifacts_listed = artifacts_downloaded = expired_artifacts = skipped_current_run = 0
+    artifacts_listed = artifacts_downloaded = expired_artifacts = 0
     inventory = []
-    for index, run in enumerate(runs, start=1):
+    for index, run in enumerate(completed_runs, start=1):
         run_id = int(run["id"])
-        if current_run_id and run_id == current_run_id:
-            skipped_current_run += 1
-            continue
         artifacts, expected_artifacts = list_endpoint(
             api + "/actions/runs/" + str(run_id) + "/artifacts", "artifacts"
         )
@@ -440,7 +454,7 @@ def main() -> int:
 
     print(f"ARTIFACTS_LISTED={artifacts_listed} DOWNLOADED={artifacts_downloaded}", flush=True)
     print(f"ARTIFACTS_EXPIRED_NOT_RETAINED={expired_artifacts}", flush=True)
-    print(f"CURRENT_FORENSIC_RUN_SKIPPED={skipped_current_run}", flush=True)
+    print(f"NONCOMPLETED_RUNS_SKIPPED={noncompleted_runs_skipped}", flush=True)
     print(f"EXTRACTED_FILES={state.total_files} UNCOMPRESSED_BYTES={state.total_bytes}", flush=True)
     print(f"UNSAFE_ENTRIES_QUARANTINED={len(state.quarantined)}", flush=True)
     for item in state.quarantined:
@@ -476,8 +490,8 @@ def main() -> int:
 
     summary = [
         "# Issue #44 — retained Actions artifact forensics", "",
-        f"- Actions runs enumerated: {len(runs)} / {expected_runs}.",
-        f"- Current forensic run excluded (still active): {skipped_current_run}.",
+        f"- Snapshot cutoff UTC: {snapshot_cutoff}.",
+        f"- Actions runs enumerated: {len(runs)} / {expected_runs}; completed runs scanned: {len(completed_runs)}; non-completed skipped: {noncompleted_runs_skipped}.",
         f"- Artifacts listed / downloaded: {artifacts_listed} / {artifacts_downloaded}.",
         f"- Expired artifacts not retained: {expired_artifacts}.",
         f"- Files extracted: {state.total_files}; uncompressed bytes: {state.total_bytes}.",

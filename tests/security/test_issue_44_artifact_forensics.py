@@ -140,6 +140,25 @@ class ArtifactForensicsTests(unittest.TestCase):
         self.assertEqual(expired, 1)
         self.assertEqual(newer, 1)
 
+    def test_completed_run_snapshot_scans_old_completed_runs_only(self):
+        selected, current, active, newer = MODULE.select_completed_runs_snapshot([
+            {"id": 1, "created_at": "2026-11-27T04:00:00Z", "status": "completed"},
+            {"id": 2, "created_at": "2026-11-27T04:30:00Z", "status": "in_progress"},
+            {"id": 3, "created_at": "2026-11-27T05:01:00Z", "status": "completed"},
+            {"id": 4, "created_at": "2026-11-27T04:45:00Z", "status": "in_progress"},
+        ], "2026-11-27T05:00:00Z", 4)
+        self.assertEqual([item["id"] for item in selected], [1])
+        self.assertEqual(current, 1)
+        self.assertEqual(active, 1)
+        self.assertEqual(newer, 1)
+
+    def test_completed_run_snapshot_fails_closed_on_invalid_timestamp(self):
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.select_completed_runs_snapshot(
+                [{"id": 1, "status": "completed"}],
+                "2026-11-27T05:00:00Z", 99,
+            )
+
     def test_repository_inventory_confirmation_rejects_concurrent_changes(self):
         original = [{"id": 10}, {"id": 11}]
         MODULE.validate_stable_inventory(original, [{"id": 11}, {"id": 10}])

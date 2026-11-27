@@ -61,7 +61,11 @@ async function login(email) {
     headers: headers(null, { "Content-Type": "application/json" }),
     body: JSON.stringify({ email, password }),
   });
-  pass("Auth password grant: " + email, r.status === 200 && Boolean(r.json?.access_token && r.json?.user?.id), r);
+  const summary = {
+    status: r.status,
+    error: r.json?.error_description ?? r.json?.error ?? r.json?.msg ?? r.json?.message ?? null,
+  };
+  pass("Auth password grant: " + email, r.status === 200 && Boolean(r.json?.access_token && r.json?.user?.id), summary);
   return { token: r.json.access_token, id: r.json.user.id };
 }
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
@@ -378,7 +382,11 @@ try {
     headers: headers(service, { "Content-Type": "application/json" }),
     body: JSON.stringify({ email, password: "Cv-Cleanup-Test-" + tag.slice(0, 8), email_confirm: true }),
   });
-  pass("service role creates a disposable local Auth account", created.status === 200 || created.status === 201, created);
+  pass("service role creates a disposable local Auth account", created.status === 200 || created.status === 201, {
+    status: created.status,
+    error: created.json?.error_description ?? created.json?.error ?? created.json?.msg ?? created.json?.message ?? null,
+    hasId: Boolean(created.json?.id),
+  });
   const targetId = created.json?.id;
   createdUsers.push(targetId);
   const target = await login(email);

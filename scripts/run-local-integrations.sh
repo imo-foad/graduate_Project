@@ -18,9 +18,12 @@ note_suite() { CURRENT_SUITE="$1"; }
 # The decisive lines of the CV suites are published to the public job summary: workflow logs need
 # repository-admin credentials, and a passing run must still be inspectable from outside.
 publish_suite_result() {
-  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
-  local log="$LOG_DIR/$1"
+  local log="$LOG_DIR/$1" last
   [ -f "$log" ] || return 0
+  last="$(grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 1 | cut -c1-400)"
+  # A public run annotation makes the decisive line readable outside the admin-only logs.
+  [ -n "$last" ] && printf '::notice title=CV_PARSER_SUITE::%s | %s\n' "$1" "$last"
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
   { printf '**%s**\n\n```\n' "$1"
     grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 12 | cut -c1-300
     printf '```\n\n'; } >> "$GITHUB_STEP_SUMMARY"

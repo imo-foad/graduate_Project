@@ -361,11 +361,11 @@ WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
   --data '{}')"
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
 check "upload that wins the lock is still removed by the worker after tombstone" "1" \
-  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]) && \
-   [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
-   [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \
-   [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \
-   [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0"
+  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] && \
+     [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
+     [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \
+     [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \
+     [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0)"
 
 if [ "$FAILS" -eq 0 ]; then
   echo "CV STORAGE UPLOAD RACE PASSED"

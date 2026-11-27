@@ -88,12 +88,39 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "17_recommendation_availability", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
-        migs = sorted(f for f in os.listdir(os.path.join(ROOT, "supabase/migrations")) if f.endswith(".sql"))
-        self.assertEqual(len(migs), 24)
-        self.assertEqual([m[:4] for m in migs], ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017", "0018", "0019", "0020", "0021", "0023", "0024", "0025"])
+        migration_dir = os.path.join(ROOT, "supabase/migrations")
+        migration_name = re.compile(r"^([0-9]{4})_[A-Za-z0-9][A-Za-z0-9_.-]*[.]sql$")
+        migs = sorted(
+            name for name in os.listdir(migration_dir)
+            if migration_name.fullmatch(name)
+        )
+        self.assertTrue(migs, "no versioned SQL migrations were discovered")
+        versions = [int(migration_name.fullmatch(name).group(1)) for name in migs]
+        self.assertEqual(versions, sorted(versions), "migration files must be ordered by version")
+        self.assertEqual(len(versions), len(set(versions)), "migration version prefixes must be unique")
+        self.assertEqual(len(migs), len([
+            name for name in os.listdir(migration_dir) if name.endswith(".sql")
+        ]), "every SQL migration must use the expected four-digit versioned filename")
+
+        # The DB runner must discover and apply every migration dynamically, then compare the complete
+        # discovered version set with Supabase's migration ledger. This intentionally has no fixed count
+        # or hard-coded terminal version, so adding a forward-only migration cannot break workflow lint.
+        for runner_contract in (
+            'MIGRATIONS=(supabase/migrations/*.sql)',
+            'PREVIOUS_VERSION=""',
+            'for f in "${MIGRATIONS[@]}"; do',
+            'version="${BASH_REMATCH[1]}"',
+            '[[ ! "$version" > "$PREVIOUS_VERSION" ]]',
+            'grep -q "$name" "$LOG_DIR/db-reset.log"',
+            'from supabase_migrations.schema_migrations',
+            '[ "$WANT" = "$GOT" ]',
+        ):
+            self.assertIn(runner_contract, s)
+        self.assertNotRegex(s, r"-ge\s+\d+")
+        self.assertNotRegex(s, r"through\s+\d{4}")
 
     def test_local_http_stage_covers_auth_storage_and_edge_function(self):
         runner = SCRIPTS["scripts/run-local-integrations.sh"]

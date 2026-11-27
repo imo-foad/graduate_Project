@@ -1,38 +1,67 @@
 name: issue-44-artifact-forensics
+
 on:
-  push:
+  pull_request:
     branches:
-      - security/issue-44-artifact-forensics
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - ".github/workflows/issue-44-artifact-forensics.yml"
+      - ".github/workflows/issue-44-security-audit.yml"
+      - "scripts/security/issue-44-artifact-forensics.py"
+      - "scripts/security/issue-44-audit.py"
+      - "scripts/security/issue-44-gitleaks.toml"
+      - "tests/security/**"
+  workflow_dispatch:
+
 permissions:
   contents: read
   actions: read
+
+concurrency:
+  group: issue-44-artifact-forensics
+  cancel-in-progress: false
+
 jobs:
   artifacts:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/security/issue-44-artifact-forensics'
     name: Forensic scan of every retained Actions artifact
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
-      - name: Checkout artifact forensics branch
+      - name: Checkout audit source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 1
           persist-credentials: false
+
       - name: Install and verify pinned Gitleaks
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="8.30.1"
-          EXPECTED_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
-          INSTALL_DIR="$RUNNER_TEMP/gitleaks-$VERSION"
+          INSTALL_DIR="$RUNNER_TEMP/gitleaks-8.30.1"
           mkdir -p "$INSTALL_DIR"
           ARCHIVE="$INSTALL_DIR/gitleaks.tar.gz"
           curl --fail --silent --show-error --location --retry 3 \
-            "https://github.com/gitleaks/gitleaks/releases/download/v$VERSION/gitleaks_"$VERSION"_linux_x64.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" \
             --output "$ARCHIVE"
-          printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | sha256sum --check --status
+          printf '%s  %s\n' \
+            "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" \
+            "$ARCHIVE" | sha256sum --check --status
           tar -xzf "$ARCHIVE" -C "$INSTALL_DIR" gitleaks
           chmod 700 "$INSTALL_DIR/gitleaks"
           "$INSTALL_DIR/gitleaks" version
+
+      - name: Test safe extraction and fail-closed checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/security/issue-44-artifact-forensics.py
+          python3 -m unittest discover -s tests/security -p 'test_issue_44_artifact_forensics.py' -v
+
       - name: Download and inspect retained artifacts without unsafe extraction
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -40,6 +69,7 @@ jobs:
           GITHUB_WORKSPACE: ${{ github.workspace }}
           RUNNER_TEMP: ${{ runner.temp }}
           GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
         shell: bash
         run: |

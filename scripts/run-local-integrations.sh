@@ -100,11 +100,20 @@ done
   exit 1
 }
 
-timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
-timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
-# The prior local integration removes its temporary admin, leaving a clean one-time bootstrap slot.
+# The first-admin bootstrap test must run before the synthetic university seed creates
+# its ten local platform-admin fixtures. The integration deletes its temporary bootstrap
+# account and leaves the one-time bootstrap slot empty for the subsequent synthetic seed.
 timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
 
+# Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
+echo "Provisioning and applying synthetic university dataset (local only)"
+node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
+# Verify Student/Faculty academic-record privacy and server-owned platform-admin authorization.
+node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
+
+timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
+timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
+timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round2 | tee "$LOG_DIR/career-cohort-round2.log"

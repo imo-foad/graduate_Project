@@ -5,26 +5,30 @@ import { demo, graduate, opps } from "./helpers.ts";
 
 const AHMED = "graduate.android@alumni.test", SARA = "graduate.demo@alumni.test", OMAR = "graduate.cyber@alumni.test";
 
-test("every weight profile sums to 100", () => {
-  for (const t of ["JOB", "INTERNSHIP", "TRAINING", "EVENT", "CONFERENCE", "VOLUNTEER"]) {
+test("every active weight profile sums to 100 and inactive types have no profile", () => {
+  for (const t of ["JOB", "INTERNSHIP", "TRAINING"]) {
     const sum = Object.values(weightProfile(t)).reduce((a, b) => a + (b ?? 0), 0);
     assert.equal(sum, 100, t);
   }
+  for (const t of ["EVENT", "CONFERENCE", "VOLUNTEER", "SCHOLARSHIP", "COMPETITION", "SOMETHING_NEW", ""]) {
+    assert.deepEqual(weightProfile(t), {}, t);
+  }
 });
 
-test("cancelled product lines are never scored or ranked (scope alignment)", () => {
+test("only JOB, INTERNSHIP and TRAINING are scored or ranked (scope alignment)", () => {
   const profile = graduate(AHMED);
-  const base = { title: "Cancelled listing", description: "x", skills: [], eligibility_failures: [] };
-  for (const type of ["SCHOLARSHIP", "COMPETITION"]) {
-    const item = scoreOpportunity(profile, { ...base, id: `cancelled-${type}`, type });
+  const base = { title: "Listing", description: "x", status: "ACTIVE", deadline: null, end_at: null, skills: [], eligibility_failures: [] };
+  for (const type of ["EVENT", "CONFERENCE", "VOLUNTEER", "SCHOLARSHIP", "COMPETITION", "SOMETHING_NEW", "", "job"]) {
+    const item = scoreOpportunity(profile, { ...base, id: `outside-${type}`, type });
     assert.equal(item, null, type);
   }
   const ranked = rankOpportunities(profile, [
-    { ...base, id: "cancelled-scholarship", type: "SCHOLARSHIP" },
-    { ...base, id: "cancelled-competition", type: "COMPETITION" },
-    { ...base, id: "active-event", type: "EVENT" },
+    ...["EVENT", "CONFERENCE", "VOLUNTEER", "SCHOLARSHIP", "COMPETITION", "SOMETHING_NEW"].map((type) =>
+      ({ ...base, id: `outside-${type}`, type })),
+    { ...base, id: "active-training", type: "TRAINING" },
+    { ...base, id: "active-internship", type: "INTERNSHIP" },
   ]);
-  assert.deepEqual(ranked.map((r) => r.opportunity_id), ["active-event"]);
+  assert.deepEqual(ranked.map((r) => r.opportunity_id).sort(), ["active-internship", "active-training"]);
 });
 
 test("bands follow the documented thresholds (80/65/50)", () => {
@@ -77,7 +81,7 @@ test("scores stay within 0..100 for every demo graduate x every opportunity", ()
 
 test("criteria without input are excluded and weights renormalised", () => {
   const bare = { career_interests: [], experience_years: 0, skills: [{ skill_id: "KOTLIN", level: 5 }] };
-  const o = { id: "j", type: "JOB", title: "Kotlin dev", skills: [{ skill_id: "KOTLIN", importance: 5, min_level: 3, is_required: true }], eligibility_failures: [] };
+  const o = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", skills: [{ skill_id: "KOTLIN", importance: 5, min_level: 3, is_required: true }], eligibility_failures: [] };
   const r = scoreOpportunity(bare, o)!;
   assert.equal(r.score_breakdown.interests, null);
   assert.equal(r.score_breakdown.location, null);
@@ -93,45 +97,50 @@ test("ranking is deterministic and sorted descending", () => {
 
 const NOW = new Date("2026-11-23T12:00:00Z");
 const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
-const event = (over: Record<string, unknown> = {}) => ({
-  id: "e", type: "EVENT", title: "Event", status: "ACTIVE", target_fields: [], skills: [], eligibility_failures: [],
+const training = (over: Record<string, unknown> = {}) => ({
+  id: "t", type: "TRAINING", title: "Training", status: "ACTIVE", deadline: null, end_at: null,
+  target_fields: [], skills: [], eligibility_failures: [],
   capacity: 10, registered_count: 0, waitlist_enabled: false, registration_opens_at: null, ...over,
 });
 const bareGraduate = { career_interests: [], experience_years: 0, skills: [] };
 
-test("availability (issue #16): an upcoming registration window is kept but scores 0", () => {
-  const r = scoreOpportunity(bareGraduate, event({ registration_opens_at: iso(60_000) }), NOW)!;
+test("availability (issue #16): an upcoming training window is kept but scores 0", () => {
+  const r = scoreOpportunity(bareGraduate, training({ registration_opens_at: iso(60_000) }), NOW)!;
   assert.equal(r.availability_status, "UPCOMING");
   assert.equal(r.score_breakdown.availability, 0);
   assert.equal(r.score, 0);
 });
 
-test("availability: an open event with free capacity scores 1, waitlist-only scores 0.5", () => {
-  const open = scoreOpportunity(bareGraduate, event(), NOW)!;
+test("availability: open training with free capacity scores 1, waitlist-only scores 0.5", () => {
+  const open = scoreOpportunity(bareGraduate, training(), NOW)!;
   assert.equal(open.availability_status, "OPEN");
   assert.equal(open.score_breakdown.availability, 100);
   assert.equal(open.score, 100);
-  const wait = scoreOpportunity(bareGraduate, event({ registered_count: 10, waitlist_enabled: true }), NOW)!;
+  const wait = scoreOpportunity(bareGraduate, training({ registered_count: 10, waitlist_enabled: true }), NOW)!;
   assert.equal(wait.availability_status, "WAITLIST_ONLY");
   assert.equal(wait.score_breakdown.availability, 50);
   assert.equal(wait.score, 50);
 });
 
-test("availability: a full event without a waitlist is never recommended", () => {
-  assert.equal(scoreOpportunity(bareGraduate, event({ registered_count: 10 }), NOW), null);
-  const ranked = rankOpportunities(bareGraduate, [event({ id: "full", registered_count: 12 })], NOW);
+test("availability: full training without a waitlist is never recommended", () => {
+  assert.equal(scoreOpportunity(bareGraduate, training({ registered_count: 10 }), NOW), null);
+  const ranked = rankOpportunities(bareGraduate, [training({ id: "full", registered_count: 12 })], NOW);
   assert.deepEqual(ranked, []);
 });
 
+test("availability: a closed opportunity is never scored, even when called directly", () => {
+  assert.equal(scoreOpportunity(bareGraduate, training({ status: "CLOSED" }), NOW), null);
+});
+
 test("availability: opportunities without registration data keep the previous behaviour (null criterion)", () => {
-  const job = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", skills: [], eligibility_failures: [] };
+  const job = { id: "j", type: "JOB", title: "Kotlin dev", status: "ACTIVE", deadline: null, end_at: null, skills: [], eligibility_failures: [] };
   const r = scoreOpportunity(bareGraduate, job, NOW)!;
   assert.equal(r.availability_status, null);
   assert.equal(r.score_breakdown.availability, undefined);
 });
 
 test("availability: a registration window that opened exactly now counts as open", () => {
-  const r = scoreOpportunity(bareGraduate, event({ registration_opens_at: iso(0) }), NOW)!;
+  const r = scoreOpportunity(bareGraduate, training({ registration_opens_at: iso(0) }), NOW)!;
   assert.equal(r.availability_status, "OPEN");
 });
 

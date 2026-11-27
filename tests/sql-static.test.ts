@@ -126,3 +126,36 @@ test("Edge Functions use trusted per-user rate limits and fail closed", async ()
   assert.match(parseCv, /RATE_LIMIT_UNAVAILABLE/);
   assert.match(parseCv, /Retry-After/);
 });
+
+
+test("certification matching accepts a CompTIA prefix but remains an exact normalized match", () => {
+  const sql = allMigrationsSql();
+  const eligibility = finalFunctions(sql).get("eligibility_failures");
+  assert.ok(eligibility, "final eligibility_failures definition must exist");
+  assert.match(sql, /create or replace function private\.normalize_certification_title\(/);
+  assert.match(eligibility.body,
+    /private\.normalize_certification_title\(c\.title\)\s*=\s*private\.normalize_certification_title\(cert\)/);
+  assert.ok(sql.includes("'^comptia[[:space:]:-]+'"));
+  assert.ok(sql.includes("'[[:space:]]+'"));
+});
+
+test("recommendation candidates carry status and timestamps required by the scorer", () => {
+  const f = finalFunctions(allMigrationsSql()).get("get_recommendation_candidates");
+  assert.ok(f, "final recommendation candidate projection must exist");
+  for (const field of ["status", "deadline", "end_at"]) {
+    assert.match(f.body, new RegExp(`'${field}',\\s*o\\.${field}\\b`),
+      `candidate JSON must expose ${field} to the deterministic scorer`);
+  }
+});
+
+test("company verification invalidates recommendation caches with an explicit all-graduates predicate", () => {
+  const sql = allMigrationsSql();
+  const definitionStart = sql.lastIndexOf("create or replace function private.mark_company_recommendations_dirty()");
+  const definitionEnd = sql.indexOf("revoke all on function private.mark_company_recommendations_dirty()", definitionStart);
+  const finalDefinition = definitionStart >= 0 && definitionEnd > definitionStart
+    ? sql.slice(definitionStart, definitionEnd)
+    : "";
+  assert.ok(finalDefinition, "final company recommendation invalidation trigger must exist");
+  assert.ok(finalDefinition.includes("where profile_id is not null"),
+    "intentional all-graduate invalidation must include the explicit non-null primary-key predicate");
+});

@@ -1,0 +1,443 @@
+{
+  "meta": {
+    "dataset_key": "alumni-connect-university-demo-v1",
+    "source_marker": "SYNTHETIC_SEED",
+    "gpa_scale": 4,
+    "phone_range": "+1 212 555 0100 through +1 212 555 0139 (reserved fictional 555-0100..0139 block)",
+    "approved_tracks": [
+      "Software Engineering",
+      "Artificial Intelligence",
+      "Data Science and Analytics",
+      "Cybersecurity",
+      "Mobile Development",
+      "Networks and Cloud",
+      "Information Systems"
+    ]
+  },
+  "students": [
+    {
+      "seed_key": "university-student-01",
+      "full_name": "Alya Nasser (Synthetic Student 01)",
+      "phone": "+12125550100",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0001",
+      "department": "Computer Science",
+      "major": "Software Engineering",
+      "academic_track": "Software Engineering",
+      "academic_level": 1,
+      "gpa": 3.81,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-02",
+      "full_name": "Yousef Kareem (Synthetic Student 02)",
+      "phone": "+12125550101",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0002",
+      "department": "Computer Science",
+      "major": "Software Engineering",
+      "academic_track": "Software Engineering",
+      "academic_level": 2,
+      "gpa": 3.42,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-03",
+      "full_name": "Mira Tarek (Synthetic Student 03)",
+      "phone": "+12125550102",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0003",
+      "department": "Computer Science",
+      "major": "Software Engineering",
+      "academic_track": "Software Engineering",
+      "academic_level": 3,
+      "gpa": 2.95,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-04",
+      "full_name": "Ziad Hany (Synthetic Student 04)",
+      "phone": "+12125550103",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0004",
+      "department": "Computer Science",
+      "major": "Software Engineering",
+      "academic_track": "Software Engineering",
+      "academic_level": 4,
+      "gpa": 3.17,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-05",
+      "full_name": "Lina Faris (Synthetic Student 05)",
+      "phone": "+12125550104",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0005",
+      "department": "Artificial Intelligence",
+      "major": "Artificial Intelligence",
+      "academic_track": "Artificial Intelligence",
+      "academic_level": 2,
+      "gpa": 3.94,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-06",
+      "full_name": "Omar Nabil (Synthetic Student 06)",
+      "phone": "+12125550105",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0006",
+      "department": "Artificial Intelligence",
+      "major": "Artificial Intelligence",
+      "academic_track": "Artificial Intelligence",
+      "academic_level": 3,
+      "gpa": 3.56,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-07",
+      "full_name": "Nour Adham (Synthetic Student 07)",
+      "phone": "+12125550106",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0007",
+      "department": "Artificial Intelligence",
+      "major": "Artificial Intelligence",
+      "academic_track": "Artificial Intelligence",
+      "academic_level": 1,
+      "gpa": 2.74,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-08",
+      "full_name": "Salma Rami (Synthetic Student 08)",
+      "phone": "+12125550107",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0008",
+      "department": "Data Science",
+      "major": "Data Science and Analytics",
+      "academic_track": "Data Science and Analytics",
+      "academic_level": 4,
+      "gpa": 3.68,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-09",
+      "full_name": "Adam Sami (Synthetic Student 09)",
+      "phone": "+12125550108",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0009",
+      "department": "Data Science",
+      "major": "Data Science and Analytics",
+      "academic_track": "Data Science and Analytics",
+      "academic_level": 2,
+      "gpa": 3.21,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-10",
+      "full_name": "Jana Fady (Synthetic Student 10)",
+      "phone": "+12125550109",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0010",
+      "department": "Data Science",
+      "major": "Data Science and Analytics",
+      "academic_track": "Data Science and Analytics",
+      "academic_level": 3,
+      "gpa": 2.48,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-11",
+      "full_name": "Malek Ashraf (Synthetic Student 11)",
+      "phone": "+12125550110",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0011",
+      "department": "Cybersecurity",
+      "major": "Cybersecurity",
+      "academic_track": "Cybersecurity",
+      "academic_level": 2,
+      "gpa": 3.77,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-12",
+      "full_name": "Farah Sameh (Synthetic Student 12)",
+      "phone": "+12125550111",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0012",
+      "department": "Cybersecurity",
+      "major": "Cybersecurity",
+      "academic_track": "Cybersecurity",
+      "academic_level": 3,
+      "gpa": 3.06,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-13",
+      "full_name": "Rayan Wael (Synthetic Student 13)",
+      "phone": "+12125550112",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0013",
+      "department": "Cybersecurity",
+      "major": "Cybersecurity",
+      "academic_track": "Cybersecurity",
+      "academic_level": 1,
+      "gpa": 2.89,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-14",
+      "full_name": "Hana Karim (Synthetic Student 14)",
+      "phone": "+12125550113",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0014",
+      "department": "Computer Science",
+      "major": "Mobile Development",
+      "academic_track": "Mobile Development",
+      "academic_level": 4,
+      "gpa": 3.63,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-15",
+      "full_name": "Tamer Fawzi (Synthetic Student 15)",
+      "phone": "+12125550114",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0015",
+      "department": "Computer Science",
+      "major": "Mobile Development",
+      "academic_track": "Mobile Development",
+      "academic_level": 2,
+      "gpa": 3.34,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-16",
+      "full_name": "Dina Hossam (Synthetic Student 16)",
+      "phone": "+12125550115",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0016",
+      "department": "Computer Science",
+      "major": "Mobile Development",
+      "academic_track": "Mobile Development",
+      "academic_level": 3,
+      "gpa": 2.67,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-17",
+      "full_name": "Khaled Amr (Synthetic Student 17)",
+      "phone": "+12125550116",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0017",
+      "department": "Computer Networks",
+      "major": "Networks and Cloud",
+      "academic_track": "Networks and Cloud",
+      "academic_level": 1,
+      "gpa": 3.49,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-18",
+      "full_name": "Mariam Ayman (Synthetic Student 18)",
+      "phone": "+12125550117",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0018",
+      "department": "Computer Networks",
+      "major": "Networks and Cloud",
+      "academic_track": "Networks and Cloud",
+      "academic_level": 4,
+      "gpa": 2.31,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-19",
+      "full_name": "Seif Ehab (Synthetic Student 19)",
+      "phone": "+12125550118",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0019",
+      "department": "Information Systems",
+      "major": "Information Systems",
+      "academic_track": "Information Systems",
+      "academic_level": 2,
+      "gpa": 3.88,
+      "gpa_scale": 4
+    },
+    {
+      "seed_key": "university-student-20",
+      "full_name": "Reem Bassem (Synthetic Student 20)",
+      "phone": "+12125550119",
+      "identity_type": "STUDENT",
+      "institution_ref": "SYNTH-STU-0020",
+      "department": "Information Systems",
+      "major": "Information Systems",
+      "academic_track": "Information Systems",
+      "academic_level": 3,
+      "gpa": 2.14,
+      "gpa_scale": 4
+    }
+  ],
+  "faculty": [
+    {
+      "seed_key": "university-faculty-01",
+      "full_name": "Dr. Rami Haddad (Synthetic Faculty 01)",
+      "phone": "+12125550120",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0001",
+      "department": "Computer Science",
+      "specialization": "Distributed Systems",
+      "academic_title": "PROFESSOR"
+    },
+    {
+      "seed_key": "university-faculty-02",
+      "full_name": "Dr. Salma Fawzi (Synthetic Faculty 02)",
+      "phone": "+12125550121",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0002",
+      "department": "Artificial Intelligence",
+      "specialization": "Machine Learning",
+      "academic_title": "ASSOCIATE_PROFESSOR"
+    },
+    {
+      "seed_key": "university-faculty-03",
+      "full_name": "Dr. Nader Amin (Synthetic Faculty 03)",
+      "phone": "+12125550122",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0003",
+      "department": "Data Science",
+      "specialization": "Statistical Learning",
+      "academic_title": "ASSISTANT_PROFESSOR"
+    },
+    {
+      "seed_key": "university-faculty-04",
+      "full_name": "Dr. Hala Mansour (Synthetic Faculty 04)",
+      "phone": "+12125550123",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0004",
+      "department": "Cybersecurity",
+      "specialization": "Network Security",
+      "academic_title": "LECTURER"
+    },
+    {
+      "seed_key": "university-faculty-05",
+      "full_name": "Dr. Karim Adel (Synthetic Faculty 05)",
+      "phone": "+12125550124",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0005",
+      "department": "Software Engineering",
+      "specialization": "Software Quality Assurance",
+      "academic_title": "ASSISTANT_LECTURER"
+    },
+    {
+      "seed_key": "university-faculty-06",
+      "full_name": "Dr. Dalia Nabil (Synthetic Faculty 06)",
+      "phone": "+12125550125",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0006",
+      "department": "Computer Science",
+      "specialization": "Mobile Application Architecture",
+      "academic_title": "LECTURER"
+    },
+    {
+      "seed_key": "university-faculty-07",
+      "full_name": "Dr. Yara Samir (Synthetic Faculty 07)",
+      "phone": "+12125550126",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0007",
+      "department": "Computer Networks",
+      "specialization": "Cloud Infrastructure",
+      "academic_title": "ASSOCIATE_PROFESSOR"
+    },
+    {
+      "seed_key": "university-faculty-08",
+      "full_name": "Dr. Tarek Emad (Synthetic Faculty 08)",
+      "phone": "+12125550127",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0008",
+      "department": "Information Systems",
+      "specialization": "Enterprise Information Systems",
+      "academic_title": "PROFESSOR"
+    },
+    {
+      "seed_key": "university-faculty-09",
+      "full_name": "Dr. Mariam Fathy (Synthetic Faculty 09)",
+      "phone": "+12125550128",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0009",
+      "department": "Computer Science",
+      "specialization": "Algorithms and Data Structures",
+      "academic_title": "TEACHING_ASSISTANT"
+    },
+    {
+      "seed_key": "university-faculty-10",
+      "full_name": "Dr. Amr Khalil (Synthetic Faculty 10)",
+      "phone": "+12125550129",
+      "identity_type": "FACULTY",
+      "institution_ref": "SYNTH-FAC-0010",
+      "department": "Data Science",
+      "specialization": "Data Governance",
+      "academic_title": "LECTURER"
+    }
+  ],
+  "administrators": [
+    {
+      "seed_key": "university-admin-01",
+      "full_name": "Demo University Administrator 01 (Synthetic)",
+      "phone": "+12125550130",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-02",
+      "full_name": "Demo University Administrator 02 (Synthetic)",
+      "phone": "+12125550131",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-03",
+      "full_name": "Demo University Administrator 03 (Synthetic)",
+      "phone": "+12125550132",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-04",
+      "full_name": "Demo University Administrator 04 (Synthetic)",
+      "phone": "+12125550133",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-05",
+      "full_name": "Demo University Administrator 05 (Synthetic)",
+      "phone": "+12125550134",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-06",
+      "full_name": "Demo University Administrator 06 (Synthetic)",
+      "phone": "+12125550135",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-07",
+      "full_name": "Demo University Administrator 07 (Synthetic)",
+      "phone": "+12125550136",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-08",
+      "full_name": "Demo University Administrator 08 (Synthetic)",
+      "phone": "+12125550137",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-09",
+      "full_name": "Demo University Administrator 09 (Synthetic)",
+      "phone": "+12125550138",
+      "admin_role": "PLATFORM_ADMIN"
+    },
+    {
+      "seed_key": "university-admin-10",
+      "full_name": "Demo University Administrator 10 (Synthetic)",
+      "phone": "+12125550139",
+      "admin_role": "PLATFORM_ADMIN"
+    }
+  ]
+}

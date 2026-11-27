@@ -2,9 +2,7 @@ openapi: 3.0.3
 info:
   title: Alumni Connect AI - Backend API (Supabase)
   version: 0.1.0
-  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`; every operation except the token
-    endpoint also needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` =
-    stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
+  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token, public phone-first registration and SMS OTP verification endpoints do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
 servers:
 - url: '{supabaseUrl}'
   variables:
@@ -23,6 +21,81 @@ components:
       bearerFormat: JWT
       description: User access_token from /auth/v1/token. Required on every operation except the token endpoint itself.
   schemas:
+    OpportunityType:
+      type: string
+      description: 'Active opportunity types. Final product decision 2026-11-26: only JOB, INTERNSHIP and TRAINING are
+        active. Every other value is rejected by the database and is never returned as actionable. Matching is exact
+        and case-sensitive.'
+      enum:
+      - JOB
+      - INTERNSHIP
+      - TRAINING
+    StudentAcademicRecord:
+      type: object
+      required: [profile_id, institution_ref, department, major, academic_track, academic_level, gpa, gpa_scale, record_source]
+      properties:
+        profile_id: { type: string, format: uuid }
+        institution_ref: { type: string, pattern: '^SYNTH-STU-[0-9]{4}$' }
+        department: { type: string }
+        major: { type: string }
+        academic_track:
+          type: string
+          enum:
+          - Software Engineering
+          - Artificial Intelligence
+          - Data Science and Analytics
+          - Cybersecurity
+          - Mobile Development
+          - Networks and Cloud
+          - Information Systems
+        academic_level: { type: integer, minimum: 1, maximum: 5 }
+        gpa: { type: number, minimum: 0, maximum: 4 }
+        gpa_scale:
+          type: number
+          enum: [4.0]
+          description: Synthetic demo convention only; not a statement of the university grading policy.
+        record_source:
+          type: string
+          enum: [SYNTHETIC_SEED, INSTITUTION_PROVIDER, MANUAL_ADMIN]
+    FacultyAcademicRecord:
+      type: object
+      required: [profile_id, institution_ref, department, specialization, academic_title, record_source]
+      properties:
+        profile_id: { type: string, format: uuid }
+        institution_ref: { type: string, pattern: '^SYNTH-FAC-[0-9]{4}$' }
+        department: { type: string }
+        specialization: { type: string }
+        academic_title:
+          type: string
+          enum: [PROFESSOR, ASSOCIATE_PROFESSOR, ASSISTANT_PROFESSOR, LECTURER, ASSISTANT_LECTURER, TEACHING_ASSISTANT]
+        record_source:
+          type: string
+          enum: [SYNTHETIC_SEED, INSTITUTION_PROVIDER, MANUAL_ADMIN]
+    Opportunity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/OpportunityType' }
+        title: { type: string }
+        company_name: { type: string, nullable: true }
+        company_id: { type: string, format: uuid, nullable: true }
+        company_verification_status:
+          type: string
+          nullable: true
+          enum: [PENDING_REVIEW, VERIFIED, REJECTED, SUSPENDED]
+          description: Safe status projection; company details remain member/admin-only.
+        description: { type: string }
+        status: { type: string, enum: [DRAFT, ACTIVE, CLOSED, EXPIRED, CANCELLED] }
+        requires_cv:
+          type: boolean
+          default: false
+          description: Active CV required only when true; false by default for JOB and INTERNSHIP.
+        capacity: { type: integer, nullable: true }
+        registered_count: { type: integer }
+        waitlist_enabled: { type: boolean }
+        registration_opens_at: { type: string, format: date-time, nullable: true }
+        deadline: { type: string, format: date-time, nullable: true }
+        end_at: { type: string, format: date-time, nullable: true }
     Error:
       type: object
       properties:
@@ -270,12 +343,14 @@ components:
     PasswordGrantRequest:
       type: object
       required:
-      - email
+      - phone
       - password
       additionalProperties: false
       properties:
-        email:
+        phone:
           type: string
+          pattern: '^\+[1-9][0-9]{7,14}$'
+          description: E.164 phone number. National ID is never used as a login credential.
         password:
           type: string
           format: password
@@ -315,6 +390,10 @@ components:
               format: uuid
             email:
               type: string
+              nullable: true
+            phone:
+              type: string
+              nullable: true
     AuthError:
       type: object
       description: Supabase Auth error body (field set can vary by version; not verified against a live project).
@@ -357,14 +436,14 @@ components:
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
-        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN.
-        422 NOT_A_JOB, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
+        404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, IDENTITY_NOT_FOUND.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, IDENTITY_ALREADY_LINKED, PHONE_NOT_VERIFIED, IDENTITY_NOT_VERIFIED.
+        422 NOT_A_JOB, NOT_APPLICATION_OPPORTUNITY, CV_REQUIRED, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
         CV_NOT_PROCESSING, INVALID_CV_SUGGESTIONS, CV_SKILL_NOT_FOUND, INVALID_CV_DECISIONS,
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
-        INVALID_INTERACTION, JOB_NOT_DRAFT,
+        INVALID_INTERACTION, JOB_NOT_DRAFT, INVALID_IDENTITY, IDENTITY_WITHOUT_VERIFIED_ROLE,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
         409 ALREADY_REPORTED, SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE.
         422 CANNOT_REPORT_OWN_CONTENT, INVALID_RATE_LIMIT_SUBJECT.
@@ -413,6 +492,32 @@ paths:
       responses:
         '204':
           description: Deleted
+  /rest/v1/student_academic_records:
+    get:
+      summary: Read the authenticated student's own typed academic record; RLS returns only the caller's row.
+      description: Read-only to clients. Insert, update and delete are service-role only. Synthetic GPA scale is a demo convention.
+      responses:
+        '200':
+          description: Own student academic record (zero or one row).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StudentAcademicRecord'
+  /rest/v1/faculty_academic_records:
+    get:
+      summary: Read the authenticated faculty member's own typed academic record; RLS returns only the caller's row.
+      description: Read-only to clients. Insert, update and delete are service-role only. Synthetic records are simulated, not institution verification.
+      responses:
+        '200':
+          description: Own faculty academic record (zero or one row).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacultyAcademicRecord'
   /rest/v1/skills:
     get:
       summary: Skills dictionary (read-only)
@@ -497,13 +602,51 @@ paths:
       responses:
         '204':
           description: Updated
+  /functions/v1/register:
+    post:
+      summary: Public phone-first signup; requires institutional National ID verification and sends a mandatory phone OTP
+      security:
+      - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [national_id, phone, password, full_name]
+              properties:
+                national_id: { type: string, minLength: 10, maxLength: 32 }
+                phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+                password: { type: string, format: password, minLength: 10, maxLength: 128 }
+                full_name: { type: string, minLength: 2, maxLength: 200 }
+      responses:
+        '202': { description: 'PENDING_OTP; confirm the SMS code and complete registration' }
+        '409': { description: 'PHONE_ALREADY_REGISTERED or IDENTITY_ALREADY_LINKED' }
+        '422': { description: 'Invalid input or institutional verification rejected' }
+        '503': { description: 'IDENTITY_PROVIDER_UNAVAILABLE, OTP_DELIVERY_FAILED, or REGISTRATION_RETRY_UNAVAILABLE. Resubmitting the exact pending phone + National-ID digest pair resends OTP without creating a second Auth user; a retry never changes the pending account password.' }
+  /functions/v1/finalize-registration:
+    post:
+      summary: Activate the pending phone-first account after Supabase confirms SMS OTP and the institution has verified at least one identity
+      responses:
+        '200': { description: 'Account activated; requires a confirmed Auth phone and at least one VERIFIED human identity' }
+        '401': { description: 'UNAUTHENTICATED' }
+        '403': { description: 'ACCOUNT_UNAVAILABLE' }
+        '409': { description: 'PHONE_NOT_VERIFIED or IDENTITY_NOT_VERIFIED' }
+        '500': { description: 'REGISTRATION_FINALIZE_FAILED' }
   /rest/v1/opportunities:
     get:
       summary: Read-only catalogue. Only open opportunities (ACTIVE, not expired) plus ones you applied/registered/saved.
-        Use PostgREST filters, e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*)
+        The active scope is exactly JOB, INTERNSHIP and TRAINING (schema OpportunityType). Use PostgREST filters,
+        e.g. ?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),event_details(*),opportunity_skills(*),requires_cv
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Opportunity' }
   /rest/v1/saved_opportunities:
     get:
       summary: Own saved
@@ -529,7 +672,13 @@ paths:
           description: OK
   /rest/v1/event_registrations:
     get:
-      summary: Own registrations
+      summary: Own TRAINING registrations (REGISTERED, WAITLISTED, CANCELLED)
+      responses:
+        '200':
+          description: OK
+  /rest/v1/event_registration_status_history:
+    get:
+      summary: Own append-only registration status history, including automatic FIFO promotion events
       responses:
         '200':
           description: OK
@@ -552,7 +701,7 @@ paths:
           description: Updated
   /rest/v1/rpc/apply_for_job:
     post:
-      summary: Create a SUBMITTED application (one per job; eligibility and deadline enforced server-side)
+      summary: Create a SUBMITTED application for JOB or INTERNSHIP; CV is optional unless requires_cv=true; eligibility, deadline and duplicate rules are enforced server-side
       requestBody:
         content:
           application/json:
@@ -576,6 +725,89 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/finalize_registration:
+    post:
+      summary: Complete phone-first registration after OTP confirmation and institutional identity verification
+      responses:
+        '200':
+          description: '{account_status: ACTIVE, verified_identities: n}. Requires auth.users.phone_confirmed_at and
+            at least one VERIFIED human identity.'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/list_my_identities:
+    post:
+      summary: Own verified/pending institutional identities (STUDENT, GRADUATE, FACULTY; multiple allowed)
+      responses:
+        '200':
+          description: Array of {id, identity_type, institution_ref, status, verification_source, verified_at, attributes}
+  /rest/v1/rpc/review_human_identity:
+    post:
+      summary: Platform admin verifies or revokes one identity (manual review fallback)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_identity_id
+              - p_decision
+              properties:
+                p_identity_id:
+                  type: string
+                  format: uuid
+                p_decision:
+                  type: string
+                  enum: [VERIFIED, REVOKED]
+                p_note:
+                  type: string
+      responses:
+        '200':
+          description: '{id, status}'
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/transfer_company_ownership:
+    post:
+      summary: Current active OWNER (or platform admin) transfers ownership to an existing active member
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_company_id
+              - p_new_owner_id
+              properties:
+                p_company_id:
+                  type: string
+                  format: uuid
+                p_new_owner_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: The new OWNER membership row; the previous owner becomes RECRUITER. Audited.
+        4XX:
+          $ref: '#/components/responses/BusinessError'
+  /rest/v1/rpc/delete_cv_document:
+    post:
+      summary: Delete own CV metadata and enqueue cleanup of the private Storage object (owner only)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - p_cv_document_id
+              properties:
+                p_cv_document_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: '{deleted: true, cv_document_id, cleanup_queued: true}. The object is removed by the
+            service-role worker through the Storage API; retry is idempotent.'
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/get_social_feed:
@@ -935,7 +1167,7 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/register_for_event:
     post:
-      summary: Register (status REGISTERED, or WAITLISTED when full and waitlist enabled)
+      summary: Direct TRAINING registration only (REGISTERED or FIFO WAITLISTED; no organizer approval)
       requestBody:
         content:
           application/json:
@@ -958,6 +1190,7 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/cancel_event_registration:
     post:
+      summary: Cancel own TRAINING registration; confirmed-seat cancellation promotes the oldest eligible waitlisted user atomically
       requestBody:
         content:
           application/json:
@@ -1062,7 +1295,8 @@ paths:
           description: JSON
   /functions/v1/recommend:
     post:
-      summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Deterministic scoring;
+      summary: Compute (only when inputs changed or force=true) and return ranked recommendations. Only active opportunity
+        types and verified-company listings are candidates; closed/full training availability is filtered. Deterministic scoring;
         no external AI call in v0.1.
       requestBody:
         content:
@@ -1232,6 +1466,13 @@ paths:
       responses:
         '204':
           description: Deleted
+  /rest/v1/human_identities:
+    get:
+      summary: Own institutional identities only (RLS-scoped; STUDENT/GRADUATE/FACULTY; multiple rows allowed).
+        Writes happen only through the service-role verification contract.
+      responses:
+        '200':
+          description: OK
   /rest/v1/cv_documents:
     get:
       summary: Own CV records
@@ -1246,11 +1487,8 @@ paths:
       responses:
         '204':
           description: Updated
-    delete:
-      summary: Delete CV record (storage object must be removed separately)
-      responses:
-        '204':
-          description: Deleted
+    # Direct DELETE is revoked: deletion must go through /rest/v1/rpc/delete_cv_document so the
+    # private Storage object is recorded in the durable cleanup ledger.
   /rest/v1/cv_suggestions:
     get:
       summary: Pending/decided CV skill suggestions (confirm via RPC)
@@ -1333,6 +1571,43 @@ paths:
       responses:
         '200': { description: Draft opportunity }
         4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_company_internship:
+    post:
+      summary: Create an INTERNSHIP draft; publish only after company verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_company_id, p_title, p_description]
+              properties:
+                p_company_id: { type: string, format: uuid }
+                p_title: { type: string }
+                p_description: { type: string }
+                p_location: { type: string }
+                p_attendance_mode: { type: string, enum: [ONSITE, ONLINE, HYBRID] }
+                p_deadline: { type: string, format: date-time }
+                p_experience_level: { type: string, enum: [FRESH_GRADUATE, JUNIOR, MID, SENIOR] }
+      responses:
+        '200': { description: INTERNSHIP draft }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/set_opportunity_cv_requirement:
+    post:
+      summary: Verified company OWNER/RECRUITER sets requires_cv on its JOB/INTERNSHIP while still DRAFT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_opportunity_id, p_required]
+              properties:
+                p_opportunity_id: { type: string, format: uuid }
+                p_required: { type: boolean }
+      responses:
+        '200': { description: Updated opportunity with requires_cv flag }
+        4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_company_job:
     post:
       summary: Edit an owned DRAFT or ACTIVE company job
@@ -1402,7 +1677,7 @@ paths:
         4XX: { $ref: '#/components/responses/BusinessError' }
   /rest/v1/rpc/update_application_status:
     post:
-      summary: Company owner/recruiter or platform admin advances a real application through the hiring workflow
+      summary: Company OWNER/RECRUITER or platform admin advances JOB/INTERNSHIP applications only through SUBMITTED -> UNDER_REVIEW -> SHORTLISTED -> INTERVIEW -> ACCEPTED; REJECTED may terminate at each review stage
       requestBody:
         required: true
         content:

@@ -566,11 +566,16 @@ def list_endpoint(url: str, collection_key: str):
 
 
 def download_archive(url: str, destination: Path):
-    """Stream an artifact ZIP to private disk with a hard compressed-size limit."""
-    response, status, headers = api_open(url)
-    if response is None and status in (301, 302, 303, 307, 308):
-        location = headers.get("Location") or headers.get("location")
-        if location:
+    """Stream an artifact ZIP to private disk; refresh temporary signed URLs on transient failures."""
+    last_status = 0
+    last_reason = "signed-download-unavailable"
+    for attempt in range(3):
+        destination.unlink(missing_ok=True)
+        response, status, headers = api_open(url)
+        if response is None and status in (301, 302, 303, 307, 308):
+            location = headers.get("Location") or headers.get("location")
+            if not location:
+                return False, status, "signed-download-location-missing"
             try:
                 response = urllib.request.urlopen(
                     urllib.request.Request(location, headers={"User-Agent": "issue-44-artifact-forensics"}),
@@ -578,31 +583,54 @@ def download_archive(url: str, destination: Path):
                 )
                 status = response.status
             except (urllib.error.URLError, TimeoutError, OSError):
-                return False, 0, "signed-download-unavailable"
-    if response is None or status != 200:
-        return False, status, "artifact-download-unavailable"
+                last_status = 0
+                last_reason = "signed-download-unavailable"
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                return False, last_status, last_reason
+        if response is None or status != 200:
+            last_status = status
+            last_reason = "artifact-download-unavailable"
+            if (status == 0 or status == 429 or status in (500, 502, 503, 504)) and attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return False, last_status, last_reason
 
-    written = 0
-    try:
-        destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with response, destination.open("wb") as output:
-            while True:
-                chunk = response.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                written += len(chunk)
-                if written > MAX_DOWNLOAD_BYTES:
-                    output.close()
-                    destination.unlink(missing_ok=True)
-                    return False, status, "compressed-download-size-limit"
-                output.write(chunk)
-        if written < 4:
+        written = 0
+        try:
+            destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with response, destination.open("wb") as output:
+                while True:
+                    chunk = response.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > MAX_DOWNLOAD_BYTES:
+                        output.close()
+                        destination.unlink(missing_ok=True)
+                        return False, status, "compressed-download-size-limit"
+                    output.write(chunk)
+            if written < 4:
+                destination.unlink(missing_ok=True)
+                last_status = status
+                last_reason = "empty-or-truncated-download"
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+                    continue
+                return False, last_status, last_reason
+            return True, status, "downloaded"
+        except (OSError, urllib.error.URLError):
             destination.unlink(missing_ok=True)
-            return False, status, "empty-or-truncated-download"
-        return True, status, "downloaded"
-    except (OSError, urllib.error.URLError):
-        destination.unlink(missing_ok=True)
-        return False, 0, "artifact-download-io-error"
+            last_status = 0
+            last_reason = "artifact-download-io-error"
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            return False, last_status, last_reason
+
+    destination.unlink(missing_ok=True)
+    return False, last_status, last_reason
 
 
 def scan_gitleaks(gitleaks: str, config: Path, exposure: Path,

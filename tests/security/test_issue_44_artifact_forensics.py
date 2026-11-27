@@ -318,5 +318,32 @@ class ArtifactForensicsTests(unittest.TestCase):
         self.assertEqual((runs, total, partitions), ([], 0, 0))
         self.assertEqual(observed[0][0], start + MODULE.timedelta(seconds=1))
 
+
+    def test_signed_artifact_download_retries_a_transient_redirect_failure(self):
+        class FakeResponse(io.BytesIO):
+            status = 200
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "artifact.zip"
+            with mock.patch.object(MODULE, "api_open", side_effect=[
+                (None, 302, {"Location": "https://signed.example/first"}),
+                (None, 302, {"Location": "https://signed.example/refreshed"}),
+            ]) as api_call, mock.patch.object(
+                MODULE.urllib.request,
+                "urlopen",
+                side_effect=[OSError("transient signed URL failure"), FakeResponse(b"PK\\x03\\x04test")],
+            ) as signed_download, mock.patch.object(MODULE.time, "sleep"):
+                ok, status, reason = MODULE.download_archive(
+                    "https://api.github.com/repos/example/repo/actions/artifacts/1/zip",
+                    destination,
+                )
+            self.assertTrue(ok)
+            self.assertEqual(status, 200)
+            self.assertEqual(reason, "downloaded")
+            self.assertEqual(api_call.call_count, 2)
+            self.assertEqual(signed_download.call_count, 2)
+            self.assertTrue(destination.is_file())
+            self.assertEqual(destination.read_bytes(), b"PK\\x03\\x04test")
+
 if __name__ == "__main__":
     unittest.main()

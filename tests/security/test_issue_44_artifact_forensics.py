@@ -54,6 +54,25 @@ class ArtifactForensicsTests(unittest.TestCase):
             self.assertFalse((exposure / "9" / "link-to-outside").is_symlink())
             self.assertEqual(state.incomplete, [])
 
+    def test_directory_symlink_entry_is_not_silently_skipped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, exposure = root / "artifact.zip", root / "extracted"
+            exposure.mkdir()
+            info = zipfile.ZipInfo("directory-link/")
+            info.create_system = 3
+            info.external_attr = (0o120777 << 16)
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr(info, b"outside-target")
+            state = MODULE.ScanState(exposure)
+            MODULE.inspect_zip(source, exposure / "11", "run:9/artifact:11/logs", state)
+            self.assertEqual(len(state.quarantined), 1)
+            self.assertEqual(state.quarantined[0]["reason"], "symlink-entry")
+            payload = list((exposure / "11" / "_quarantine").glob("*.bin"))
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0].read_bytes(), b"outside-target")
+            self.assertEqual(state.incomplete, [])
+
     def test_nested_zip_content_is_recursively_extracted_and_mapped(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -111,14 +130,24 @@ class ArtifactForensicsTests(unittest.TestCase):
             MODULE.validate_inventory([{"id": 1}, {"id": 1}], 2)
         MODULE.validate_inventory([{"id": 1}, {"id": 2}], 2)
 
-    def test_only_completed_runs_enter_the_artifact_snapshot(self):
-        completed, skipped = MODULE.completed_runs_snapshot([
-            {"id": 1, "status": "completed"},
-            {"id": 2, "status": "in_progress"},
-            {"id": 3, "status": "queued"},
-        ])
-        self.assertEqual([item["id"] for item in completed], [1])
-        self.assertEqual(skipped, 2)
+    def test_artifact_snapshot_is_stable_and_excludes_expired_or_newer_items(self):
+        selected, expired, newer = MODULE.select_artifacts_snapshot([
+            {"id": 1, "created_at": "2026-11-27T04:00:00Z", "expired": False},
+            {"id": 2, "created_at": "2026-11-27T03:00:00Z", "expired": True},
+            {"id": 3, "created_at": "2026-11-27T05:01:00Z", "expired": False},
+        ], "2026-11-27T05:00:00Z")
+        self.assertEqual([item["id"] for item in selected], [1])
+        self.assertEqual(expired, 1)
+        self.assertEqual(newer, 1)
+
+    def test_artifact_snapshot_fails_closed_on_missing_or_invalid_timestamp(self):
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.select_artifacts_snapshot([{"id": 1, "expired": False}], "2026-11-27T05:00:00Z")
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.select_artifacts_snapshot(
+                [{"id": 1, "created_at": "not-a-date", "expired": False}],
+                "2026-11-27T05:00:00Z",
+            )
 
     def test_gitleaks_exit_code_must_match_report(self):
         self.assertEqual(MODULE.validate_gitleaks_result(0, True, []), [])

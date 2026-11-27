@@ -27,9 +27,10 @@ FAILS=0
 
 cleanup() {
   local status=$?
+  trap - EXIT
   set +e
   if [ -n "$BARRIER_PID" ] && kill -0 "$BARRIER_PID" >/dev/null 2>&1; then
-    printf '\\q\\n' >&"$BARRIER_WRITE" 2>/dev/null
+    printf '%s\n' "\\q" >&"$BARRIER_WRITE" 2>/dev/null
     kill "$BARRIER_PID" >/dev/null 2>&1
     wait "$BARRIER_PID" >/dev/null 2>&1
   fi
@@ -38,9 +39,7 @@ cleanup() {
   [ -n "$A_PID" ] && wait "$A_PID" >/dev/null 2>&1
   [ -n "$B_PID" ] && wait "$B_PID" >/dev/null 2>&1
   psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 -c \
-    "drop trigger if exists zz_issue18_pause_cv_insert on public.cv_documents;
-     drop function if exists issue18_concurrency.pause_cv_insert();
-     drop schema if exists issue18_concurrency cascade;
+    "drop schema if exists issue18_concurrency cascade;
      delete from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$REVERSE_PATH');
      delete from auth.users where id = '$OWNER';" >/dev/null 2>&1
   rm -rf "$TMP"
@@ -80,25 +79,22 @@ wait_for_lock_wait() {
 start_barrier() {
   local key="$1" marker="$2" line
   BARRIER_KEY="$key"
+  unset CV_BARRIER_PSQL CV_BARRIER_PSQL_PID 2>/dev/null || true
   coproc CV_BARRIER_PSQL { psql "$DB_URL" -X -q -A -t; }
   BARRIER_PID="$CV_BARRIER_PSQL_PID"
   BARRIER_READ="${CV_BARRIER_PSQL[0]}"
   BARRIER_WRITE="${CV_BARRIER_PSQL[1]}"
-  printf "select case when pg_catalog.pg_try_advisory_lock(%s) then 'LOCKED' else 'BUSY' end;\\n\\\\echo %s\\n" \
-    "$key" "$marker" >&"$BARRIER_WRITE"
+  printf '%s\n' "select pg_catalog.pg_advisory_lock($key);" "\\echo $marker" >&"$BARRIER_WRITE"
   while IFS= read -r -t 10 line <&"$BARRIER_READ"; do
-    [ "$line" = "LOCKED" ] && continue
+    [ -z "$line" ] && continue
     [ "$line" = "$marker" ] && return 0
-    [ "$line" = "BUSY" ] && { echo "barrier key is already in use" >&2; return 1; }
   done
   echo "TIMEOUT acquiring deterministic test barrier" >&2
   return 1
 }
-
 release_barrier() {
   local marker="$1" line
-  printf "select pg_catalog.pg_advisory_unlock(%s);\\n\\\\echo %s\\n\\\\q\\n" \
-    "$BARRIER_KEY" "$marker" >&"$BARRIER_WRITE"
+  printf '%s\n' "select pg_catalog.pg_advisory_unlock($BARRIER_KEY);" "\\echo $marker" "\\q" >&"$BARRIER_WRITE"
   while IFS= read -r -t 10 line <&"$BARRIER_READ"; do
     [ "$line" = "$marker" ] && break
   done
@@ -107,7 +103,6 @@ release_barrier() {
   exec {BARRIER_WRITE}>&-
   BARRIER_PID=""
 }
-
 # Create one disposable Auth user. The database trigger creates its profile/graduate profile.
 P "insert into auth.users (id, aud, role, email, raw_user_meta_data)
    values ('$OWNER', 'authenticated', 'authenticated',

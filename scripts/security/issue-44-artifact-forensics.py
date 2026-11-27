@@ -50,10 +50,35 @@ def validate_inventory(items: list[dict[str, Any]], expected: int, id_key: str =
         raise ForensicsError(f"inventory contains duplicate {id_key} values")
 
 
-def completed_runs_snapshot(runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    """Only scan completed runs; an in-progress workflow can still publish artifacts later."""
-    completed = [run for run in runs if run.get("status") == "completed"]
-    return completed, len(runs) - len(completed)
+def select_artifacts_snapshot(
+    artifacts: list[dict[str, Any]], cutoff: str
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Return non-expired artifacts created no later than the immutable snapshot cutoff."""
+    try:
+        cutoff_time = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ForensicsError("invalid artifact snapshot cutoff") from error
+
+    selected = []
+    expired = 0
+    newer = 0
+    for artifact in artifacts:
+        created_at = artifact.get("created_at")
+        if not isinstance(created_at, str):
+            raise ForensicsError("artifact inventory item is missing created_at")
+        try:
+            created_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ForensicsError("artifact inventory item has invalid created_at") from error
+        if created_time.tzinfo is None:
+            raise ForensicsError("artifact created_at must include a timezone")
+        if created_time > cutoff_time:
+            newer += 1
+        elif artifact.get("expired") is True:
+            expired += 1
+        else:
+            selected.append(artifact)
+    return selected, expired, newer
 
 
 def validate_gitleaks_result(exit_code: int, report_exists: bool, findings: Any):
@@ -110,7 +135,7 @@ def _unsafe_member_reason(info: zipfile.ZipInfo, raw_name: str):
         return "drive-qualified-path"
     if file_type == stat.S_IFLNK:
         return "symlink-entry"
-    if file_type not in (0, stat.S_IFREG):
+    if file_type not in (0, stat.S_IFREG, stat.S_IFDIR):
         return "non-regular-entry"
     if not path.parts:
         return "empty-path"
@@ -146,10 +171,12 @@ def inspect_zip(archive_path: Path, destination: Path, origin: str,
             return
 
         for index, info in enumerate(infos, start=1):
-            if info.is_dir():
-                continue
             raw_name = info.filename
             unsafe_reason = _unsafe_member_reason(info, raw_name)
+            # Skip only ordinary directories. A symlink/special/traversal directory
+            # entry must be recorded just like an unsafe file member.
+            if info.is_dir() and unsafe_reason is None:
+                continue
             if info.file_size < 0 or info.file_size > MAX_ENTRY_BYTES:
                 state.record_incomplete(origin, raw_name, "entry-size-limit")
                 continue
@@ -370,8 +397,9 @@ def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
     runner_temp = Path(os.environ["RUNNER_TEMP"])
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    # Freeze the run inventory at a fixed creation-time boundary. Runs created after
-    # this cutoff cannot shift pagination while the long artifact scan is underway.
+    # Freeze the artifact inventory at a fixed creation-time boundary. This uses
+    # GitHub's repository-wide artifact endpoint (one paginated inventory), rather
+    # than making a separate API request for every workflow run.
     snapshot_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     api = "https://api.github.com/repos/" + repo
     config = workspace / "scripts/security/issue-44-gitleaks.toml"
@@ -396,54 +424,53 @@ def main() -> int:
         os.chmod(directory, 0o700)
 
     state = ScanState(exposure)
-    runs, expected_runs = list_endpoint(
-        api + "/actions/runs?created=2000-01-01T00:00:00Z.." + snapshot_cutoff,
-        "workflow_runs",
+    artifacts_all, expected_artifacts = list_endpoint(api + "/actions/artifacts", "artifacts")
+    selected_artifacts, expired_artifacts, artifacts_newer_than_cutoff = select_artifacts_snapshot(
+        artifacts_all, snapshot_cutoff
     )
-    completed_runs, noncompleted_runs_skipped = completed_runs_snapshot(runs)
+    artifacts_listed = len(artifacts_all)
     print(
-        f"ACTIONS_RUNS_ENUMERATED={len(runs)}/{expected_runs} "
-        f"COMPLETED_RUNS={len(completed_runs)} NONCOMPLETED_SKIPPED={noncompleted_runs_skipped}",
+        f"ARTIFACTS_ENUMERATED={artifacts_listed}/{expected_artifacts} "
+        f"IN_SNAPSHOT={len(selected_artifacts)} EXPIRED={expired_artifacts} "
+        f"NEWER_THAN_CUTOFF={artifacts_newer_than_cutoff}",
         flush=True,
     )
 
-    artifacts_listed = artifacts_downloaded = expired_artifacts = 0
+    artifacts_downloaded = 0
     inventory = []
-    for index, run in enumerate(completed_runs, start=1):
-        run_id = int(run["id"])
-        artifacts, expected_artifacts = list_endpoint(
-            api + "/actions/runs/" + str(run_id) + "/artifacts", "artifacts"
-        )
-        validate_inventory(artifacts, expected_artifacts)
-        for artifact in artifacts:
-            artifacts_listed += 1
-            artifact_id = int(artifact["id"])
-            artifact_name = safe_text(artifact.get("name"), 160)
-            if artifact.get("expired") is True:
-                expired_artifacts += 1
-                continue
-            archive_path = downloads / (str(artifact_id) + ".zip")
-            origin = f"run:{run_id}/artifact:{artifact_id}/{artifact_name}"
-            ok, http_status, reason = download_archive(
-                api + "/actions/artifacts/" + str(artifact_id) + "/zip", archive_path
+    for index, artifact in enumerate(selected_artifacts, start=1):
+        artifact_id = int(artifact["id"])
+        artifact_name = safe_text(artifact.get("name"), 160)
+        workflow_run = artifact.get("workflow_run")
+        if not isinstance(workflow_run, dict) or not workflow_run.get("id"):
+            state.record_incomplete(
+                f"artifact:{artifact_id}/{artifact_name}", "<workflow_run>",
+                "artifact-source-run-id-missing",
             )
-            if not ok:
-                state.record_incomplete(origin, "<archive>", reason + "-http-" + str(http_status))
-                continue
+            continue
+        run_id = int(workflow_run["id"])
+        archive_path = downloads / (str(artifact_id) + ".zip")
+        origin = f"run:{run_id}/artifact:{artifact_id}/{artifact_name}"
+        ok, http_status, reason = download_archive(
+            api + "/actions/artifacts/" + str(artifact_id) + "/zip", archive_path
+        )
+        if not ok:
+            state.record_incomplete(origin, "<archive>", reason + "-http-" + str(http_status))
+            continue
 
-            before_quarantine = len(state.quarantined)
-            before_incomplete = len(state.incomplete)
-            inspect_zip(archive_path, exposure / str(artifact_id), origin, state)
-            archive_path.unlink(missing_ok=True)
-            artifacts_downloaded += 1
-            inventory.append({
-                "run_id": run_id, "artifact_id": artifact_id, "name": artifact_name,
-                "quarantined_entries": len(state.quarantined) - before_quarantine,
-                "incomplete_entries": len(state.incomplete) - before_incomplete,
-            })
+        before_quarantine = len(state.quarantined)
+        before_incomplete = len(state.incomplete)
+        inspect_zip(archive_path, exposure / str(artifact_id), origin, state)
+        archive_path.unlink(missing_ok=True)
+        artifacts_downloaded += 1
+        inventory.append({
+            "run_id": run_id, "artifact_id": artifact_id, "name": artifact_name,
+            "quarantined_entries": len(state.quarantined) - before_quarantine,
+            "incomplete_entries": len(state.incomplete) - before_incomplete,
+        })
         if index % 100 == 0:
             print(
-                f"ACTIONS_RUNS_PROCESSED={index} ARTIFACTS_DOWNLOADED={artifacts_downloaded}",
+                f"ARTIFACTS_PROCESSED={index} DOWNLOADED={artifacts_downloaded}",
                 flush=True,
             )
 
@@ -452,9 +479,12 @@ def main() -> int:
     )
     findings = scan_gitleaks(gitleaks, config, exposure, reports, state)
 
-    print(f"ARTIFACTS_LISTED={artifacts_listed} DOWNLOADED={artifacts_downloaded}", flush=True)
+    print(
+        f"ARTIFACTS_LISTED={artifacts_listed} DOWNLOADED={artifacts_downloaded} "
+        f"NEWER_THAN_SNAPSHOT={artifacts_newer_than_cutoff}",
+        flush=True,
+    )
     print(f"ARTIFACTS_EXPIRED_NOT_RETAINED={expired_artifacts}", flush=True)
-    print(f"NONCOMPLETED_RUNS_SKIPPED={noncompleted_runs_skipped}", flush=True)
     print(f"EXTRACTED_FILES={state.total_files} UNCOMPRESSED_BYTES={state.total_bytes}", flush=True)
     print(f"UNSAFE_ENTRIES_QUARANTINED={len(state.quarantined)}", flush=True)
     for item in state.quarantined:
@@ -491,9 +521,9 @@ def main() -> int:
     summary = [
         "# Issue #44 — retained Actions artifact forensics", "",
         f"- Snapshot cutoff UTC: {snapshot_cutoff}.",
-        f"- Actions runs enumerated: {len(runs)} / {expected_runs}; completed runs scanned: {len(completed_runs)}; non-completed skipped: {noncompleted_runs_skipped}.",
-        f"- Artifacts listed / downloaded: {artifacts_listed} / {artifacts_downloaded}.",
-        f"- Expired artifacts not retained: {expired_artifacts}.",
+        f"- Repository artifacts enumerated: {artifacts_listed} / {expected_artifacts}.",
+        f"- Artifacts in snapshot / downloaded: {len(selected_artifacts)} / {artifacts_downloaded}.",
+        f"- Expired artifacts: {expired_artifacts}; created after snapshot cutoff: {artifacts_newer_than_cutoff}.",
         f"- Files extracted: {state.total_files}; uncompressed bytes: {state.total_bytes}.",
         f"- Unsafe member paths quarantined and scanned: {len(state.quarantined)}.",
         f"- Items that could not be fully scanned: {len(state.incomplete)}.",

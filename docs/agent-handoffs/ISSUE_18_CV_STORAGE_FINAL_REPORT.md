@@ -1,12 +1,12 @@
 # Issue #18 — durable CV Storage cleanup, end-to-end
 
-**Status:** implementation and synthetic regression evidence complete; the real local Storage E2E suite could not be executed in this environment and its CI execution is currently blocked. Issue #18 must stay open (see *Remaining blockers*).
+**Status:** implementation complete and verified by the full CI workflow, including the real local Storage/Edge-Function E2E suite. Issue #18 should still stay open until the pull request is opened, reviewed, and merged (see *Issue state recommendation*).
 
 - **Base:** `main` at `c44aaf4217f45d41b58b83cdd6618b71f5e34b7f`
 - **Branch:** `fix/issue-18-cv-storage-cleanup-e2e`
-- **Branch HEAD at report time:** `fbb7881` (this report commit follows it)
+- **Code HEAD:** `d2dedb4` (this report commit follows it)
 - **Pull request:** not created — this environment has no authenticated GitHub write API (see *Remaining blockers*)
-- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45957895168 (database job failed; logs are not readable without repository-admin credentials)
+- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45965430484 — **all three jobs passed** (static, synthetic university seed, database)
 
 ## Initial defect
 
@@ -68,8 +68,8 @@ No historical migration was edited. `0039` is additive and does not write to `st
 | `node --check` on every changed `.mjs`, `bash -n` on `run-db-tests.sh` / `run-local-integrations.sh` | **PASSED** |
 | Local PostgreSQL 17.12 + pgTAP 1.3.3 harness: apply all 38 migrations, both seeds twice, then all 19 pgTAP files | **PASSED** — 19/19 files, 764 assertions, no failures |
 | `npm run test:db` (Supabase CLI + Docker) | **BLOCKED_ENVIRONMENT** — no Docker daemon, Supabase CLI or `pg_prove` in this sandbox |
-| `tests/integration/cv-cleanup.integration.mjs` (real Storage objects) | **NOT_RUN locally** (BLOCKED_ENVIRONMENT); configured in CI |
-| GitHub Actions workflow `backend-tests` | **FAILED** at the database job before its later stages; log download requires repository-admin credentials (**BLOCKED_ENVIRONMENT** for diagnosis) |
+| `tests/integration/cv-cleanup.integration.mjs` (real Storage objects) | **NOT_RUN locally** (BLOCKED_ENVIRONMENT: no Docker/Supabase CLI) |
+| GitHub Actions workflow `backend-tests` on `d2dedb4` | **PASSED** — static, synthetic-seed and database jobs all green; the database job runs migrations, both seeds, 19 pgTAP files, concurrency and the full HTTP/Storage integration suite including `cv-cleanup.integration.mjs` |
 
 The pgTAP result comes from a real PostgreSQL 17 server with the repository's migrations and seeds and
 the actual pgTAP extension; the Supabase-managed objects (`auth.users`, `auth.uid()`/`auth.role()`,
@@ -79,15 +79,21 @@ provided by a local shim, so it is strong schema evidence but **not** a Supabase
 ## Repeated-run results
 
 - `npm test` on this branch: 198/198 twice consecutively.
-- pgTAP 19-file suite: 1/1 on branch `fix/issue-18...`; the same harness ran the 18-file baseline on
-  `main`'s migrations successfully. The new-file suite was not repeated three times because the
-  sandbox has no disposable Supabase stack to reset; CI is the only place the real stack runs.
+- pgTAP 19-file suite locally: 19/19 files, 764 assertions, zero failures.
+- CI: the workflow ran three times on this branch. The early runs exposed two real test defects (see
+  below); the final run `45965430484` passed every job, and the database job executed the real Storage
+  E2E suite end to end. One intermediate run failed a login lookup while the newly created Auth user
+  was not yet usable; the next run passed the same code path, so the login step is timing-sensitive in
+  CI and is called out under *Outstanding defects*.
 
 ## Failures discovered and fixed during this work
 
 1. **Re-used object key could not be re-uploaded in the E2E test** — the Storage API rejects `POST` of an
-   existing key unless `x-upsert` is set, so the path-reuse scenario failed before the cancellation
-   trigger ran. Fixed by making the re-upload an explicit upsert (commit `fbb7881`).
+   existing key unless `x-upsert` is set (commit `fbb7881`). An explicit upsert then proved to be
+   rejected as well: the private bucket deliberately has **no UPDATE policy**, so in-place overwrite is
+   not a supported client operation. The scenario now models the real flow — remove the old object
+   through the Storage API, upload the same key again, re-register it — which is what actually makes a
+   path live again and must cancel the queued cleanup (commit `75ffe27`).
 2. **Immediate retry** — replaced with bounded exponential backoff (0039).
 3. **Live-path deletion race** — closed with the insert/update trigger plus claim-time re-check.
 4. **Unsafe queue path** — the worker now rejects non-owner-prefixed/traversal paths before any Storage
@@ -109,12 +115,13 @@ provided by a local shim, so it is strong schema evidence but **not** a Supabase
 
 ## Remaining product/external limitations
 
-- The E2E suite (real bytes) has **not** been observed passing. Until it runs on a disposable local
-  Supabase stack and is inspected, no completion criterion that depends on actual object deletion can be
-  marked passed.
-- The database CI job currently fails before reaching the HTTP suites, and this environment cannot read
-  its logs or run Docker/Supabase locally, so the failure is undiagnosed
-  (**BLOCKED_ENVIRONMENT**, not a pass).
+- The E2E suite cannot run in this sandbox (no Docker/Supabase CLI); its passing evidence comes from the
+  GitHub Actions database job, not from a local run in this environment.
+- Logs of failed runs are not downloadable without repository-admin credentials. To keep failures
+  diagnosable, the runners now publish the failing stage/suite and a short redacted tail as a workflow
+  annotation, and tee stderr into the suite logs.
+- The Auth login immediately after admin user creation failed once in CI and passed on the next run
+  (see *Outstanding defects*).
 - Unsafe-path rows stay `FAILED` and follow the normal bounded retry schedule until exhausted; they are
   observable in the report and requeueable by the operator, but they are not terminal on first
   detection. This is deliberate (bounded, visible) and documented here.
@@ -123,13 +130,22 @@ provided by a local shim, so it is strong schema evidence but **not** a Supabase
 
 - Branch: `fix/issue-18-cv-storage-cleanup-e2e`
 - HEAD: `fbb7881` (report commit adds this file)
-- PR: **not created** — no authenticated GitHub write path in this environment; compare URL:
+- PR: **not created** — no authenticated GitHub write path in this environment (**OUT_OF_SCOPE /
+  BLOCKED_ENVIRONMENT** for this session); compare URL:
   `https://github.com/imo-foad/graduate_Project/compare/main...fix/issue-18-cv-storage-cleanup-e2e`
-- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45957895168 — database job **FAILED**
-  (step 9); static job **PASSED**; seed job **PASSED**. Logs require admin access.
+- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45965430484 — **PASSED**, all three jobs.
+
+## Outstanding defects / limitations
+
+- Opening the pull request and updating Issue #18 require GitHub write access this session does not have.
+- The admin-create → password-grant login in the E2E suite failed once with an assertion on the login
+  check and passed on the next run with identical code. The suite should treat that as a retryable wait
+  (for example a short bounded poll until the new user can sign in) instead of a single attempt; this is
+  left documented rather than masked.
 
 ## Issue state recommendation
 
-**Keep #18 open.** The implementation is complete and locally regression-tested, but the issue's
-completion gate requires the real local Storage lifecycle run. Attach the passing E2E run (or the CI
-database job once it is green) before closing.
+**Keep #18 open** until the PR exists and is reviewed. All of the issue's technical completion criteria
+(real object deletion, replacement safety, idempotent missing object, transient failure/retry, expired
+lease, exhaustion, account deletion, cross-user and service-role restrictions) now have passing evidence
+from the CI database job; only the Git/PR steps and the login-retry polish remain.

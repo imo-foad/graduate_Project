@@ -182,6 +182,13 @@ cleanup() {
        delete from auth.users where id = '$OWNER';" >/dev/null 2>&1
   fi
 
+  check "test-only Storage insert trigger is absent after cleanup" "0" \
+    "$(P "select count(*) from pg_catalog.pg_trigger where tgname = 'zz_issue18_pause_storage_insert' and not tgisinternal")"
+  check "no test Storage object rows remain after cleanup" "0" \
+    "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name in ('$DELETE_PATH', '$UPLOAD_PATH')")"
+  check "no test CV metadata or cleanup tombstones remain after cleanup" "0" \
+    "$(P "select (select count(*) from public.cv_documents where storage_path in ('$DELETE_PATH', '$UPLOAD_PATH')) + (select count(*) from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$UPLOAD_PATH'))")"
+
   rm -rf "$TMP"
   if [ "$status" -ne 0 ]; then exit "$status"; fi
   if [ "$FAILS" -ne 0 ]; then

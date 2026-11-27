@@ -335,6 +335,11 @@ wait "$DELETE_PID"; DELETE_STATUS=$?
 set -e
 UPLOAD_PID=""; DELETE_PID=""
 UPLOAD_HTTP_STATUS="$(cat "$TMP/upload-first.status" 2>/dev/null || echo 000)"
+if [ "$UPLOAD_HTTP_STATUS" != "200" ]; then
+  echo "UPLOAD_FIRST_STORAGE_ERROR_BODY (test-only response):"
+  sed "s/$OWNER/[TEST_USER]/g" "$TMP/upload-first.body" | head -c 1200
+  echo
+fi
 check "upload-first Storage API request completes before deletion commits" "200" "$UPLOAD_HTTP_STATUS"
 check "upload-first metadata deletion commits after waiting for the upload lock" "0" "$DELETE_STATUS"
 check "upload that wins the lock leaves one object and one tombstone before worker" "1" \

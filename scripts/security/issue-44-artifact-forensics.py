@@ -32,6 +32,19 @@ class ForensicsError(RuntimeError):
     pass
 
 
+def parse_current_run_id(raw_value: str | None) -> int:
+    """Parse the current workflow run id from the Actions environment."""
+    if raw_value in (None, ""):
+        return 0
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ForensicsError("GITHUB_RUN_ID is not a valid integer") from error
+    if value < 0:
+        raise ForensicsError("GITHUB_RUN_ID cannot be negative")
+    return value
+
+
 def safe_text(value: Any, limit: int = 300) -> str:
     text = str(value or "")
     for pattern in SECRET_PATTERNS:
@@ -541,6 +554,7 @@ def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
     runner_temp = Path(os.environ["RUNNER_TEMP"])
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    current_run_id = parse_current_run_id(os.environ.get("GITHUB_RUN_ID"))
     # Freeze the artifact inventory at the start of collection, not one minute
     # earlier: every artifact that existed at this cutoff remains in scope.
     snapshot_cutoff = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")

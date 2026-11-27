@@ -1,0 +1,489 @@
+{
+  "version": 1,
+  "description": "Synthetic CV parser evaluation corpus (issue #24). No real or identifiable CV content.",
+  "skills_dictionary": "fixtures/skills.json",
+  "scenarios": [
+    {
+      "id": "en-pdf-single-column-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "single-column",
+      "content": [
+        { "line": "PROFILE" },
+        { "line": "Backend engineer focused on reliable services." },
+        { "line": "COURSES" },
+        { "line": "Advanced SQL | Coursera | 2024 | 12 hours" },
+        { "line": "CERTIFICATIONS" },
+        { "line": "AWS Certified Cloud Practitioner | Amazon Web Services | 2023" },
+        { "line": "WORK EXPERIENCE" },
+        { "line": "Backend Engineer | Northstar Systems" },
+        { "line": "Jan 2021 - Feb 2023" },
+        { "line": "Built integrations using Python, Docker and PostgreSQL. Kotlin and SQL." }
+      ],
+      "expected": {
+        "skills": ["PYTHON", "DOCKER", "POSTGRESQL", "KOTLIN", "SQL", "AWS"],
+        "experiences": [
+          {
+            "company_name": "Northstar Systems",
+            "job_title": "Backend Engineer",
+            "start_date": "2021-01-01",
+            "end_date": "2023-02-28",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "issue_date": "2023-01-01" }
+        ],
+        "courses": [
+          { "title": "Advanced SQL", "issuer": "Coursera", "issue_date": "2024-01-01", "duration": "12 hours" }
+        ]
+      },
+      "must_not_extract": { "skills": ["JAVA", "JAVASCRIPT", "AGILE"] }
+    },
+    {
+      "id": "ar-docx-attached-skills-v1",
+      "format": "docx",
+      "language": "ar",
+      "layout": "single-column",
+      "content": [
+        { "line": "السيرة المهنية", "heading": true },
+        { "line": "الخبرة العملية", "heading": true },
+        { "line": "مهندس برمجيات | شركة النور" },
+        { "line": "03/2020 - 11/2021" },
+        { "line": "عمل على خدمات داخلية باستخدام Python وSQL وKotlin." },
+        { "line": "الشهادات", "heading": true },
+        { "line": "شهادة الأمن السيبراني | أكاديمية التقنية | 2022" },
+        { "line": "الدورات التدريبية", "heading": true },
+        { "line": "تحليل البيانات | منصة التعلم | 2023 | 6 weeks" }
+      ],
+      "expected": {
+        "skills": ["PYTHON", "SQL", "KOTLIN"],
+        "experiences": [
+          {
+            "company_name": "شركة النور",
+            "job_title": "مهندس برمجيات",
+            "start_date": "2020-03-01",
+            "end_date": "2021-11-30",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "شهادة الأمن السيبراني", "issuer": "أكاديمية التقنية", "issue_date": "2022-01-01" }
+        ],
+        "courses": [
+          { "title": "تحليل البيانات", "issuer": "منصة التعلم", "issue_date": "2023-01-01", "duration": "6 weeks" }
+        ]
+      },
+      "must_not_extract": { "skills": ["JAVA", "JAVASCRIPT"] }
+    },
+    {
+      "id": "en-pdf-merged-header-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "single-column-with-gap",
+      "content": [
+        { "line": "EXPERIENCE" },
+        { "line": "Product Analyst\tBright Analytics" },
+        { "line": "2019 - 2020" },
+        { "line": "Analysed product reports with Excel and SQL." },
+        { "line": "CERTIFICATIONS" },
+        { "line": "Professional Scrum Master | Scrum.org | 2020" },
+        { "line": "COURSES" },
+        { "line": "Agile Delivery | Open Learning | 2019" }
+      ],
+      "expected": {
+        "skills": ["EXCEL", "SQL", "AGILE"],
+        "experiences": [
+          {
+            "company_name": "Bright Analytics",
+            "job_title": "Product Analyst",
+            "start_date": "2019-01-01",
+            "end_date": "2020-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "Professional Scrum Master", "issuer": "Scrum.org", "issue_date": "2020-01-01" }
+        ],
+        "courses": [
+          { "title": "Agile Delivery", "issuer": "Open Learning", "issue_date": "2019-01-01" }
+        ]
+      },
+      "must_not_extract": { "skills": ["KOTLIN", "REACT"] }
+    },
+    {
+      "id": "en-pdf-two-column-sidebar-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "two-column",
+      "content": [
+        {
+          "columns": {
+            "left": [
+              "WORK EXPERIENCE",
+              "Backend Engineer | Northstar Systems",
+              "Jan 2021 - Mar 2023",
+              "Built services with Python and Docker.",
+              "CERTIFICATIONS",
+              "AWS Certified Developer | Amazon Web Services | 2022",
+              "COURSES",
+              "Advanced Python | Coursera | 2023 | 8 weeks"
+            ],
+            "right": [
+              "SKILLS",
+              "Kotlin",
+              "PostgreSQL",
+              "Git",
+              "EDUCATION",
+              "BSc Computer Science"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "skills": ["PYTHON", "DOCKER", "KOTLIN", "POSTGRESQL", "GIT", "AWS"],
+        "experiences": [
+          {
+            "company_name": "Northstar Systems",
+            "job_title": "Backend Engineer",
+            "start_date": "2021-01-01",
+            "end_date": "2023-03-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "AWS Certified Developer", "issuer": "Amazon Web Services", "issue_date": "2022-01-01" }
+        ],
+        "courses": [
+          { "title": "Advanced Python", "issuer": "Coursera", "issue_date": "2023-01-01", "duration": "8 weeks" }
+        ]
+      },
+      "must_not_extract": { "skills": ["JAVA", "REACT"], "courses": ["BSc Computer Science"] }
+    },
+    {
+      "id": "en-docx-table-experience-v1",
+      "format": "docx",
+      "language": "en",
+      "layout": "table",
+      "content": [
+        { "line": "WORK EXPERIENCE", "heading": true },
+        {
+          "table": [
+            ["Backend Engineer", "Northstar Systems", "Jan 2021 - Feb 2023"],
+            ["Data Analyst", "Insight Analytics", "2020 - 2021"]
+          ]
+        },
+        { "line": "CERTIFICATIONS", "heading": true },
+        { "table": [["Microsoft Power BI Data Analyst", "Microsoft", "2024"]] },
+        { "line": "COURSES", "heading": true },
+        { "table": [["Data Visualization with Tableau", "Tableau", "2023", "4 weeks"]] }
+      ],
+      "expected": {
+        "skills": ["POWER_BI", "DATA_VISUALIZATION", "TABLEAU"],
+        "experiences": [
+          {
+            "company_name": "Northstar Systems",
+            "job_title": "Backend Engineer",
+            "start_date": "2021-01-01",
+            "end_date": "2023-02-28",
+            "is_current": false
+          },
+          {
+            "company_name": "Insight Analytics",
+            "job_title": "Data Analyst",
+            "start_date": "2020-01-01",
+            "end_date": "2021-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "Microsoft Power BI Data Analyst", "issuer": "Microsoft", "issue_date": "2024-01-01" }
+        ],
+        "courses": [
+          {
+            "title": "Data Visualization with Tableau",
+            "issuer": "Tableau",
+            "issue_date": "2023-01-01",
+            "duration": "4 weeks"
+          }
+        ]
+      },
+      "must_not_extract": { "skills": ["EXCEL", "SQL"] }
+    },
+    {
+      "id": "en-pdf-alternate-headings-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "single-column",
+      "content": [
+        { "line": "LICENSES" },
+        { "line": "Microsoft Power BI Data Analyst | Microsoft | 2024" },
+        { "line": "EMPLOYMENT HISTORY" },
+        { "line": "Data Analyst at Insight Analytics" },
+        { "line": "2021 - 2022" },
+        { "line": "Prepared reports with Power BI, Excel, Tableau and Statistics." },
+        { "line": "PROFESSIONAL DEVELOPMENT" },
+        { "line": "Data Visualization with Tableau | Tableau | 2023 | 4 weeks" }
+      ],
+      "expected": {
+        "skills": ["POWER_BI", "EXCEL", "TABLEAU", "STATISTICS", "DATA_VISUALIZATION"],
+        "experiences": [
+          {
+            "company_name": "Insight Analytics",
+            "job_title": "Data Analyst",
+            "start_date": "2021-01-01",
+            "end_date": "2022-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "Microsoft Power BI Data Analyst", "issuer": "Microsoft", "issue_date": "2024-01-01" }
+        ],
+        "courses": [
+          {
+            "title": "Data Visualization with Tableau",
+            "issuer": "Tableau",
+            "issue_date": "2023-01-01",
+            "duration": "4 weeks"
+          }
+        ]
+      },
+      "must_not_extract": { "skills": ["AGILE", "KOTLIN"] }
+    },
+    {
+      "id": "ar-docx-table-mixed-v1",
+      "format": "docx",
+      "language": "ar-en",
+      "layout": "table",
+      "content": [
+        { "line": "المهارات التقنية", "heading": true },
+        { "table": [["Python", "SQL", "Kotlin"], ["Docker", "Git"]] },
+        { "line": "الخبرات", "heading": true },
+        { "table": [["مطور تطبيقات", "شركة الرواد", "01/2019 - 12/2020"]] },
+        { "line": "الشهادات المهنية", "heading": true },
+        { "table": [["شهادة إدارة المشاريع", "معهد الإدارة", "2021"]] },
+        { "line": "الدورات", "heading": true },
+        { "table": [["أساسيات البيانات", "منصة التعلم", "2022", "8 weeks"]] }
+      ],
+      "expected": {
+        "skills": ["PYTHON", "SQL", "KOTLIN", "DOCKER", "GIT"],
+        "experiences": [
+          {
+            "company_name": "شركة الرواد",
+            "job_title": "مطور تطبيقات",
+            "start_date": "2019-01-01",
+            "end_date": "2020-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "شهادة إدارة المشاريع", "issuer": "معهد الإدارة", "issue_date": "2021-01-01" }
+        ],
+        "courses": [
+          { "title": "أساسيات البيانات", "issuer": "منصة التعلم", "issue_date": "2022-01-01", "duration": "8 weeks" }
+        ]
+      },
+      "must_not_extract": { "skills": ["JAVA", "REACT"] }
+    },
+    {
+      "id": "en-docx-bullets-v1",
+      "format": "docx",
+      "language": "en",
+      "layout": "bullets",
+      "content": [
+        { "line": "PROFILE" },
+        { "line": "Test automation engineer." },
+        { "line": "WORK EXPERIENCE", "heading": true },
+        { "line": "QA Engineer | Quality Works", "bullet": true },
+        { "line": "Feb 2019 - Jan 2021", "bullet": true },
+        { "line": "Built UI tests with JavaScript and Docker.", "bullet": true },
+        { "line": "CERTIFICATIONS", "heading": true },
+        { "line": "ISTQB Foundation Level | ISTQB | 2020", "bullet": true },
+        { "line": "COURSES", "heading": true },
+        { "line": "Continuous Integration | DevOps Academy | 2021 | 6 hours", "bullet": true }
+      ],
+      "expected": {
+        "skills": ["JAVASCRIPT", "DOCKER", "TESTING", "DEVOPS_CI_CD"],
+        "experiences": [
+          {
+            "company_name": "Quality Works",
+            "job_title": "QA Engineer",
+            "start_date": "2019-02-01",
+            "end_date": "2021-01-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          { "title": "ISTQB Foundation Level", "issuer": "ISTQB", "issue_date": "2020-01-01" }
+        ],
+        "courses": [
+          {
+            "title": "Continuous Integration",
+            "issuer": "DevOps Academy",
+            "issue_date": "2021-01-01",
+            "duration": "6 hours"
+          }
+        ]
+      },
+      "must_not_extract": { "skills": ["JAVA", "KOTLIN", "AGILE"] }
+    },
+    {
+      "id": "en-pdf-current-and-numeric-dates-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "single-column",
+      "content": [
+        { "line": "EXPERIENCE" },
+        { "line": "Frontend Developer | Bright Apps" },
+        { "line": "01/2020 - 12/2021" },
+        { "line": "Built interfaces with React, TypeScript and HTML/CSS." },
+        { "line": "Full Stack Developer | Cloud Nine" },
+        { "line": "03/2022 - Present" },
+        { "line": "Working with Node.js, MongoDB and REST APIs." }
+      ],
+      "expected": {
+        "skills": ["REACT", "TYPESCRIPT", "HTML_CSS", "NODE_JS", "MONGODB", "REST_API"],
+        "experiences": [
+          {
+            "company_name": "Bright Apps",
+            "job_title": "Frontend Developer",
+            "start_date": "2020-01-01",
+            "end_date": "2021-12-31",
+            "is_current": false
+          },
+          {
+            "company_name": "Cloud Nine",
+            "job_title": "Full Stack Developer",
+            "start_date": "2022-03-01",
+            "is_current": true
+          }
+        ],
+        "certifications": [],
+        "courses": []
+      },
+      "must_not_extract": { "skills": ["JAVA", "KOTLIN"] }
+    },
+    {
+      "id": "negative-en-pdf-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "negative",
+      "content": [
+        { "line": "PROFILE" },
+        { "line": "I enjoy hiking and painting with watercolours." },
+        { "line": "EDUCATION" },
+        { "line": "BSc Computer Science, coursework covered relational theory and SQLite storage." },
+        { "line": "CERTIFICATIONS" },
+        { "line": "None" },
+        { "line": "COURSES" },
+        { "line": "N/A" },
+        { "line": "PROJECTS" },
+        { "line": "A personal photo blog; no professional tooling was used." }
+      ],
+      "expected": { "skills": [], "experiences": [], "certifications": [], "courses": [] },
+      "must_not_extract": {
+        "skills": ["SQL", "JAVA", "PYTHON", "KOTLIN"],
+        "certifications": ["None"],
+        "courses": ["N/A"]
+      }
+    },
+    {
+      "id": "negative-ar-docx-v1",
+      "format": "docx",
+      "language": "ar",
+      "layout": "negative",
+      "content": [
+        { "line": "نبذة", "heading": true },
+        { "line": "أحب القراءة والرياضة." },
+        { "line": "التعليم", "heading": true },
+        { "line": "بكالوريوس علوم الحاسب." },
+        { "line": "الشهادات", "heading": true },
+        { "line": "لا يوجد" },
+        { "line": "الدورات", "heading": true },
+        { "line": "لا توجد" },
+        { "line": "المشاريع", "heading": true },
+        { "line": "موقع شخصي بسيط." }
+      ],
+      "expected": { "skills": [], "experiences": [], "certifications": [], "courses": [] },
+      "must_not_extract": { "skills": ["SQL", "KOTLIN"], "certifications": ["لا يوجد"], "courses": ["لا توجد"] }
+    },
+    {
+      "id": "mixed-docx-certifications-courses-v1",
+      "format": "docx",
+      "language": "ar-en",
+      "layout": "single-column",
+      "content": [
+        { "line": "الملف المهني", "heading": true },
+        { "line": "مهندس أمن معلومات." },
+        { "line": "الشهادات", "heading": true },
+        { "line": "CompTIA Security+ | CompTIA | 2022" },
+        { "line": "الدورات التدريبية", "heading": true },
+        { "line": "تحليل البيانات باستخدام Excel | منصة التعلم | 2023 | 10 hours" },
+        { "line": "المهارات", "heading": true },
+        { "line": "Cybersecurity, SIEM, Linux" }
+      ],
+      "expected": {
+        "skills": ["CYBERSECURITY", "SIEM", "LINUX", "EXCEL"],
+        "experiences": [],
+        "certifications": [
+          { "title": "CompTIA Security+", "issuer": "CompTIA", "issue_date": "2022-01-01" }
+        ],
+        "courses": [
+          {
+            "title": "تحليل البيانات باستخدام Excel",
+            "issuer": "منصة التعلم",
+            "issue_date": "2023-01-01",
+            "duration": "10 hours"
+          }
+        ]
+      },
+      "must_not_extract": { "skills": ["PENETRATION_TESTING", "AGILE"] }
+    },
+    {
+      "id": "en-pdf-multiple-entries-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "single-column",
+      "content": [
+        { "line": "WORK EXPERIENCE" },
+        { "line": "Software Engineer | Alpha Labs" },
+        { "line": "2018 - 2019" },
+        { "line": "Wrote Java services." },
+        { "line": "Senior Software Engineer | Beta Works" },
+        { "line": "2019 - 2021" },
+        { "line": "Led Java and Kotlin migration." },
+        { "line": "Engineering Manager | Gamma Tech" },
+        { "line": "2021 - Present" },
+        { "line": "Managed eight engineers using Agile and Scrum." }
+      ],
+      "expected": {
+        "skills": ["JAVA", "KOTLIN", "AGILE"],
+        "experiences": [
+          {
+            "company_name": "Alpha Labs",
+            "job_title": "Software Engineer",
+            "start_date": "2018-01-01",
+            "end_date": "2019-12-31",
+            "is_current": false
+          },
+          {
+            "company_name": "Beta Works",
+            "job_title": "Senior Software Engineer",
+            "start_date": "2019-01-01",
+            "end_date": "2021-12-31",
+            "is_current": false
+          },
+          {
+            "company_name": "Gamma Tech",
+            "job_title": "Engineering Manager",
+            "start_date": "2021-01-01",
+            "is_current": true
+          }
+        ],
+        "certifications": [],
+        "courses": []
+      },
+      "must_not_extract": { "skills": ["PYTHON", "REACT"] }
+    }
+  ]
+}

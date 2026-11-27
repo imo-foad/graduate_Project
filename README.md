@@ -69,7 +69,7 @@ Additional database/runtime evidence:
 
 ## Remaining product / security limitations
 
-- **CV parsing:** PDF/DOCX text extraction, dictionary-based skill extraction and section-rule extraction for work experience, certifications and courses are implemented. Structured items remain PENDING until the graduate reviews them with `review_cv_suggestions`. Scanned/image-only PDFs still need OCR and are not parsed by the free local parser.
+- **CV parsing:** PDF/DOCX text extraction, dictionary-based skill extraction and section-rule extraction for work experience, certifications and courses are implemented. PDF text is rebuilt from item coordinates (visual lines, two-column reading order and employer/title gaps) instead of content-stream order; DOCX paragraphs, bullet lists and table cells are separated correctly. Arabic diacritics, tatweel and punctuation are normalized for matching, and Latin skills attached to Arabic clitics (`وSQL`, `وKotlin`) match without allowing substring false positives. Structured items remain PENDING until the graduate reviews them with `review_cv_suggestions`. Scanned/image-only PDFs still need OCR and are not parsed by the free local parser.
 - Recommendation matching is deterministic and explainable; inferred career paths use a local skill taxonomy, interaction signals affect ranking, mandatory experience can exclude a candidate, and market gaps are measured against active platform jobs. Lexical similarity remains a proxy, not an embedding model.
 - Business assumptions A2 (INTERNSHIP application eligibility) and A3 (TRAINING registration eligibility) still need product-owner confirmation.
 - Automated local RLS/Storage tests are not a third-party penetration test or a production-cloud deployment rehearsal.
@@ -92,6 +92,7 @@ See `docs/AUDIT_REPORT.md` for the subsystem scores, exact test evidence and rem
 - `POST /rest/v1/rpc/record_recommendation_interaction` records IMPRESSION, VIEW, DISMISS or NOT_INTERESTED. Saves, job applications and event registrations are recorded automatically.
 - Companies/admins can set a numeric minimum through `set_job_experience_requirement`; it can be mandatory (not recommended below threshold) or preferred (score penalty).
 - Career paths and recommendation scoring are local deterministic TypeScript. pgvector/hosted LLMs are intentionally deferred to avoid paid infrastructure and CV data sharing.
+- **CV parser evaluation:** `npm run evaluate:cv:local` runs the versioned synthetic corpus in `tests/fixtures/cv-parser/` through the real local `parse-cv` function and enforces per-field gates (skills 95/95, experience 90/90, certifications 95/95, courses 95/95 precision/recall), negative fixtures and the Arabic DOCX / multi-column PDF regressions. Synthetic results are **not** real-world accuracy evidence; a consented, anonymized real-CV corpus is still required, and OCR remains out of scope.
 
 ## Current verification snapshot (2026-11-26)
 

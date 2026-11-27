@@ -1,5 +1,6 @@
 import DOMMatrixPolyfill from "npm:@thednp/dommatrix@2.0.12";
 import { unzipSync } from "npm:fflate@0.8.3";
+import { layoutPdfText, type PdfTextItem } from "./pdf-layout.ts";
 
 export class CvFileError extends Error {
   constructor(readonly code: string) {
@@ -59,14 +60,32 @@ function extractDocxText(bytes: Uint8Array): string {
     if (!documentXml) throw new CvFileError("CV_INVALID_FILE");
 
     const xml = new TextDecoder("utf-8", { fatal: true }).decode(documentXml);
-    const tokens = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:br\b[^>]*\/>|<\/w:p>/g;
+    // We never resolve DTDs or entities; refuse a document that declares them instead of guessing.
+    if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new CvFileError("CV_INVALID_FILE");
+    // Table cells are separate columns. A paragraph inside a cell must not end the visual line, or
+    // employer, title and dates become unrelated lines. Cells join with " | " and a row ends the line.
+    const tokens = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<\/?w:[A-Za-z][A-Za-z0-9]*\b[^>]*>/g;
     let result = "";
+    let inCell = false;
     for (const match of xml.matchAll(tokens)) {
-      if (match[1] !== undefined) result += decodeXmlText(match[1]);
-      else if (match[0].startsWith("<w:tab")) result += "\t";
-      else result += "\n";
+      if (match[1] !== undefined) {
+        result += decodeXmlText(match[1]);
+      } else {
+        const tag = match[0];
+        if (/^<w:tab\b/.test(tag)) result += "\t";
+        else if (/^<w:(?:br|cr)\b/.test(tag)) result += inCell ? " " : "\n";
+        else if (/^<w:tc\b/.test(tag)) inCell = true;
+        else if (/^<\/w:tc>/.test(tag)) { inCell = false; result += " | "; }
+        else if (/^<\/w:tr>/.test(tag)) { inCell = false; result += "\n"; }
+        else if (/^<w:p\b/.test(tag) || /^<\/w:p>/.test(tag)) {
+          if (tag.startsWith("<w:p") && !tag.endsWith("/>") && !tag.startsWith("</")) continue;
+          result += inCell ? " " : "\n";
+        }
+      }
       if (result.length >= MAX_TEXT_CHARS) break;
     }
+    // A row ends with the last cell separator; it is not a field boundary.
+    result = result.replace(/[ \t]*\|[ \t]*(?=\n)/g, "");
     const text = normalizeText(result);
     if (!text) throw new CvFileError("CV_NO_TEXT_FOUND");
     return text;
@@ -112,12 +131,24 @@ async function extractPdfText(bytes: Uint8Array): Promise<string> {
       for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
         const page = await document.getPage(pageNumber);
         const content = await page.getTextContent();
+        // Content-stream order is not reading order. Rebuild lines from each item's transform so a
+        // two-column page is emitted column by column instead of interleaved, and keep a wide
+        // employer/title gap as an explicit field boundary.
+        const positioned: PdfTextItem[] = [];
         for (const item of content.items) {
-          if ("str" in item && typeof item.str === "string") {
-            result += item.str + ("hasEOL" in item && item.hasEOL ? "\n" : " ");
-            if (result.length >= MAX_TEXT_CHARS) break;
-          }
+          if (!("str" in item) || typeof item.str !== "string") continue;
+          const transform = (item as { transform?: number[] }).transform;
+          if (!Array.isArray(transform) || transform.length < 6) continue;
+          if (!Number.isFinite(transform[4]) || !Number.isFinite(transform[5])) continue;
+          positioned.push({
+            str: item.str,
+            x: transform[4],
+            y: transform[5],
+            width: typeof item.width === "number" ? item.width : 0,
+            height: typeof item.height === "number" ? item.height : 0,
+          });
         }
+        result += layoutPdfText(positioned) + "\n";
         page.cleanup();
         if (result.length >= MAX_TEXT_CHARS) break;
       }

@@ -1,14 +1,15 @@
 # Issue #24 — CV extraction quality for Arabic DOCX and multi-column PDFs
 
-**Status:** parser fixes are implemented and measured on a versioned synthetic corpus; the HTTP
-evaluation suite could not be executed in this environment. Issue #24 must stay open: synthetic fixtures
-are not evidence about real CVs, and a consented, anonymized corpus is still required.
+**Status:** parser fixes are implemented, measured on a versioned synthetic corpus, and verified by
+the full CI workflow including the real HTTP evaluation and robustness suites. Issue #24 must stay
+open: synthetic fixtures are not evidence about real CVs, and a consented, anonymized corpus is still
+required.
 
 - **Base:** `main` at `c44aaf4217f45d41b58b83cdd6618b71f5e34b7f`
 - **Branch:** `fix/issue-24-cv-parser-quality`
-- **Branch HEAD at report time:** `f5db8db` (this report commit follows it)
+- **Code HEAD:** `2de97f7` (this report commit follows it)
 - **Pull request:** not created — this environment has no authenticated GitHub write API
-- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45955978804 (static job passed; the database and seed jobs failed during the disposable-stack steps, and their logs are not readable without repository-admin credentials)
+- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45965502766 — **all three jobs passed** (static, synthetic university seed, database)
 
 ## Initial defect
 
@@ -114,16 +115,16 @@ negative fixtures produce zero suggestions, and heading-only lines are not emitt
 
 ## HTTP integration results
 
-- `npm run evaluate:cv:local` (real gateway + Storage + `parse-cv`): **NOT RUN / BLOCKED_ENVIRONMENT** —
-  this sandbox has no Docker daemon or Supabase CLI, so the local stack cannot start.
-- `tests/integration/cv-parser-robustness.integration.mjs`: **NOT RUN** for the same reason; syntax
-  checked and wired into `scripts/run-local-integrations.sh`.
-- GitHub Actions database job: **FAILED** during the disposable-stack stage, before the HTTP suites, and
-  its logs are not readable from here (**BLOCKED_ENVIRONMENT**).
+- `npm run evaluate:cv:local` (real gateway + Storage + `parse-cv`): **NOT RUN locally** — this sandbox
+  has no Docker daemon or Supabase CLI. It **PASSED in CI**: the database job runs it against the
+  disposable local stack with the per-field gates enabled, so a gate miss fails the workflow.
+- `tests/integration/cv-parser-robustness.integration.mjs`: **NOT RUN locally** for the same reason, and
+  **PASSED in CI** (malformed/empty/encrypted/oversized/41-page PDFs, bad ZIP/DOCX, DTD/XXE, MIME
+  mismatch, foreign user, duplicate and concurrent parses, unicode, suggestion lifecycle).
+- GitHub Actions: **PASSED** on `2de97f7` (run `45965502766`), all three jobs.
 
-The quality gates above were therefore measured through the parser modules and the corpus, not through
-the HTTP function; the HTTP evaluator that enforces the same gates in CI is new but has not been observed
-running.
+The quality gates above were measured twice: directly through the parser modules and corpus (the
+numbers in the table) and through the real HTTP evaluator in CI, which enforces the same gates.
 
 ## Full test results
 
@@ -135,7 +136,7 @@ running.
 | Deno corpus harness (13 scenarios, same modules) | **PASSED** — 4/4 field gates, no negative violations, Arabic and merged-header regressions fixed |
 | Node focused tests (`pdf-layout`, `cv-extract`, `cv-structured-extract`, `cv-parser-metrics`) | **PASSED** — 34 tests, 34 pass, 0 fail |
 | Real PostgreSQL 17.12 + pgTAP 1.3.3 (18 files, 718 assertions) | **PASSED** — schema unchanged by this branch, re-verified on the same migration set |
-| GitHub Actions | static **PASSED**; database and seed jobs **FAILED** in the disposable-stack steps |
+| GitHub Actions run `45965502766` | **PASSED** — static, synthetic-seed and database jobs all green; the database job runs migrations, seeds, 18 pgTAP files, concurrency, the HTTP parser evaluation gates and the robustness suite |
 
 ## Failures discovered and fixed during this work
 
@@ -152,8 +153,8 @@ running.
 
 ## Tests not run and reasons
 
-- HTTP parser evaluation and the robustness integration: no local Supabase stack (BLOCKED_ENVIRONMENT).
-- CI database job: failed before the HTTP stage; logs unavailable (BLOCKED_ENVIRONMENT).
+- HTTP parser evaluation and the robustness integration were not executed **in this sandbox** (no local
+  Supabase stack); both ran and passed in CI (BLOCKED_ENVIRONMENT locally, PASSED in CI).
 - Real-CV accuracy: no consented, anonymized corpus exists (OUT_OF_SCOPE / blocked on the owner).
 - OCR: explicitly out of scope.
 
@@ -180,13 +181,13 @@ running.
 
 - Branch: `fix/issue-24-cv-parser-quality`
 - HEAD: `f5db8db` (report commit adds this file)
-- PR: **not created** — compare URL:
+- PR: **not created** — no authenticated GitHub write path in this session; compare URL:
   `https://github.com/imo-foad/graduate_Project/compare/main...fix/issue-24-cv-parser-quality`
-- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45955978804 — static **PASSED**,
-  database and seed jobs **FAILED** (logs require admin access).
+- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45965502766 — **PASSED**, all three jobs.
 
 ## Issue state recommendation
 
-**Keep #24 open.** The deterministic parser defects are fixed and measured, but the issue's completion
-gate requires evaluation on a representative, owner-approved, consented and anonymized real-CV corpus.
-Synthetic fixtures do not satisfy that criterion.
+**Keep #24 open.** The deterministic parser defects are fixed and measured, and the synthetic gates pass
+both directly and through the CI HTTP evaluator, but the issue's completion gate requires evaluation on
+a representative, owner-approved, consented and anonymized real-CV corpus. Synthetic fixtures do not
+satisfy that criterion, and opening the PR / updating the issue still needs GitHub write access.

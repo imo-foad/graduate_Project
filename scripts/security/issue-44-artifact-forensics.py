@@ -336,6 +336,32 @@ def api_json(url: str):
         return 0, None
 
 
+def retry_inventory_call(fetch, attempts: int = 5):
+    """Retry only inventory-drift errors; never suppress authorization, HTTP, or schema failures."""
+    for attempt in range(attempts):
+        try:
+            return fetch()
+        except ForensicsError as error:
+            message = str(error)
+            transient = (
+                "total_count changed during" in message
+                or "inventory count mismatch" in message
+                or "repository artifact inventory changed during" in message
+                or "repository artifact total_count changed during" in message
+                or "Actions run total_count changed during" in message
+            )
+            if not transient or attempt + 1 == attempts:
+                raise
+            delay = min(5 * (2 ** attempt), 30)
+            print(
+                f"INVENTORY_SNAPSHOT_RETRY={attempt + 1}/{attempts - 1} "
+                f"REASON=transient-pagination-drift WAIT_SECONDS={delay}",
+                flush=True,
+            )
+            time.sleep(delay)
+    raise ForensicsError("inventory retry budget exhausted")
+
+
 def list_endpoint(url: str, collection_key: str):
     items = []
     expected = None
@@ -444,6 +470,12 @@ def main() -> int:
     # Freeze the artifact inventory at the start of collection, not one minute
     # earlier: every artifact that existed at this cutoff remains in scope.
     snapshot_cutoff = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Workflow runs are more volatile than artifact records: exclude the
+    # just-started CI wave from the run-log inventory, then revisit it in the
+    # next audit pass once those runs have completed.
+    run_snapshot_cutoff = (
+        datetime.now(timezone.utc) - timedelta(minutes=1)
+    ).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     api = "https://api.github.com/repos/" + repo
     config = workspace / "scripts/security/issue-44-gitleaks.toml"
     root = runner_temp / "issue-44-artifact-forensics"
@@ -470,17 +502,22 @@ def main() -> int:
 
     # Snapshot all completed workflow runs first. Logs are ZIP archives too, and
     # the previous audit's aggregate unsafe-entry count covered both logs and artifacts.
-    runs_url = api + "/actions/runs?created=2000-01-01T00:00:00Z.." + snapshot_cutoff
-    runs_all, expected_runs = list_endpoint(runs_url, "workflow_runs")
-    runs_confirmation, confirmed_runs_total = list_endpoint(runs_url, "workflow_runs")
+    runs_url = api + "/actions/runs?created=2000-01-01T00:00:00Z.." + run_snapshot_cutoff
+    runs_all, expected_runs = retry_inventory_call(
+        lambda: list_endpoint(runs_url, "workflow_runs")
+    )
+    runs_confirmation, confirmed_runs_total = retry_inventory_call(
+        lambda: list_endpoint(runs_url, "workflow_runs")
+    )
     if expected_runs != confirmed_runs_total:
         raise ForensicsError("Actions run total_count changed during snapshot confirmation")
     validate_stable_inventory(runs_all, runs_confirmation)
     selected_runs, current_run_skipped, noncompleted_runs_skipped, newer_runs = (
-        select_completed_runs_snapshot(runs_all, snapshot_cutoff, current_run_id)
+        select_completed_runs_snapshot(runs_all, run_snapshot_cutoff, current_run_id)
     )
     print(
         f"ACTIONS_RUNS_ENUMERATED={len(runs_all)}/{expected_runs} "
+        f"RUN_SNAPSHOT_CUTOFF={run_snapshot_cutoff} "
         f"COMPLETED_RUNS_IN_SNAPSHOT={len(selected_runs)} "
         f"CURRENT_RUN_SKIPPED={current_run_skipped} "
         f"NONCOMPLETED_RUNS_SKIPPED={noncompleted_runs_skipped} "
@@ -522,8 +559,12 @@ def main() -> int:
         json.dumps(run_log_inventory, separators=(",", ":")), encoding="utf-8"
     )
 
-    artifacts_all, expected_artifacts = list_endpoint(api + "/actions/artifacts", "artifacts")
-    confirmation, confirmation_total = list_endpoint(api + "/actions/artifacts", "artifacts")
+    artifacts_all, expected_artifacts = retry_inventory_call(
+        lambda: list_endpoint(api + "/actions/artifacts", "artifacts")
+    )
+    confirmation, confirmation_total = retry_inventory_call(
+        lambda: list_endpoint(api + "/actions/artifacts", "artifacts")
+    )
     if expected_artifacts != confirmation_total:
         raise ForensicsError("repository artifact total_count changed during snapshot confirmation")
     validate_stable_inventory(artifacts_all, confirmation)
@@ -627,7 +668,8 @@ def main() -> int:
 
     summary = [
         "# Issue #44 — retained Actions logs and artifact forensics", "",
-        f"- Snapshot cutoff UTC: {snapshot_cutoff}.",
+        f"- Artifact snapshot cutoff UTC: {snapshot_cutoff}.",
+        f"- Workflow-run snapshot cutoff UTC: {run_snapshot_cutoff}.",
         f"- Actions runs enumerated: {len(runs_all)} / {expected_runs}; completed logs selected: {len(selected_runs)}.",
         f"- Current forensic run skipped: {current_run_skipped}; non-completed runs skipped: {noncompleted_runs_skipped}; newer runs: {newer_runs}.",
         f"- Run logs downloaded: {run_logs_downloaded} / {len(selected_runs)}.",

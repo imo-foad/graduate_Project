@@ -352,11 +352,14 @@ def api_json(url: str):
 MAX_RUNS_PER_SEARCH = 900
 
 
-def partition_time_range(start, end, count_provider, max_results: int = MAX_RUNS_PER_SEARCH):
-    """Split a GitHub created-time query until each result set stays below its 1,000 cap."""
+def partition_time_range(
+    start, end, count_provider, max_results: int = MAX_RUNS_PER_SEARCH,
+    expected_count: int | None = None,
+):
+    """Split a GitHub created-time query and reconcile every child count to its parent."""
     if start > end:
         raise ForensicsError("workflow run time range is inverted")
-    expected = count_provider(start, end)
+    expected = count_provider(start, end) if expected_count is None else expected_count
     if not isinstance(expected, int) or expected < 0:
         raise ForensicsError("workflow run count probe returned an invalid count")
     if expected <= max_results:
@@ -370,6 +373,8 @@ def partition_time_range(start, end, count_provider, max_results: int = MAX_RUNS
     right_start = midpoint + timedelta(seconds=1)
     left = partition_time_range(start, midpoint, count_provider, max_results)
     right = partition_time_range(right_start, end, count_provider, max_results)
+    if sum(partition[2] for partition in left + right) != expected:
+        raise ForensicsError("workflow run partition counts do not reconcile parent total")
     return left + right
 
 
@@ -436,6 +441,7 @@ def retry_inventory_call(fetch, attempts: int = 5):
                 or "repository artifact inventory changed during" in message
                 or "repository artifact total_count changed during" in message
                 or "Actions run total_count changed during" in message
+                or "workflow run partition counts do not reconcile parent total" in message
             )
             if not transient or attempt + 1 == attempts:
                 raise

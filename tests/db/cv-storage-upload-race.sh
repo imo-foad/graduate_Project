@@ -334,7 +334,7 @@ start_barrier "$UPLOAD_BARRIER" "UPLOAD_BARRIER_READY"
 upload_in_background "$UPLOAD_PATH" "upload-first"
 wait_for_storage_insert_lock_wait
 
-PGAPPNAME="issue18-storage-delete-after-upload" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \\
+PGAPPNAME="issue18-storage-delete-after-upload" psql "$DB_URL" -X -q -v ON_ERROR_STOP=1 \
   >"$TMP/delete-after-upload.log" 2>&1 <<SQL &
 begin;
 set local application_name = 'issue18-storage-delete-after-upload';

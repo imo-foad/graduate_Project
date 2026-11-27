@@ -44,8 +44,11 @@ cleanup() {
      delete from private.cv_cleanup_queue where storage_path in ('$DELETE_PATH', '$REVERSE_PATH');" >/dev/null 2>&1
   rm -rf "$TMP"
   if [ "$status" -ne 0 ]; then exit "$status"; fi
-  [ "$FAILS" -eq 0 ] || exit 1
-}
+  if [ "$FAILS" -ne 0 ]; then
+    echo "CV CLEANUP CONCURRENCY FAILED: $FAILS checks" >&2
+    exit 1
+  fi
+  }
 trap cleanup EXIT
 
 P() {
@@ -157,7 +160,7 @@ wait "$B_PID"; B_STATUS=$?
 set -e
 A_PID=""; B_PID=""
 check "delete-first transaction commits" "0" "$A_STATUS"
-check "registration after deletion is rejected" "1" "$B_STATUS"
+check "registration after deletion is rejected" "3" "$B_STATUS"
 grep -Fq "CV_STORAGE_PATH_RETIRED" "$TMP/insert-after-delete.log" \
   && check "delete-first rejection carries CV_STORAGE_PATH_RETIRED" "1" "1" \
   || check "delete-first rejection carries CV_STORAGE_PATH_RETIRED" "1" "0"
@@ -217,7 +220,7 @@ wait "$A_PID"; A_STATUS=$?
 set -e
 A_PID=""; B_PID=""
 check "insert-first delete transaction commits after unique conflict" "0" "$A_STATUS"
-check "insert-first duplicate registration is rejected by storage_path uniqueness" "1" "$B_STATUS"
+check "insert-first duplicate registration is rejected by storage_path uniqueness" "3" "$B_STATUS"
 grep -qi "duplicate key value violates unique constraint" "$TMP/insert-first.log" \
   && check "insert-first rejection is the existing unique constraint" "1" "1" \
   || check "insert-first rejection is the existing unique constraint" "1" "0"

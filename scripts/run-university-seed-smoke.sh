@@ -73,6 +73,20 @@ cleanup() {
   else
     marker="SMOKE RESULT: FAIL (exit status $status) — see $LOG_FILE"
   fi
+  # Job logs need repository-admin credentials to download; a short redacted tail in the public
+  # job summary keeps a failed stage diagnosable without exposing keys, JWTs or CV content.
+  if [ "$status" -ne 0 ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "## Synthetic university seed job failed (exit $status)"
+      for tail_file in "$LOG_DIR/university-seed-supabase-start.log" "$LOG_DIR/university-seed-db-reset.log" "$LOG_FILE"; do
+        [ -s "$tail_file" ] || continue
+        echo "### $(basename "$tail_file")"
+        echo '```'
+        tail -n 30 "$tail_file"
+        echo '```'
+      done
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
   # Append the terminal result only after tee exits, so artifact verification never races it.
   printf '%s\n' "$marker" >> "$LOG_FILE"
   printf '%s\n' "$marker"

@@ -195,7 +195,8 @@ trap cleanup EXIT
 node --input-type=module - "$TMP/create-user.json" "$EMAIL" "$TEST_PASSWORD" <<'NODE'
 import { writeFileSync } from "node:fs";
 const [, , output, email, password] = process.argv;
-writeFileSync(output, JSON.stringify({ email, password, email_confirm: true }), { mode: 0o600 });
+writeFileSync(output, JSON.stringify({ email, password, email_confirm: true,
+  user_metadata: { full_name: "Issue 18 Storage Race Fixture" } }), { mode: 0o600 });
 NODE
 CREATE_STATUS="$(curl -sS -o "$TMP/create-user.response" -w '%{http_code}' \
   -X POST "$SUPABASE_URL/auth/v1/admin/users" \

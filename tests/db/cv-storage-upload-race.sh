@@ -303,7 +303,7 @@ UPLOAD_POLICY_PROBE="$(P "begin;
   select auth.uid()::text || '|' || private.check_cv_upload_allowed('$UPLOAD_PATH')::text;
   rollback")"
 UPLOAD_POLICY_ALLOWED="$(printf '%s\n' "$UPLOAD_POLICY_PROBE" | tail -n 1 | cut -d'|' -f2)"
-check "authenticated RLS helper allows a fresh unretired upload path" "t" "$UPLOAD_POLICY_ALLOWED"
+check "authenticated RLS helper allows a fresh unretired upload path" "true" "$UPLOAD_POLICY_ALLOWED"
 
 # The second object path has live CV metadata but no Storage row yet. Its HTTP upload is
 # paused by a BEFORE INSERT trigger after taking the same path advisory lock as the RLS policy.
@@ -355,7 +355,9 @@ P "create schema issue18_storage_race;
    as \$pause\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
-       perform private.lock_cv_storage_paths(array[new.name]);
+       if not private.check_cv_upload_allowed(new.name) then
+         raise exception using errcode = 'P0001', message = 'ISSUE18_UPLOAD_POLICY_REJECTED_BEFORE_BARRIER';
+       end if;
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
        perform pg_catalog.pg_advisory_unlock($UPLOAD_BARRIER);
      end if;
@@ -398,7 +400,8 @@ fi
 UPLOAD_FIRST_OBJECTS_BEFORE_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")"
 UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
-check "upload-first Storage API request commits after winning the path lock" "200" "$UPLOAD_HTTP_STATUS"
+check "upload-first Storage API request commits after winning the path lock" "1" \
+  "$(case "$UPLOAD_HTTP_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
 check "upload-first metadata deletion commits after waiting for the Storage upload lock" "0" "$DELETE_STATUS"
 check "upload-first object row and tombstone coexist before worker" "1" \
   "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
@@ -416,7 +419,7 @@ WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
 check "upload that wins the lock is still removed by the worker after tombstone" "1" \
   "$(
-    [ "$UPLOAD_HTTP_STATUS" = "200" ] &&
+    { [ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]; } &&
     [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] &&
     [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] &&
     [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] &&

@@ -66,7 +66,8 @@ wait_for_app_lock_wait() {
     count="$(P "select count(*) from pg_catalog.pg_stat_activity
                  where application_name = '$app'
                    and state = 'active'
-                   and wait_event_type = 'Lock'")"
+                   and wait_event_type = 'Lock'
+                   and wait_event = 'advisory'")"
     [ "$count" -ge 1 ] && return 0
     sleep 0.01
   done
@@ -345,9 +346,9 @@ check "storage upload blocks on the path lock while deletion is uncommitted, the
 check "delete-first tombstone is committed with no live CV metadata" "0" \
   "$(P "select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path where q.storage_path = '$DELETE_PATH'")"
 
-# Ordering B: the real Storage API upload takes the same path advisory lock BEFORE the RLS
-# WITH CHECK runs. Deletion waits for that lock; after release the upload commits first, then the
-# metadata delete creates the tombstone and the worker removes the actual object bytes.
+# Ordering B: the real Storage API INSERT passes its RLS WITH CHECK first. A temporary
+# AFTER INSERT trigger pauses that same transaction before commit. The RLS policy has already
+# acquired the production path advisory lock; metadata deletion must wait for it to commit.
 UPLOAD_BARRIER=918180000000001102
 P "create schema issue18_storage_race;
    create function issue18_storage_race.pause_storage_insert()
@@ -355,9 +356,6 @@ P "create schema issue18_storage_race;
    as \$pause\$
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
-       if not private.check_cv_upload_allowed(new.name) then
-         raise exception using errcode = 'P0001', message = 'ISSUE18_UPLOAD_POLICY_REJECTED_BEFORE_BARRIER';
-       end if;
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
        perform pg_catalog.pg_advisory_unlock($UPLOAD_BARRIER);
      end if;
@@ -365,7 +363,7 @@ P "create schema issue18_storage_race;
    end
    \$pause\$;
    create trigger zz_issue18_pause_storage_insert
-   before insert on storage.objects
+   after insert on storage.objects
    for each row execute function issue18_storage_race.pause_storage_insert();" >/dev/null
 
 start_barrier "$UPLOAD_BARRIER" "UPLOAD_BARRIER_READY"

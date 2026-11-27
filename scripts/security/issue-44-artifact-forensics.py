@@ -199,7 +199,7 @@ def inspect_zip(archive_path: Path, destination: Path, origin: str,
 
             rel = PurePosixPath(raw_name.replace("\\", "/"))
             if unsafe_reason:
-                target = destination / "_quarantine" / f"entry-{index:06d}.bin"
+                target = destination / "_quarantine" / f"entry-{index:06d}.txt"
                 state.record_quarantined(origin, raw_name, unsafe_reason)
             else:
                 parts = [_safe_component(part) for part in rel.parts]

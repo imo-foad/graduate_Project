@@ -50,30 +50,38 @@ async function responseJson(res) {
 async function request(path, init = {}) {
   return responseJson(await fetch(base + path, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) }));
 }
-async function login(email) {
+async function login(email, credential = password) {
   const r = await request("/auth/v1/token?grant_type=password", {
     method: "POST",
     headers: headers(anon, null, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password: credential }),
   });
   assert.equal(r.status, 200, "CV evaluation login failed for " + email + ": " + r.raw);
   return { token: r.data.access_token, id: r.data.user.id, email };
 }
 async function createSyntheticAccount(index) {
   const email = `${SYNTHETIC_PREFIX}-${index}@alumni.test`;
+  // Each benchmark account gets its own password; the demo password is only for seeded accounts.
+  const credential = "CvEval-" + randomUUID().replace(/-/g, "").slice(0, 20);
   const created = await request("/auth/v1/admin/users", {
     method: "POST",
     headers: headers(service, service, { "Content-Type": "application/json" }),
     body: JSON.stringify({
       email,
-      password: "CvEval-" + randomUUID().replace(/-/g, "").slice(0, 20),
+      password: credential,
       email_confirm: true,
       user_metadata: { full_name: "Synthetic CV Benchmark " + index },
     }),
   });
   assert.ok(created.status === 200 || created.status === 201, "could not create synthetic benchmark account: " + created.raw);
-  const account = await login(email);
-  account.synthetic = true;
+  const id = created.data?.id;
+  assert.ok(typeof id === "string" && id.length > 0, "synthetic benchmark account creation returned no user id");
+  // Record the account before the password grant, so cleanup also deletes it if that login fails.
+  const account = { id, email, token: null, synthetic: true };
+  accounts.push(account);
+  const session = await login(email, credential);
+  assert.equal(session.id, id, "CV evaluation login resolved a different user than the one created");
+  account.token = session.token;
   return account;
 }
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
@@ -119,7 +127,7 @@ const records = [];
 try {
   for (const [index, scenario] of corpus.scenarios.entries()) {
     const bucket = Math.floor(index / DOCUMENTS_PER_ACCOUNT);
-    if (bucket >= accounts.length) accounts.push(await createSyntheticAccount(bucket));
+    if (bucket >= accounts.length) await createSyntheticAccount(bucket);
     const account = accounts[bucket];
     assert.ok(account, "missing evaluation account for " + scenario.id);
 

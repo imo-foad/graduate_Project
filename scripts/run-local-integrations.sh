@@ -15,6 +15,16 @@ LOCAL_ENV="$(mktemp)"
 FUNCTION_PID=""
 CURRENT_SUITE=""
 note_suite() { CURRENT_SUITE="$1"; }
+# The decisive lines of the CV suites are published to the public job summary: workflow logs need
+# repository-admin credentials, and a passing run must still be inspectable from outside.
+publish_suite_result() {
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+  local log="$LOG_DIR/$1"
+  [ -f "$log" ] || return 0
+  { printf '**%s**\n\n```\n' "$1"
+    grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 12 | cut -c1-300
+    printf '```\n\n'; } >> "$GITHUB_STEP_SUMMARY"
+}
 cleanup() {
   local status=$?
   trap - EXIT
@@ -136,8 +146,10 @@ timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DI
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
 note_suite "cv-parser-robustness.log"
 timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"
+publish_suite_result "cv-parser-robustness.log"
 note_suite "cv-parser-evaluation.log"
 timeout 300s node scripts/evaluate-cv-parser-local.mjs 2>&1 | tee "$LOG_DIR/cv-parser-evaluation.log"
+publish_suite_result "cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 note_suite "career-cohort-round1.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 2>&1 | tee "$LOG_DIR/career-cohort-round1.log"

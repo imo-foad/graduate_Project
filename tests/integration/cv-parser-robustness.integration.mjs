@@ -44,11 +44,11 @@ async function readResponse(res) {
 async function request(path, init = {}) {
   return readResponse(await fetch(base + path, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) }));
 }
-async function login(email) {
+async function login(email, credential = password) {
   const r = await request("/auth/v1/token?grant_type=password", {
     method: "POST",
     headers: headers(null, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password: credential }),
   });
   assert.equal(r.status, 200, "robustness account login failed: " + r.text);
   return { token: r.json.access_token, id: r.json.user.id, email };
@@ -60,15 +60,23 @@ const parsedDocuments = [];
 async function newAccount() {
   const index = accounts.length;
   const email = `${syntheticPrefix}-${index}@alumni.test`;
+  // The synthetic user gets its own password: the demo password belongs to the seeded accounts only.
+  const credential = "Cv-Robust-" + randomUUID().slice(0, 12);
   const created = await request("/auth/v1/admin/users", {
     method: "POST",
     headers: headers(service, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password: "Cv-Robust-" + randomUUID().slice(0, 12), email_confirm: true }),
+    body: JSON.stringify({ email, password: credential, email_confirm: true }),
   });
   assert.ok(created.status === 200 || created.status === 201, "synthetic robustness account creation failed: " + created.text);
-  const account = await login(email);
-  account.remaining = 5;
+  const id = created.json?.id;
+  assert.ok(typeof id === "string" && id.length > 0, "synthetic robustness account creation returned no user id");
+  // Record the account before the password grant, so cleanup also deletes it if that login fails.
+  const account = { id, email, token: null };
   accounts.push(account);
+  const session = await login(email, credential);
+  assert.equal(session.id, id, "robustness login resolved a different user than the one created");
+  account.token = session.token;
+  account.remaining = 5;
   return account;
 }
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");

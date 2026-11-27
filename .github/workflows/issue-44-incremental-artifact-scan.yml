@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   incremental:
-    name: Initial scan (defer active runs)
+    name: Incremental inventory and defer active runs
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     outputs:
@@ -52,7 +52,7 @@ jobs:
           python3 -m py_compile scripts/security/issue-44-artifact-forensics.py
           python3 -m unittest discover -s tests/security -p 'test_issue_44_artifact_forensics.py' -v
 
-      - name: Download and scan only the previously unscanned Actions scope
+      - name: Inventory the prior unscanned scope and defer active runs
         id: scan
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -61,6 +61,7 @@ jobs:
           RUNNER_TEMP: ${{ runner.temp }}
           GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          ISSUE_44_DEFER_ONLY: "1"
           GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
           ISSUE_44_PRIOR_RUN_CUTOFF: "2026-11-27T05:00:29Z"
           ISSUE_44_PRIOR_ARTIFACT_CUTOFF: "2026-11-27T05:01:29Z"
@@ -71,9 +72,8 @@ jobs:
           python3 scripts/security/issue-44-artifact-forensics.py
 
   deferred-rescan:
-    name: Rescan deferred runs after sibling workflows finish
+    name: Scan the prior scope after deferred runs complete
     needs: incremental
-    if: needs.incremental.outputs.deferred_run_ids != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:

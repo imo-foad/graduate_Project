@@ -793,6 +793,9 @@ def main() -> int:
     prior_run_cutoff = os.environ.get("ISSUE_44_PRIOR_RUN_CUTOFF")
     prior_artifact_cutoff = os.environ.get("ISSUE_44_PRIOR_ARTIFACT_CUTOFF")
     incremental_mode = bool(prior_run_cutoff or prior_artifact_cutoff)
+    defer_only = os.environ.get("ISSUE_44_DEFER_ONLY") == "1"
+    if defer_only and not incremental_mode:
+        raise ForensicsError("defer-only mode requires incremental cutoffs")
     if incremental_mode and not (prior_run_cutoff and prior_artifact_cutoff):
         raise ForensicsError("both previous Actions-run and artifact cutoffs are required")
     if incremental_mode:
@@ -902,49 +905,6 @@ def main() -> int:
             " branch=" + safe_text(run.get("head_branch"), 120),
             flush=True,
         )
-    for index, run in enumerate(selected_runs, start=1):
-        run_id = int(run["id"])
-        origin = f"run:{run_id}/logs"
-        archive_path = downloads / f"run-{run_id}-logs.zip"
-        ok, http_status, reason = download_archive(
-            api + "/actions/runs/" + str(run_id) + "/logs", archive_path
-        )
-        if not ok:
-            if http_status == 404 and workflow_run_has_no_jobs(api, run_id) is True:
-                run_logs_skipped_no_jobs.append(run_id)
-                print(
-                    "RUN_LOG_SKIPPED_NO_JOBS id=" + str(run_id) +
-                    " reason=workflow-run-created-no-jobs-and-no-log-archive",
-                    flush=True,
-                )
-                run_log_inventory.append({
-                    "run_id": run_id, "downloaded": False, "skipped": "no-jobs-no-log-archive"
-                })
-                continue
-            state.record_incomplete(
-                origin, "<archive>", reason + "-http-" + str(http_status)
-            )
-            run_log_inventory.append({"run_id": run_id, "downloaded": False})
-            continue
-
-        before_quarantine = len(state.quarantined)
-        before_incomplete = len(state.incomplete)
-        inspect_zip(archive_path, exposure / "logs" / str(run_id), origin, state)
-        archive_path.unlink(missing_ok=True)
-        run_logs_downloaded += 1
-        run_log_inventory.append({
-            "run_id": run_id,
-            "downloaded": True,
-            "quarantined_entries": len(state.quarantined) - before_quarantine,
-            "incomplete_entries": len(state.incomplete) - before_incomplete,
-        })
-        if index % 100 == 0:
-            print(f"ACTIONS_RUN_LOGS_PROCESSED={index} DOWNLOADED={run_logs_downloaded}", flush=True)
-
-    (root / "run-log-inventory.json").write_text(
-        json.dumps(run_log_inventory, separators=(",", ":")), encoding="utf-8"
-    )
-
     artifacts_all, expected_artifacts = retry_inventory_call(
         lambda: list_endpoint(api + "/actions/artifacts", "artifacts")
     )
@@ -1004,6 +964,109 @@ def main() -> int:
         f"IN_SNAPSHOT={len(selected_artifacts)} EXPIRED={expired_artifacts} "
         f"NEWER_THAN_CUTOFF={artifacts_newer_than_cutoff}",
         flush=True,
+    )
+
+    if defer_only:
+        pending_artifacts = len(selected_artifacts) + len(deferred_artifacts)
+        pending_scope = len(selected_runs) + pending_artifacts
+        print(
+            f"DEFER_ONLY_INVENTORY_COMPLETE=true PENDING_SCOPE_ITEMS={pending_scope} "
+            f"PENDING_COMPLETED_RUN_LOGS={len(selected_runs)} "
+            f"PENDING_ARTIFACTS={pending_artifacts}",
+            flush=True,
+        )
+        print("GITLEAKS_SCAN_DEFERRED_TO_FOLLOWUP=true", flush=True)
+        print(f"INCOMPLETE_ITEMS={len(state.incomplete)}", flush=True)
+        summary = [
+            "# Issue #44 — incremental inventory and deferred scan",
+            "",
+            f"- Inventory snapshot cutoff UTC: {snapshot_cutoff}.",
+            f"- Workflow-run snapshot cutoff UTC: {run_snapshot_cutoff}.",
+            f"- Actions runs enumerated: {len(runs_all)} / {expected_runs} across {run_partition_count} disjoint time partitions.",
+            f"- Completed run logs pending scan: {len(selected_runs)}.",
+            f"- Repository artifacts enumerated: {artifacts_listed} / {expected_artifacts}.",
+            f"- Completed-run artifacts pending scan: {len(selected_artifacts)}.",
+            f"- Artifacts attached to deferred active runs: {len(deferred_artifacts)}.",
+            f"- Deferred active runs: {len(deferred_runs)}.",
+            f"- Total deferred/pending items: {pending_scope + len(deferred_runs)}.",
+            "- Scan phase: inventory only; Gitleaks and archive downloads run in the follow-up job after active workflows finish.",
+            f"- Items incomplete during inventory validation: {len(state.incomplete)}.",
+        ]
+        for item in deferred_runs:
+            summary.append(
+                "- DEFERRED RUN: id=" + str(item["run_id"]) +
+                "; status=" + item["status"] + "; workflow=" + item["workflow"] +
+                ("; current inventory run." if item["is_current_run"] else "; waiting for completion.")
+            )
+        for artifact in deferred_artifacts:
+            workflow_run = artifact.get("workflow_run") if isinstance(artifact.get("workflow_run"), dict) else {}
+            summary.append(
+                "- DEFERRED ARTIFACT: id=" + str(int(artifact["id"])) +
+                "; run_id=" + str(int(workflow_run.get("id", 0))) +
+                "; name=" + safe_text(artifact.get("name"), 160) + "."
+            )
+        for item in state.incomplete:
+            summary.append(
+                "- INCOMPLETE: " + safe_text(item["origin"]) + " :: " +
+                safe_text(item["member"]) + " (" + item["reason"] + ")."
+            )
+        output_path = os.environ.get("GITHUB_OUTPUT")
+        if output_path:
+            followup_run_ids = [
+                str(item["run_id"]) for item in deferred_runs if not item["is_current_run"]
+            ]
+            with open(output_path, "a", encoding="utf-8") as stream:
+                stream.write("deferred_run_ids=" + ",".join(followup_run_ids) + "\n")
+        if summary_path:
+            with open(summary_path, "a", encoding="utf-8") as stream:
+                stream.write("\n".join(summary) + "\n")
+        if state.incomplete:
+            print("ARTIFACT_FORENSICS_VERDICT=INCOMPLETE", flush=True)
+            return 2
+        print("ARTIFACT_FORENSICS_VERDICT=INVENTORY_COMPLETE_SCAN_DEFERRED", flush=True)
+        return 0
+
+    for index, run in enumerate(selected_runs, start=1):
+        run_id = int(run["id"])
+        origin = f"run:{run_id}/logs"
+        archive_path = downloads / f"run-{run_id}-logs.zip"
+        ok, http_status, reason = download_archive(
+            api + "/actions/runs/" + str(run_id) + "/logs", archive_path
+        )
+        if not ok:
+            if http_status == 404 and workflow_run_has_no_jobs(api, run_id) is True:
+                run_logs_skipped_no_jobs.append(run_id)
+                print(
+                    "RUN_LOG_SKIPPED_NO_JOBS id=" + str(run_id) +
+                    " reason=workflow-run-created-no-jobs-and-no-log-archive",
+                    flush=True,
+                )
+                run_log_inventory.append({
+                    "run_id": run_id, "downloaded": False, "skipped": "no-jobs-no-log-archive"
+                })
+                continue
+            state.record_incomplete(
+                origin, "<archive>", reason + "-http-" + str(http_status)
+            )
+            run_log_inventory.append({"run_id": run_id, "downloaded": False})
+            continue
+
+        before_quarantine = len(state.quarantined)
+        before_incomplete = len(state.incomplete)
+        inspect_zip(archive_path, exposure / "logs" / str(run_id), origin, state)
+        archive_path.unlink(missing_ok=True)
+        run_logs_downloaded += 1
+        run_log_inventory.append({
+            "run_id": run_id,
+            "downloaded": True,
+            "quarantined_entries": len(state.quarantined) - before_quarantine,
+            "incomplete_entries": len(state.incomplete) - before_incomplete,
+        })
+        if index % 100 == 0:
+            print(f"ACTIONS_RUN_LOGS_PROCESSED={index} DOWNLOADED={run_logs_downloaded}", flush=True)
+
+    (root / "run-log-inventory.json").write_text(
+        json.dumps(run_log_inventory, separators=(",", ":")), encoding="utf-8"
     )
 
     artifacts_downloaded = 0

@@ -1,6 +1,7 @@
 """Offline security tests for Issue #44 artifact forensics."""
 import importlib.util
 import io
+import json
 import tempfile
 import unittest
 from unittest import mock

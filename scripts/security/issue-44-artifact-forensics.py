@@ -1134,7 +1134,7 @@ def main() -> int:
         f"- Files extracted: {state.total_files}; uncompressed bytes: {state.total_bytes}.",
         f"- Unsafe member paths quarantined and scanned: {len(state.quarantined)}.",
         f"- Items that could not be fully scanned: {len(state.incomplete)}.",
-        f"- Deferred active runs: {len(deferred_runs)}; logs are scheduled for a completion-triggered scan.",
+        f"- Deferred active runs: {len(deferred_runs)}; non-current runs are passed to the follow-up rescan job.",
         f"- Artifacts deferred with active runs: {len(deferred_artifacts)}.",
         f"- Gitleaks findings: {len(findings)}.",
     ]
@@ -1200,6 +1200,15 @@ def main() -> int:
             "; member=" + safe_text(source.get("member", reported_file)) +
             "; line=" + str(finding.get("StartLine", "")) + "."
         )
+    if incremental_mode:
+        output_path = os.environ.get("GITHUB_OUTPUT")
+        if output_path:
+            followup_run_ids = [
+                str(item["run_id"]) for item in deferred_runs if not item["is_current_run"]
+            ]
+            with open(output_path, "a", encoding="utf-8") as stream:
+                stream.write("deferred_run_ids=" + ",".join(followup_run_ids) + "\n")
+
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as stream:
             stream.write("\n".join(summary) + "\n")

@@ -81,6 +81,16 @@ def select_artifacts_snapshot(
     return selected, expired, newer
 
 
+def validate_stable_inventory(
+    first: list[dict[str, Any]], second: list[dict[str, Any]], id_key: str = "id"
+) -> None:
+    """Reject artifact-list drift between two complete repository-wide snapshots."""
+    first_ids = [str(item.get(id_key, "")) for item in first]
+    second_ids = [str(item.get(id_key, "")) for item in second]
+    if len(first_ids) != len(second_ids) or set(first_ids) != set(second_ids):
+        raise ForensicsError("repository artifact inventory changed during snapshot confirmation")
+
+
 def validate_gitleaks_result(exit_code: int, report_exists: bool, findings: Any):
     if not report_exists or not isinstance(findings, list):
         raise ForensicsError("Gitleaks report is missing or is not a JSON array")
@@ -397,10 +407,9 @@ def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"])
     runner_temp = Path(os.environ["RUNNER_TEMP"])
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    # Freeze the artifact inventory at a fixed creation-time boundary. This uses
-    # GitHub's repository-wide artifact endpoint (one paginated inventory), rather
-    # than making a separate API request for every workflow run.
-    snapshot_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Freeze the artifact inventory at the start of collection, not one minute
+    # earlier: every artifact that existed at this cutoff remains in scope.
+    snapshot_cutoff = datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     api = "https://api.github.com/repos/" + repo
     config = workspace / "scripts/security/issue-44-gitleaks.toml"
     root = runner_temp / "issue-44-artifact-forensics"
@@ -425,6 +434,10 @@ def main() -> int:
 
     state = ScanState(exposure)
     artifacts_all, expected_artifacts = list_endpoint(api + "/actions/artifacts", "artifacts")
+    confirmation, confirmation_total = list_endpoint(api + "/actions/artifacts", "artifacts")
+    if expected_artifacts != confirmation_total:
+        raise ForensicsError("repository artifact total_count changed during snapshot confirmation")
+    validate_stable_inventory(artifacts_all, confirmation)
     selected_artifacts, expired_artifacts, artifacts_newer_than_cutoff = select_artifacts_snapshot(
         artifacts_all, snapshot_cutoff
     )

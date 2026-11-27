@@ -562,9 +562,13 @@ try {
   const accountQueues = accountPaths.map((path) => queue(path));
   pass("every associated Storage path is enqueued exactly once",
     accountQueues.every((rows) => rows.length === 1 && rows[0].status === "PENDING"), accountQueues);
+  const accountObjectCountAfterDeletionBeforeWorker = accountPaths.reduce((sum, path) => sum + storageObjectCount(path), 0);
+  pass("delete-graduate removes both account CV objects before the worker runs",
+    accountObjectCountAfterDeletionBeforeWorker === 0 && accountPaths.every((path) => storageObjectCount(path) === 0),
+    { afterAccountDeletion: accountObjectCountAfterDeletionBeforeWorker, perPath: accountPaths.map(storageObjectCount) });
   const accountDrain = await worker();
   pass("account deletion: service-role/SQL confirms both objects exist before worker and are absent after",
-    accountObjectCountBeforeWorker === 2 &&
+    accountObjectCountBeforeWorker === 2 && accountObjectCountAfterDeletionBeforeWorker === 0 &&
     accountPaths.every((path) => storageObjectCount(path) === 0) &&
     accountPaths.every((path) => queue(path).length === 1 &&
       queue(path)[0]?.status === "DONE" && queue(path)[0]?.attempts === 1),

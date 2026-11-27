@@ -459,14 +459,15 @@ fi
 UPLOAD_FIRST_OBJECTS_BEFORE_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
 UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'PENDING'")"
 UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
+UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER="$(download_status "$UPLOAD_PATH" "upload-first-before-worker")"
+echo "UPLOAD_FIRST_DIAGNOSTICS http=$UPLOAD_HTTP_STATUS upload_wait=$UPLOAD_WAIT_STATUS delete_exit=$DELETE_STATUS objects=$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER pending_queue=$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER live_metadata=$UPLOAD_FIRST_METADATA_BEFORE_WORKER download=$UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER"
 check "upload-first Storage API request commits after winning the path lock" "1" \
   "$(case "$UPLOAD_HTTP_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
 check "upload-first metadata deletion commits after waiting for the Storage upload lock" "0" "$DELETE_STATUS"
-check "upload-first object row and tombstone coexist before worker" "1" \
-  "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
-     [ "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER" = "1" ] && \
-     [ "$UPLOAD_FIRST_METADATA_BEFORE_WORKER" = "0" ] && \
-     [ "$(download_status "$UPLOAD_PATH" "upload-first-before-worker")" = "200" ] && echo 1 || echo 0)"
+check "upload-first object row exists before the worker" "1" "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER"
+check "upload-first tombstone is pending before the worker" "1" "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER"
+check "upload-first metadata row is gone before the worker" "0" "$UPLOAD_FIRST_METADATA_BEFORE_WORKER"
+check "upload-first Storage bytes are readable before the worker" "200" "$UPLOAD_FIRST_DOWNLOAD_BEFORE_WORKER"
 
 # The service-role worker removes the actual uploaded bytes and Storage metadata row.
 WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
@@ -476,15 +477,15 @@ WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
   -H "Content-Type: application/json" \
   --data '{}')"
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
-check "upload that wins the lock is still removed by the worker after tombstone" "1" \
-  "$(
-    { [ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]; } &&
-    [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] &&
-    [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] &&
-    [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] &&
-    [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] &&
-    echo 1 || echo 0
-  )"
+UPLOAD_FIRST_OBJECTS_AFTER_WORKER="$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")"
+UPLOAD_FIRST_QUEUE_DONE_AFTER_WORKER="$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")"
+UPLOAD_FIRST_DOWNLOAD_AFTER_WORKER="$(download_status "$UPLOAD_PATH" "upload-first-after-worker")"
+echo "UPLOAD_FIRST_WORKER_DIAGNOSTICS objects_after=$UPLOAD_FIRST_OBJECTS_AFTER_WORKER done_queue=$UPLOAD_FIRST_QUEUE_DONE_AFTER_WORKER download_after=$UPLOAD_FIRST_DOWNLOAD_AFTER_WORKER"
+check "upload that wins the lock is removed from storage.objects by the worker" "0" "$UPLOAD_FIRST_OBJECTS_AFTER_WORKER"
+check "upload that wins the lock reaches DONE after worker" "1" "$UPLOAD_FIRST_QUEUE_DONE_AFTER_WORKER"
+check "upload that wins the lock bytes are no longer downloadable after worker" "1" \
+  "$(case "$UPLOAD_FIRST_DOWNLOAD_AFTER_WORKER" in 200) echo 0 ;; *) echo 1 ;; esac)"
+
 if [ "$FAILS" -eq 0 ]; then
   echo "CV STORAGE UPLOAD RACE PASSED"
 else

@@ -364,25 +364,25 @@ UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER="$(P "select count(*) from private.cv_c
 UPLOAD_FIRST_METADATA_BEFORE_WORKER="$(P "select count(*) from public.cv_documents where storage_path = '$UPLOAD_PATH'")"
 check "upload-first Storage API request commits after winning the path lock" "200" "$UPLOAD_HTTP_STATUS"
 check "upload-first metadata deletion commits after waiting for the Storage upload lock" "0" "$DELETE_STATUS"
-check "upload-first object row and tombstone coexist before worker" "1" \\
-  "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \\
-     [ "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER" = "1" ] && \\
-     [ "$UPLOAD_FIRST_METADATA_BEFORE_WORKER" = "0" ] && \\
+check "upload-first object row and tombstone coexist before worker" "1" \
+  "$([ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
+     [ "$UPLOAD_FIRST_QUEUE_PENDING_BEFORE_WORKER" = "1" ] && \
+     [ "$UPLOAD_FIRST_METADATA_BEFORE_WORKER" = "0" ] && \
      [ "$(download_status "$UPLOAD_PATH" "upload-first-before-worker")" = "200" ] && echo 1 || echo 0)"
 
 # The service-role worker removes the actual uploaded bytes and Storage metadata row.
-WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \\
-  -X POST "$SUPABASE_URL/functions/v1/cleanup-cv-objects" \\
-  -H "apikey: $SUPABASE_ANON_KEY" \\
-  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \\
-  -H "Content-Type: application/json" \\
+WORKER_STATUS="$(curl -sS -o "$TMP/worker.response" -w '%{http_code}' \
+  -X POST "$SUPABASE_URL/functions/v1/cleanup-cv-objects" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
   --data '{}')"
 check "worker accepts the local service-role cleanup request" "200" "$WORKER_STATUS"
-check "upload that wins the lock is still removed by the worker after tombstone" "1" \\
-  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]) && \\
-   [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \\
-   [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \\
-   [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \\
+check "upload that wins the lock is still removed by the worker after tombstone" "1" \
+  "$([ "$UPLOAD_HTTP_STATUS" = "200" ] || [ "$UPLOAD_HTTP_STATUS" = "201" ]) && \
+   [ "$UPLOAD_FIRST_OBJECTS_BEFORE_WORKER" = "1" ] && \
+   [ "$(P "select count(*) from storage.objects where bucket_id = 'cv-documents' and name = '$UPLOAD_PATH'")" = "0" ] && \
+   [ "$(P "select count(*) from private.cv_cleanup_queue where storage_path = '$UPLOAD_PATH' and status = 'DONE'")" = "1" ] && \
    [ "$(download_status "$UPLOAD_PATH" "upload-first-after-worker")" != "200" ] && echo 1 || echo 0)"
 
 echo "CV STORAGE UPLOAD RACE PASSED"

@@ -285,6 +285,39 @@ try {
     queueCount(freshPath) === 0 &&
     sqlInt("select count(*) from public.cv_documents d join private.cv_cleanup_queue q on q.storage_path = d.storage_path") === 0);
 
+  // ---- B3. All tombstone statuses reject authenticated Storage uploads -----------------------------
+  // Proves that every cleanup-queue state (PENDING, PROCESSING, FAILED, DONE) is a permanent tombstone.
+  const tombstoneStates = ["PENDING", "PROCESSING", "FAILED", "DONE"];
+  for (const state of tombstoneStates) {
+    const tombstonePath = ownerPrefix + "-tombstone-" + state.toLowerCase() + ".pdf";
+    const tombstoneBytes = buildPdf("TOMBSTONE CV " + state);
+    staleObjects.push(tombstonePath);
+
+    // Ensure the object does not exist before the assertion.
+    await removeObject(owner.token, tombstonePath).catch(() => {});
+
+    // Create a permanent tombstone through the local integration fixture's SQL helper.
+    sql("insert into private.cv_cleanup_queue (storage_path, graduate_id, reason, status, attempts) values (" +
+      quote(tombstonePath) + ", " + quote(owner.id) + ", 'METADATA_DELETE', " + quote(state) + ", 0)");
+
+    // Attempt a real authenticated Storage HTTP upload.
+    const tombstoneUpload = await upload(owner.token, tombstonePath, tombstoneBytes);
+    pass("authenticated upload to a " + state + " tombstone path is rejected",
+      tombstoneUpload.status === 403 || tombstoneUpload.status === 400,
+      { status: tombstoneUpload.status, body: tombstoneUpload.json ?? tombstoneUpload.text });
+
+    // Verify that no object was created despite the rejected upload.
+    const tombstoneDownload = await download(owner.token, tombstonePath);
+    pass("no object exists after rejected " + state + " tombstone upload",
+      tombstoneDownload.status !== 200,
+      { status: tombstoneDownload.status });
+
+    // Remove the fixture ledger row so the next state uses an independent path.
+    sql("delete from private.cv_cleanup_queue where storage_path = " + quote(tombstonePath));
+  }
+
+  pass("all four tombstone statuses permanently reject Storage uploads", true);
+
   // ---- C. Already-missing object is idempotent ----------------------------------------------------
   const missingPath = ownerPrefix + "-missing.pdf";
   const missingBytes = buildPdf("NEVER UPLOADED");

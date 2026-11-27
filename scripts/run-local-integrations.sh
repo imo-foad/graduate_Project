@@ -149,6 +149,10 @@ timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DI
 note_suite "cv-cleanup-integration.log"
 timeout 300s node tests/integration/cv-cleanup.integration.mjs 2>&1 | tee "$LOG_DIR/cv-cleanup-integration.log"
 publish_suite_result "cv-cleanup-integration.log"
+# Real Storage API INSERT vs CV tombstone race; runs only on this disposable local stack.
+note_suite "cv-storage-upload-race.log"
+timeout 300s bash tests/db/cv-storage-upload-race.sh 2>&1 | tee "$LOG_DIR/cv-storage-upload-race.log"
+publish_suite_result "cv-storage-upload-race.log"
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
 note_suite "cv-parser-robustness.log"
 timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"

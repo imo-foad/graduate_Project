@@ -7,9 +7,14 @@ required.
 
 - **Base:** `main` at `c44aaf4217f45d41b58b83cdd6618b71f5e34b7f`
 - **Branch:** `fix/issue-24-cv-parser-quality`
-- **Code HEAD:** `2de97f7` (this report commit follows it)
+- **Code HEAD:** `47ef4df` (this report commit follows it)
 - **Pull request:** not created — this environment has no authenticated GitHub write API
-- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45965502766 — **all three jobs passed** (static, synthetic university seed, database)
+- **CI:** https://github.com/imo-foad/graduate_Project/actions/runs/45989860822 — **all three jobs passed** (static, synthetic university seed, database), including the real HTTP robustness suite and the synthetic evaluation gates.
+
+**Correction:** an earlier revision of this report cited run `45965502766` as passing. That was wrong:
+the database job on that revision failed the robustness suite with `invalid_credentials`, because the
+suite created its synthetic Auth user with a generated password and then logged in with
+`DEMO_PASSWORD`. The corrected evidence, and the defects fixed to reach it, are below.
 
 ## Initial defect
 
@@ -116,15 +121,22 @@ negative fixtures produce zero suggestions, and heading-only lines are not emitt
 ## HTTP integration results
 
 - `npm run evaluate:cv:local` (real gateway + Storage + `parse-cv`): **NOT RUN locally** — this sandbox
-  has no Docker daemon or Supabase CLI. It **PASSED in CI**: the database job runs it against the
-  disposable local stack with the per-field gates enabled, so a gate miss fails the workflow.
+  has no Docker daemon and no Supabase CLI (`MISSING TOOL: supabase`, exit 3). It **PASSED in CI**: the
+  database job runs it against the disposable local stack with the per-field gates enabled, so a gate
+  miss fails the workflow. Public run annotation:
+  `cv-parser-evaluation.log | CV PARSER EVALUATION PASSED: synthetic field-level gates met`.
 - `tests/integration/cv-parser-robustness.integration.mjs`: **NOT RUN locally** for the same reason, and
-  **PASSED in CI** (malformed/empty/encrypted/oversized/41-page PDFs, bad ZIP/DOCX, DTD/XXE, MIME
-  mismatch, foreign user, duplicate and concurrent parses, unicode, suggestion lifecycle).
-- GitHub Actions: **PASSED** on `2de97f7` (run `45965502766`), all three jobs.
+  **PASSED in CI** with 20 checks (malformed/empty/encrypted/oversized/41-page PDFs, bad ZIP/DOCX,
+  DTD/XXE, MIME mismatch, invalid metadata, foreign user, duplicate and concurrent parses, unicode,
+  external relationship, failure retry). Public run annotation:
+  `cv-parser-robustness.log | CV PARSER ROBUSTNESS INTEGRATION PASSED: 20 checks`.
+- GitHub Actions: **PASSED** on `47ef4df` (run `45989860822`), all three jobs.
 
-The quality gates above were measured twice: directly through the parser modules and corpus (the
-numbers in the table) and through the real HTTP evaluator in CI, which enforces the same gates.
+The evaluation line is only printed after the evaluated-id equality check (13 scenarios, each exactly
+once), the four field gates, the Arabic `وSQL`/`وKotlin` regressions, the multi-column PDF assertions,
+the negative-fixture checks, and the new Auth-cleanup assertions. The quality gates were therefore
+measured twice: through the parser modules and corpus (the numbers below) and through the real HTTP
+evaluator in CI.
 
 ## Full test results
 
@@ -136,7 +148,9 @@ numbers in the table) and through the real HTTP evaluator in CI, which enforces 
 | Deno corpus harness (13 scenarios, same modules) | **PASSED** — 4/4 field gates, no negative violations, Arabic and merged-header regressions fixed |
 | Node focused tests (`pdf-layout`, `cv-extract`, `cv-structured-extract`, `cv-parser-metrics`) | **PASSED** — 34 tests, 34 pass, 0 fail |
 | Real PostgreSQL 17.12 + pgTAP 1.3.3 (18 files, 718 assertions) | **PASSED** — schema unchanged by this branch, re-verified on the same migration set |
-| GitHub Actions run `45965502766` | **PASSED** — static, synthetic-seed and database jobs all green; the database job runs migrations, seeds, 18 pgTAP files, concurrency, the HTTP parser evaluation gates and the robustness suite |
+| GitHub Actions run `45989860822` | **PASSED** — static, synthetic-seed and database jobs all green; the database job runs migrations, seeds, 18 pgTAP files, concurrency, the robustness suite and the HTTP parser evaluation gates |
+| `npm run test:db` / `npm run verify:university-seed:local` locally | **BLOCKED_ENVIRONMENT** — both stop at `MISSING TOOL: supabase` (exit 3); no Docker daemon exists in this sandbox. Covered by the CI database and seed jobs |
+| `npm run evaluate:cv:local` / robustness suite locally | **BLOCKED_ENVIRONMENT** — same reason; both **PASSED in CI** |
 
 ## Failures discovered and fixed during this work
 
@@ -147,6 +161,21 @@ numbers in the table) and through the real HTTP evaluator in CI, which enforces 
 - Placeholder values and heading lines were emitted as certifications/courses (fixed).
 - A metrics test initially compared arrays by reference; the assertion was corrected to a structural
   comparison (test bug, not a product change).
+- **Both HTTP suites could not authenticate their synthetic accounts** (`7cd57ad`). `newAccount()` /
+  `createSyntheticAccount()` created the Auth user with a generated password (`Cv-Robust-…` /
+  `CvEval-…`) and then called `login(email)`, which always sent the seeded `DEMO_PASSWORD`. GoTrue
+  correctly answered `400 invalid_credentials`, so the robustness suite stopped before its first
+  scenario and the evaluator failed as soon as it needed a second benchmark account. Each account now
+  receives its own credential for both the Admin create call and the password grant; `login()` takes an
+  explicit password and keeps `DEMO_PASSWORD` as the default for seeded users.
+- **The robustness helper asserted 201 for a request it expected to fail** (`b6b4a85`). The
+  invalid-`file_type` scenario registered metadata with `file_type: "txt"` to prove the database check
+  constraint rejects it, but the helper asserted 201 before the call site could assert 400. The
+  existing `expectMetadataStatus` option now carries the 400 the constraint returns.
+- **Cleanup was unverified** (`47ef4df`). Both suites deleted temporary Auth users best-effort; they now
+  read each deleted user back and require `404`, and the evaluator also requires the seeded
+  `graduate.cyber@alumni.test` account to still exist. Accounts are recorded immediately after
+  creation, so a user whose password grant fails is still deleted.
 - `evaluate-cv-parser-local.mjs` previously deleted metadata directly with a service-role `DELETE`; the
   supported owner RPC `delete_cv_document` is now used, and `tests/seed.test.ts` asserts that cleanup
   uses the owner token instead of an unauthenticated service-role call.
@@ -172,7 +201,7 @@ numbers in the table) and through the real HTTP evaluator in CI, which enforces 
 
 - Accuracy evidence is synthetic only. The parser is **not** proven accurate on real-world CVs.
 - OCR / scanned PDFs remain unsupported and must not be advertised.
-- The HTTP evaluation gates have not been observed passing in CI or locally in this environment.
+- The HTTP evaluation gates pass in CI on the synthetic corpus only; they say nothing about real CVs.
 - Two structural PDFs (heavy graphics, tables spanning columns) may still be misread; the layout module
   is a targeted correction, not a general layout engine, and low-confidence output is preferred to
   confident wrong data where sections cannot be identified.
@@ -180,10 +209,10 @@ numbers in the table) and through the real HTTP evaluator in CI, which enforces 
 ## Branch / PR / CI
 
 - Branch: `fix/issue-24-cv-parser-quality`
-- HEAD: `f5db8db` (report commit adds this file)
+- HEAD: `47ef4df` (this report commit follows it)
 - PR: **not created** — no authenticated GitHub write path in this session; compare URL:
   `https://github.com/imo-foad/graduate_Project/compare/main...fix/issue-24-cv-parser-quality`
-- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45965502766 — **PASSED**, all three jobs.
+- CI: https://github.com/imo-foad/graduate_Project/actions/runs/45989860822 — **PASSED**, all three jobs.
 
 ## Issue state recommendation
 

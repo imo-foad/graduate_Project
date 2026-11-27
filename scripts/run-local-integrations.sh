@@ -13,9 +13,21 @@ for t in node supabase psql curl timeout; do need "$t"; done
 node scripts/assert-local-db.mjs "${DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}" >/dev/null
 LOCAL_ENV="$(mktemp)"
 FUNCTION_PID=""
+CURRENT_SUITE=""
+note_suite() { CURRENT_SUITE="$1"; }
 cleanup() {
+  local status=$?
+  trap - EXIT
+  # Workflow logs need repository-admin credentials; publish the failing suite (and a short,
+  # credential-filtered tail) as a public run annotation so the failure is diagnosable.
+  if [ "$status" -ne 0 ]; then
+    local tail_text
+    tail_text="$(tail -n 40 "$LOG_DIR/$CURRENT_SUITE" 2>/dev/null | grep -viE 'eyJ|bearer|apikey|password|secret|token' | tail -n 6 | tr '\n' ' ' | cut -c1-900)"
+    printf '::error title=INTEGRATION_FAILED::%s (exit %s) | %s\n' "${CURRENT_SUITE:-unknown suite}" "$status" "$tail_text"
+  fi
   if [ -n "$FUNCTION_PID" ]; then kill "$FUNCTION_PID" >/dev/null 2>&1 || true; wait "$FUNCTION_PID" >/dev/null 2>&1 || true; fi
   rm -f "$LOCAL_ENV"
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -42,8 +54,10 @@ NODE
 # Disposable password: never write it to the repository, CI logs or artifacts.
 export DEMO_PASSWORD="$(node --input-type=module -e 'import { randomBytes } from "node:crypto"; console.log(randomBytes(24).toString("base64url"))')"
 echo "Provisioning synthetic Auth demo users (password omitted from logs)"
+note_suite "demo-provision-first.log"
 node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-first.log"
 # The second pass verifies that provisioning is idempotent for already-created users.
+note_suite "demo-provision-second.log"
 node scripts/provision-demo-users.mjs | tee "$LOG_DIR/demo-provision-second.log"
 
 npm run build:seed > "$LOG_DIR/integration-build-seed.log"
@@ -103,21 +117,31 @@ done
 # The first-admin bootstrap test must run before the synthetic university seed creates
 # its ten local platform-admin fixtures. The integration deletes its temporary bootstrap
 # account and leaves the one-time bootstrap slot empty for the subsequent synthetic seed.
+note_suite "onboarding-integration.log"
 timeout 300s node tests/integration/onboarding.integration.mjs | tee "$LOG_DIR/onboarding-integration.log"
 
 # Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
 echo "Provisioning and applying synthetic university dataset (local only)"
+note_suite "university-seed.log"
 node scripts/seed-university-demo.mjs | tee "$LOG_DIR/university-seed.log"
 # Verify Student/Faculty academic-record privacy and server-owned platform-admin authorization.
+note_suite "university-dataset-integration.log"
 node tests/integration/university-dataset.integration.mjs | tee "$LOG_DIR/university-dataset-integration.log"
 
+note_suite "http-integration.log"
 timeout 300s node tests/integration/local-supabase.integration.mjs | tee "$LOG_DIR/http-integration.log"
+note_suite "cv-parse-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs | tee "$LOG_DIR/cv-parse-integration.log"
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
+note_suite "cv-parser-robustness.log"
 timeout 300s node tests/integration/cv-parser-robustness.integration.mjs | tee "$LOG_DIR/cv-parser-robustness.log"
+note_suite "cv-parser-evaluation.log"
 timeout 300s node scripts/evaluate-cv-parser-local.mjs | tee "$LOG_DIR/cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
+note_suite "career-cohort-round1.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 | tee "$LOG_DIR/career-cohort-round1.log"
+note_suite "career-cohort-round2.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round2 | tee "$LOG_DIR/career-cohort-round2.log"
 # Run after the other demo-account journeys because this deliberately exhausts rate-limit buckets.
+note_suite "rate-limits-integration.log"
 timeout 300s node tests/integration/rate-limits.integration.mjs | tee "$LOG_DIR/rate-limits-integration.log"

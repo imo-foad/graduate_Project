@@ -55,7 +55,7 @@ jobs:
           curl --fail --silent --show-error --location --retry 3 \
             "https://github.com/gitleaks/gitleaks/releases/download/v$VERSION/gitleaks_${VERSION}_linux_x64.tar.gz" \
             --output "$ARCHIVE"
-          printf '%s  %s\\n' "$EXPECTED_SHA256" "$ARCHIVE" | sha256sum --check --status
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | sha256sum --check --status
           tar -xzf "$ARCHIVE" -C "$INSTALL_DIR" gitleaks
           chmod 700 "$INSTALL_DIR/gitleaks"
           "$INSTALL_DIR/gitleaks" version

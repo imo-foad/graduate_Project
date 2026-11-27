@@ -140,6 +140,14 @@ class ArtifactForensicsTests(unittest.TestCase):
         self.assertEqual(expired, 1)
         self.assertEqual(newer, 1)
 
+    def test_repository_inventory_confirmation_rejects_concurrent_changes(self):
+        original = [{"id": 10}, {"id": 11}]
+        MODULE.validate_stable_inventory(original, [{"id": 11}, {"id": 10}])
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.validate_stable_inventory(original, [{"id": 10}, {"id": 12}])
+        with self.assertRaises(MODULE.ForensicsError):
+            MODULE.validate_stable_inventory(original, [{"id": 10}])
+
     def test_artifact_snapshot_fails_closed_on_missing_or_invalid_timestamp(self):
         with self.assertRaises(MODULE.ForensicsError):
             MODULE.select_artifacts_snapshot([{"id": 1, "expired": False}], "2026-11-27T05:00:00Z")

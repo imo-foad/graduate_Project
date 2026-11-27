@@ -56,8 +56,9 @@ export async function runRecommend(deps: FlowDeps, opts: { force?: boolean; maxA
   }
   const { data, error } = await deps.readCached();
   if (error) return { status: 500, body: { error: "READ_FAILED" } };
-  // Cached rows are filtered exactly like fresh ones: closed opportunities and full events without a
-  // waitlist are dropped, and every item reports its current registration availability.
+  // Cached rows are filtered exactly like fresh ones: closed opportunities and full TRAINING programmes
+  // without a waitlist are dropped, and every item reports its current registration availability
+  // (null for JOB/INTERNSHIP, which use applications rather than direct registration).
   const items = filterAvailableRecommendations(data ?? []).map((item) => ({
     ...item,
     availability_status: registrationAvailability(item.opportunity),

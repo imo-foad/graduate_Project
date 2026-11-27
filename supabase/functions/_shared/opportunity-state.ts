@@ -49,6 +49,8 @@ export function filterOpenRecommendations<T extends { opportunity?: OpenCheckabl
 //   full      -> capacity reached without a waitlist (the RPC raises TRAINING_FULL, so never recommend)
 //   closed    -> the opportunity itself is no longer open
 export interface AvailabilityCheckable extends OpenCheckable {
+  /** Registration availability is a TRAINING-only workflow; JOB/INTERNSHIP use applications. */
+  type?: string | null;
   registration_opens_at?: string | null;
   capacity?: number | null;
   registered_count?: number | null;
@@ -58,9 +60,16 @@ export interface AvailabilityCheckable extends OpenCheckable {
 }
 export type AvailabilityStatus = "OPEN" | "UPCOMING" | "WAITLIST_ONLY" | "FULL" | "CLOSED";
 
-/** null means the opportunity carries no registration data, so availability is not modelled for it. */
+/**
+ * null means availability is not modelled for the opportunity. Direct registration is a TRAINING-only
+ * workflow (public.register_for_event rejects every other type), so JOB and INTERNSHIP are governed by
+ * their application workflow: capacity/registered_count/registration_opens_at/waitlist_enabled must
+ * never turn them into FULL, UPCOMING or WAITLIST_ONLY. Unknown and missing types are treated the same
+ * way instead of inheriting TRAINING rules.
+ */
 export function registrationAvailability(o: AvailabilityCheckable | null | undefined, now: Date = new Date()): AvailabilityStatus | null {
   if (!o) return null;
+  if (o.type !== "TRAINING") return null;
   if (!isOpportunityOpen(o, now)) return "CLOSED";
   const hasRegistrationData = (o.capacity !== null && o.capacity !== undefined)
     || (o.registration_opens_at !== null && o.registration_opens_at !== undefined);
@@ -83,13 +92,18 @@ export function filterAvailableRecommendations<T extends { opportunity?: (Availa
   now: Date = new Date(),
 ): T[] {
   return items.filter((r) => {
+    // Universal closure rule for every type: a cached row whose opportunity was deleted, closed,
+    // cancelled or expired must not leak through the cache.
+    const o = r.opportunity;
+    if (!o || !isOpportunityOpen(o, now)) return false;
     // Parity with the SQL candidate projection: only the active allow-list may be surfaced. This also
     // catches legacy cached rows for cancelled/excluded lines, unknown types and malformed type values.
-    if (r.opportunity && !isActiveOpportunityType(r.opportunity.type)) return false;
+    if (!isActiveOpportunityType(o.type)) return false;
     // The opportunity exposes a safe, denormalized company status because the companies table itself
     // is intentionally member/admin-only under RLS. Missing or suspended companies are not actionable.
-    if (r.opportunity?.company_id && r.opportunity.company_verification_status !== "VERIFIED") return false;
-    const status = registrationAvailability(r.opportunity, now);
+    if (o.company_id && o.company_verification_status !== "VERIFIED") return false;
+    // Registration availability only constrains TRAINING; JOB/INTERNSHIP and unknown types return null.
+    const status = registrationAvailability(o, now);
     return status !== "CLOSED" && status !== "FULL";
   });
 }

@@ -256,10 +256,11 @@ components:
           - UPCOMING
           - WAITLIST_ONLY
           description: |
-            Registration availability at read time. null when the opportunity carries no registration data.
-            Items with no registration window yet are still returned with UPCOMING (score 0).
-            Closed opportunities and full events without a waitlist are omitted from `items` entirely, so
-            `FULL`/`CLOSED` never appear here. Clients should render WAITLIST_ONLY as "join waitlist".
+            TRAINING registration availability at read time. Always null for JOB and INTERNSHIP, which use
+            the application workflow, and for a TRAINING with no registration data. A TRAINING with a
+            future registration window is still returned with UPCOMING (score 0). Closed opportunities and
+            full TRAINING without a waitlist are omitted from `items` entirely, so `FULL`/`CLOSED` never
+            appear here. Clients should render WAITLIST_ONLY as "join waitlist".
         model_version:
           type: string
         generated_at:

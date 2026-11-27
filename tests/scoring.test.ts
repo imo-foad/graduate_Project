@@ -144,6 +144,32 @@ test("availability: a registration window that opened exactly now counts as open
   assert.equal(r.availability_status, "OPEN");
 });
 
+test("availability: JOB and INTERNSHIP are never excluded or mislabelled by Training-only fields", () => {
+  for (const type of ["JOB", "INTERNSHIP"]) {
+    const item = scoreOpportunity(bareGraduate, {
+      id: type, type, title: "Role", status: "ACTIVE", deadline: null, end_at: null,
+      capacity: 1, registered_count: 9, waitlist_enabled: false,
+      registration_opens_at: iso(60_000), skills: [], eligibility_failures: [],
+    }, NOW);
+    assert.ok(item, type);
+    assert.equal(item.availability_status, null, type);
+    assert.equal(item.score_breakdown.availability, undefined, type);
+  }
+  const ranked = rankOpportunities(bareGraduate, ["JOB", "INTERNSHIP"].map((type) => ({
+    id: type, type, title: "Role", status: "ACTIVE", deadline: null, end_at: null,
+    capacity: 1, registered_count: 9, waitlist_enabled: false,
+    registration_opens_at: iso(60_000), skills: [], eligibility_failures: [],
+  })), NOW);
+  assert.deepEqual(ranked.map((r) => r.opportunity_id).sort(), ["INTERNSHIP", "JOB"]);
+});
+
+test("availability: universal closure drops a closed JOB even when called directly", () => {
+  assert.equal(scoreOpportunity(bareGraduate, {
+    id: "closed-job", type: "JOB", title: "Role", status: "CLOSED", deadline: null, end_at: null,
+    capacity: 1, registered_count: 9, skills: [], eligibility_failures: [],
+  }, NOW), null);
+});
+
 test("training suggests skills the graduate lacks (gap_fill)", () => {
   const r = rankOpportunities(graduate(SARA), opps()).find((x) => x.opportunity_id === "trn-python-data")!;
   assert.ok(r.missing_skill_ids.includes("PYTHON"));

@@ -89,3 +89,25 @@ test("cached rows are filtered by current availability and report their status",
   assert.deepEqual(items.map((item) => [item.id, item.availability_status]),
     [["open", "OPEN"], ["waitlist", "WAITLIST_ONLY"], ["upcoming", "UPCOMING"]]);
 });
+
+test("cached JOB/INTERNSHIP with Training-only fields stay eligible and report no availability", async () => {
+  const future = new Date(NOW + 1e6).toISOString();
+  const { d } = deps({
+    cacheState: async () => ({ dirty: false, count: 5 }),
+    readCached: async () => ({ data: [
+      // availability_status is intentionally stale to prove the read path recomputes it.
+      { id: "job-full", availability_status: "FULL",
+        opportunity: { type: "JOB", status: "ACTIVE", capacity: 1, registered_count: 9, registration_opens_at: future } },
+      { id: "internship-full", availability_status: "UPCOMING",
+        opportunity: { type: "INTERNSHIP", status: "ACTIVE", capacity: 1, registered_count: 9, registration_opens_at: future } },
+      { id: "job-closed", opportunity: { type: "JOB", status: "CLOSED", capacity: 1, registered_count: 9 } },
+      { id: "training-full", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 1, registered_count: 1 } },
+      { id: "training-waitlist", opportunity: { type: "TRAINING", status: "ACTIVE", capacity: 1, registered_count: 1, waitlist_enabled: true } },
+    ] }),
+  });
+  const r = await runRecommend(d);
+  assert.equal(r.status, 200);
+  const items = r.body.items as { id: string; availability_status: string | null }[];
+  assert.deepEqual(items.map((item) => [item.id, item.availability_status]),
+    [["job-full", null], ["internship-full", null], ["training-waitlist", "WAITLIST_ONLY"]]);
+});

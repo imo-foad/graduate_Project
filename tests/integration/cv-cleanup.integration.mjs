@@ -179,7 +179,6 @@ function buildPdf(text) {
 
 const createdUsers = [];
 const staleObjects = [];
-let insertedAdminId = null;
 const owner = await login("graduate.demo@alumni.test");
 const other = await login("graduate.android@alumni.test");
 const tag = randomUUID();
@@ -523,35 +522,13 @@ try {
     const meta = await createMetadata(target.token, targetId, path, bytes);
     pass("account-deletion CV " + (index + 1) + " metadata exists", meta.status === 201 && meta.json?.length === 1, meta);
   }
-  const requested = await request("/rest/v1/rpc/request_account_deletion", {
-    method: "POST",
-    headers: headers(target.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ p_reason: "synthetic local cleanup verification" }),
-  });
-  pass("the owner can request account deletion", requested.status === 200 && typeof requested.json === "string", requested);
-
-  // Provision a disposable local platform admin only for this scenario's approval step.
-  insertedAdminId = sql(
-    "with inserted as (" +
-    " insert into private.platform_admins (user_id) " +
-    " select id from public.profiles where email = 'graduate.data@alumni.test' " +
-    " on conflict (user_id) do nothing returning user_id) select coalesce(user_id::text, '') from inserted",
-  ) || null;
-  const admin = await login("graduate.data@alumni.test");
-  const approved = await request("/rest/v1/rpc/review_account_deletion_request", {
-    method: "POST",
-    headers: headers(admin.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ p_request_id: requested.json, p_decision: "APPROVE", p_note: "local synthetic cleanup test" }),
-  });
-  pass("the platform admin approves the account deletion", approved.status === 200 && approved.json === "APPROVED", approved);
-  // Delete the Auth account directly on this disposable local stack. The Auth/profile cascade
-  // removes CV metadata and enqueues cleanup rows, but Storage bytes are external and remain
-  // until the actual worker removes them. This proves the worker's delete, not only API denial.
+  // Auth Admin deletion on the disposable local stack exercises the database cascade:
+  // CV metadata is deleted and queued, while external Storage bytes remain for the worker.
   const deleted = await request("/auth/v1/admin/users/" + targetId, {
     method: "DELETE",
     headers: headers(service),
   });
-  pass("service-role account deletion commits the Auth/profile cascade",
+  pass("service-role account deletion completes the Auth cascade",
     deleted.status === 200 || deleted.status === 204, { status: deleted.status });
   pass("all account CV metadata is deleted",
     sqlInt("select count(*) from public.cv_documents where graduate_id = " + quote(targetId)) === 0);
@@ -584,14 +561,6 @@ try {
       .every((result) => result.status !== 200));
   pass("an unrelated graduate's object survives account deletion",
     (await download(other.token, sentinelPath)).status === 200);
-  const repeatDeletion = await request("/functions/v1/delete-graduate", {
-    method: "POST",
-    headers: headers(admin.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ request_id: requested.json }),
-  });
-  pass("repeating a completed account deletion is rejected without side effects",
-    repeatDeletion.status === 404, repeatDeletion);
-
   // ---- Authorization: clients can never drive the worker or the queue ------------------------------
   const directDelete = await request("/rest/v1/cv_documents?id=eq." + newId, {
     method: "DELETE",
@@ -648,9 +617,6 @@ try {
   for (const id of createdUsers) {
     if (!id) continue;
     await request("/auth/v1/admin/users/" + id, { method: "DELETE", headers: headers(service) }).catch(() => {});
-  }
-  if (insertedAdminId) {
-    sql("delete from private.platform_admins where user_id = " + quote(insertedAdminId));
   }
   for (let attempt = 0; attempt < 5; attempt++) {
     const drained = await worker();

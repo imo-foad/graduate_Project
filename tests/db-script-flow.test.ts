@@ -37,7 +37,7 @@ case "$1 $2" in
   "db reset") for f in ${MIGS.map((m) => `"${m}"`).join(" ")}; do [ "$f" = "$FAKE_MISSING" ] || echo "Applying migration $f..."; done;;
   "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Files=19, Tests=672, 0 wallclock secs"; echo "Result: PASS"; exit \${FAKE_TEST_EXIT:-0};;
 esac`);
-  put("bash", `case "$1" in *cv-cleanup-concurrency.sh) echo "CV CLEANUP CONCURRENCY PASSED"; exit \\${FAKE_CV_CLEANUP_CONC_EXIT:-0};; *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \\${FAKE_CONC_EXIT:-0};; *run-local-integrations.sh) echo "LOCAL HTTP INTEGRATION PASSED: 20 checks"; exit \\${FAKE_INTEGRATION_EXIT:-0};; esac\\nexec /bin/bash "$@"`);
+  put("bash", `case "$1" in *cv-cleanup-concurrency.sh) echo "CV CLEANUP CONCURRENCY PASSED"; exit \${FAKE_CV_CLEANUP_CONC_EXIT:-0};; *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \${FAKE_CONC_EXIT:-0};; *run-local-integrations.sh) echo "LOCAL HTTP INTEGRATION PASSED: 20 checks"; exit \${FAKE_INTEGRATION_EXIT:-0};; esac\nexec /bin/bash "$@"`);
   return dir;
 }
 function run(over: Record<string, string> = {}) {

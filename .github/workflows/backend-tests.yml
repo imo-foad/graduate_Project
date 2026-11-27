@@ -121,8 +121,19 @@ jobs:
           docker compose version
       - name: Install and verify the PostgreSQL client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client
+          # GitHub's apt mirrors intermittently fail with exit 100; retry a bounded number of times
+          # before failing the job, so an infrastructure hiccup is not reported as a test failure.
+          if ! command -v psql >/dev/null; then
+            for attempt in 1 2 3; do
+              if sudo apt-get update -o Acquire::Retries=3 &&
+                 sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 postgresql-client; then
+                break
+              fi
+              if [ "$attempt" = 3 ]; then echo "apt-get failed after 3 attempts" >&2; exit 1; fi
+              sudo dpkg --configure -a || true
+              sleep $((attempt * 10))
+            done
+          fi
           psql --version
           pg_isready --version
       - uses: supabase/setup-cli@v1

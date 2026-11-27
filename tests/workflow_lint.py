@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -144,12 +144,6 @@ class Scripts(unittest.TestCase):
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
-        self.assertIn("cv-cleanup.integration.mjs", runner)
-        cleanup_http = code(open(os.path.join(ROOT, "tests/integration/cv-cleanup.integration.mjs")).read())
-        for needle in ("/functions/v1/cleanup-cv-objects", "delete_cv_document", "PATH_REUSED_CLEANUP_CANCELLED",
-                       "UNSAFE_STORAGE_PATH", "claim_cv_cleanup", "retry_cv_cleanup", "/functions/v1/delete-graduate",
-                       "assertLocalDbUrl"):
-            self.assertIn(needle, cleanup_http)
         self.assertIn("onboarding.integration.mjs", runner)
         self.assertIn("rate-limits.integration.mjs", runner)
         onboarding_http = code(open(os.path.join(ROOT, "tests/integration/onboarding.integration.mjs")).read())
@@ -174,6 +168,61 @@ class Scripts(unittest.TestCase):
         self.assertIn("career-cohort-reports/", WF_TEXT)
         self.assertIn("name: career-cohort-reports", WF_TEXT)
         self.assertIn("bash scripts/run-local-integrations.sh", SCRIPTS["scripts/run-db-tests.sh"])
+
+    def test_cv_parser_corpus_and_quality_gates_are_enforced(self):
+        evaluator = code(open(os.path.join(ROOT, "scripts/evaluate-cv-parser-local.mjs")).read())
+        metrics = code(open(os.path.join(ROOT, "scripts/cv-parser-metrics.mjs")).read())
+        generator = code(open(os.path.join(ROOT, "scripts/cv-fixture-generator.mjs")).read())
+        robustness = code(open(os.path.join(ROOT, "tests/integration/cv-parser-robustness.integration.mjs")).read())
+        runner = SCRIPTS["scripts/run-local-integrations.sh"]
+        for needle in ("tests/fixtures/cv-parser/corpus.v1.json", "validateCorpus", "scoreScenario",
+                       "aggregateScores", "gateReport", "cv-fixture-generator.mjs", "PENDING",
+                       "delete_cv_document", "confirmation_required"):
+            self.assertIn(needle, evaluator)
+        # The old aggregate-only 0.75 recall threshold must not return.
+        self.assertNotIn("recall>=0.75", evaluator.replace(" ", ""))
+        for needle in ("QUALITY_GATES", "precision", "recall", "experience_fields",
+                       "certification_fields", "course_fields", "negative_violation"):
+            self.assertIn(needle, metrics)
+        for needle in ("buildPdf", "buildDocx", "columns", "table"):
+            self.assertIn(needle, generator)
+        for needle in ("CV_FILE_TYPE_MISMATCH", "CV_INVALID_FILE", "CV_NO_TEXT_FOUND", "CV_TOO_MANY_PAGES",
+                       "DOCTYPE", "Encrypt", "PENDING", "another graduate"):
+            self.assertIn(needle, robustness)
+        self.assertIn("cv-parser-robustness.integration.mjs", runner)
+        self.assertIn("evaluate-cv-parser-local.mjs", runner)
+        corpus = __import__("json").load(open(os.path.join(ROOT, "tests/fixtures/cv-parser/corpus.v1.json")))
+        ids = [scenario["id"] for scenario in corpus["scenarios"]]
+        self.assertGreaterEqual(len(ids), 10, "the synthetic corpus must keep at least 10 scenarios")
+        self.assertEqual(len(ids), len(set(ids)), "corpus scenario ids must be unique")
+        self.assertGreaterEqual(sum(1 for scenario in corpus["scenarios"] if scenario["id"].startswith("negative-")), 2,
+                                "the corpus must keep at least two negative fixtures")
+        self.assertIn("ar-docx-attached-skills-v1", ids)
+        self.assertIn("en-pdf-two-column-sidebar-v1", ids)
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "tests/fixtures/cv-parser/README.md")))
+
+    def test_cv_storage_cleanup_retirement_and_real_race_are_required(self):
+        runner = SCRIPTS["scripts/run-db-tests.sh"]
+        local = SCRIPTS["scripts/run-local-integrations.sh"]
+        integration = code(open(os.path.join(ROOT, "tests/integration/cv-cleanup.integration.mjs")).read())
+        pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
+        migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
+        race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
+        for needle in ("21_cv_cleanup_lifecycle", "Files=19", "bash tests/db/cv-cleanup-concurrency.sh"):
+            self.assertIn(needle, runner)
+        self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
+        self.assertIn("createdUsers.push(targetId)", integration)
+        self.assertIn("login(email, targetPassword)", integration)
+        self.assertIn("async function login(email, accountPassword = password)", integration)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", migration)
+        self.assertIn("pg_advisory_xact_lock", migration)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", pgtap)
+        for status in ("PENDING", "PROCESSING", "FAILED", "DONE"):
+            self.assertIn(status, pgtap)
+        self.assertIn("CV_STORAGE_PATH_RETIRED", race)
+        self.assertIn("pg_stat_activity", race)
+        self.assertIn("wait_for_lock_wait", race)
+        self.assertIn("CV CLEANUP CONCURRENCY PASSED", race)
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):
         on_disk = sorted(f[:-len(".test.sql")] for f in os.listdir(os.path.join(ROOT, "supabase/tests/database")) if f.endswith(".test.sql"))

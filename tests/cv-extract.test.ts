@@ -37,3 +37,29 @@ test("validateExtraction rejects non-object payloads", () => {
   assert.equal(validateExtraction("garbage", new Set()).errors.length, 1);
   assert.equal(validateExtraction(null, new Set()).skills.length, 0);
 });
+
+test("REGRESSION: Arabic-attached conjunction/preposition does not hide Latin skills", () => {
+  // Arabic attaches و/ف/ب/ل directly to the next word; the DOCX benchmark missed SQL and Kotlin here.
+  assert.deepEqual(ids("عمل على خدمات داخلية باستخدام Python وSQL وKotlin."), ["KOTLIN", "PYTHON", "SQL"]);
+  assert.deepEqual(ids("استخدمت Docker وReact في المشروع"), ["DOCKER", "REACT"]);
+  assert.deepEqual(ids("خبرة فيSQL وKotlin خلال التدريب"), ["KOTLIN", "SQL"]);
+});
+
+test("Arabic diacritics, tatweel and punctuation do not block a skill match", () => {
+  assert.deepEqual(ids("مهاراتي في SQL، وKotlin؛ وDocker."), ["DOCKER", "KOTLIN", "SQL"]);
+  assert.deepEqual(ids("استخدمت Kـotlin وPythـon"), ["KOTLIN", "PYTHON"]);
+  assert.deepEqual(ids("أعمل على قواعد البيانات SQL\u200f"), ["SQL"]);
+});
+
+test("mixed-script boundaries never create substring skill false positives", () => {
+  assert.deepEqual(ids("استخدمت SQLite فقط"), []);
+  assert.deepEqual(ids("لا أستخدم JavaScript أو KotlinScript"), ["JAVASCRIPT"]);
+  assert.deepEqual(ids("MySQL وPostgreSQL"), ["POSTGRESQL", "SQL"].sort());
+  assert.deepEqual(ids("استخدمت AndroidX فقط"), []);
+  assert.deepEqual(ids("واجهة Androيد ليست Web"), []);
+});
+
+test("normalization does not rewrite the matched term reported to the reviewer", () => {
+  const found = extractSkillsFromText("خبرة في Kـotlin", dict);
+  assert.equal(found.find((item) => item.skill_id === "KOTLIN")?.matched_term, "Kotlin");
+});

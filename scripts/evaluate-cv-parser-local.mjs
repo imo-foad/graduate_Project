@@ -1,9 +1,26 @@
-// Executable local-only CV extraction evaluation.
-// Generates PDF and DOCX fixtures, sends them through the real local parse-cv Edge Function,
-// and reports per-category field-level precision/recall. No OCR or paid service is used.
+// Executable local-only CV extraction evaluation (issue #24).
+//
+// Generates every document from the versioned synthetic corpus, sends it through the real local
+// parse-cv Edge Function, reads the persisted suggestions, and reports per-field precision/recall.
+// No OCR, paid API or hosted model is used. CV_PARSE has a five-token bucket per account, so the
+// corpus is split across a dedicated benchmark account plus disposable synthetic accounts created
+// with the local service role. No rate-limit rule is changed or bypassed.
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { buildFixture } from "./cv-fixture-generator.mjs";
+import {
+  aggregateScores,
+  CATEGORIES,
+  gateReport,
+  QUALITY_GATES,
+  scoreScenario,
+  validateCorpus,
+} from "./cv-parser-metrics.mjs";
+
+const corpus = JSON.parse(readFileSync(new URL("../tests/fixtures/cv-parser/corpus.v1.json", import.meta.url), "utf8"));
+const corpusErrors = validateCorpus(corpus);
+assert.deepEqual(corpusErrors, [], "synthetic CV corpus is malformed: " + corpusErrors.join("; "));
 
 const base = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
 const anon = process.env.SUPABASE_ANON_KEY ?? "";
@@ -11,12 +28,14 @@ const service = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const password = process.env.DEMO_PASSWORD ?? "";
 assert.ok(base && anon && service && password, "local Supabase CV evaluation environment is incomplete");
 const parsedBase = new URL(base);
-assert.ok(parsedBase.protocol === "http:" && ["127.0.0.1","localhost","[::1]"].includes(parsedBase.hostname) && parsedBase.port === "54321",
-  "refusing CV evaluation outside the disposable local Supabase API");
+assert.ok(parsedBase.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(parsedBase.hostname) &&
+  parsedBase.port === "54321", "refusing CV evaluation outside the disposable local Supabase API");
 
-// Use a dedicated demo graduate for this benchmark. The CV integration and rate-limit
-// suite intentionally consume the graduate.demo account's five-token CV_PARSE bucket.
+// Dedicated benchmark identity, separate from the CV integration and rate-limit accounts.
 const userEmail = "graduate.cyber@alumni.test";
+const SYNTHETIC_PREFIX = "cv-eval-" + randomUUID().slice(0, 8);
+const DOCUMENTS_PER_ACCOUNT = 5;
+
 const headers = (key, token, more = {}) => ({
   apikey: key,
   ...(token ? { Authorization: "Bearer " + token } : {}),
@@ -25,263 +44,244 @@ const headers = (key, token, more = {}) => ({
 async function responseJson(res) {
   const raw = await res.text();
   let data = null;
-  try { data = raw ? JSON.parse(raw) : null; } catch {}
+  try { data = raw ? JSON.parse(raw) : null; } catch { /* non-JSON response */ }
   return { status: res.status, data, raw };
 }
 async function request(path, init = {}) {
   return responseJson(await fetch(base + path, { ...init, signal: init.signal ?? AbortSignal.timeout(60_000) }));
 }
-async function login() {
+async function login(email, credential = password) {
   const r = await request("/auth/v1/token?grant_type=password", {
-    method: "POST", headers: headers(anon,null,{"Content-Type":"application/json"}),
-    body: JSON.stringify({email:userEmail,password}),
+    method: "POST",
+    headers: headers(anon, null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ email, password: credential }),
   });
-  assert.equal(r.status,200,"CV evaluation login failed: "+r.raw);
-  return {token:r.data.access_token,id:r.data.user.id};
+  assert.equal(r.status, 200, "CV evaluation login failed for " + email + ": " + r.raw);
+  return { token: r.data.access_token, id: r.data.user.id, email };
 }
-function pdfEscape(s) {
-  return s.replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)");
+async function createSyntheticAccount(index) {
+  const email = `${SYNTHETIC_PREFIX}-${index}@alumni.test`;
+  // Each benchmark account gets its own password; the demo password is only for seeded accounts.
+  const credential = "CvEval-" + randomUUID().replace(/-/g, "").slice(0, 20);
+  const created = await request("/auth/v1/admin/users", {
+    method: "POST",
+    headers: headers(service, service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      email,
+      password: credential,
+      email_confirm: true,
+      user_metadata: { full_name: "Synthetic CV Benchmark " + index },
+    }),
+  });
+  assert.ok(created.status === 200 || created.status === 201, "could not create synthetic benchmark account: " + created.raw);
+  const id = created.data?.id;
+  assert.ok(typeof id === "string" && id.length > 0, "synthetic benchmark account creation returned no user id");
+  // Record the account before the password grant, so cleanup also deletes it if that login fails.
+  const account = { id, email, token: null, synthetic: true };
+  accounts.push(account);
+  const session = await login(email, credential);
+  assert.equal(session.id, id, "CV evaluation login resolved a different user than the one created");
+  account.token = session.token;
+  return account;
 }
-function makePdf(text) {
-  const lines=text.replace(/\r\n?/g,"\n").split("\n");
-  const commands=lines.map((line,i)=>(i?"T*\n":"")+"("+pdfEscape(line)+") Tj").join("\n");
-  const stream=["BT","/F1 11 Tf","13 TL","45 750 Td",commands,"ET"].join("\n");
-  const objects=[
-    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
-    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-    "5 0 obj\n<< /Length "+Buffer.byteLength(stream,"latin1")+" >>\nstream\n"+stream+"\nendstream\nendobj\n",
-  ];
-  let output="%PDF-1.4\n% Synthetic CV evaluation fixture\n";
-  const offsets=[0];
-  for(const obj of objects){offsets.push(Buffer.byteLength(output,"latin1"));output+=obj;}
-  const xref=Buffer.byteLength(output,"latin1");
-  output+="xref\n0 6\n0000000000 65535 f \n";
-  for(let i=1;i<offsets.length;i++) output+=offsets[i].toString().padStart(10,"0")+" 00000 n \n";
-  output+="trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF\n";
-  return Buffer.from(output,"latin1");
+const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
+async function upload(account, scenario, bytes, mime) {
+  const path = `${account.id}/cv-eval-${scenario.id}-${randomUUID()}.${scenario.format}`;
+  const up = await request("/storage/v1/object/cv-documents/" + encodePath(path), {
+    method: "POST",
+    headers: headers(anon, account.token, { "Content-Type": mime, "x-upsert": "false" }),
+    body: bytes,
+  });
+  assert.ok(up.status === 200 || up.status === 201, scenario.id + " upload failed: " + up.raw);
+  const meta = await request("/rest/v1/cv_documents", {
+    method: "POST",
+    headers: headers(anon, account.token, { "Content-Type": "application/json", Prefer: "return=representation" }),
+    body: JSON.stringify({
+      graduate_id: account.id,
+      storage_path: path,
+      file_type: scenario.format,
+      size_bytes: bytes.length,
+    }),
+  });
+  assert.equal(meta.status, 201, scenario.id + " metadata failed: " + meta.raw);
+  return { id: meta.data[0].id, path };
 }
-function crc32(buf) {
-  let crc=0xffffffff;
-  for(const byte of buf){
-    crc^=byte;
-    for(let bit=0;bit<8;bit++) crc=(crc>>>1)^((crc&1)?0xedb88320:0);
-  }
-  return (crc^0xffffffff)>>>0;
+async function parse(account, id) {
+  return request("/functions/v1/parse-cv", {
+    method: "POST",
+    headers: headers(anon, account.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ cv_document_id: id }),
+  });
 }
-function makeZip(entries) {
-  const local=[],central=[]; let offset=0;
-  for(const [name,value] of entries){
-    const nameBytes=Buffer.from(name,"utf8"), data=Buffer.from(value,"utf8"), crc=crc32(data);
-    const lh=Buffer.alloc(30);
-    lh.writeUInt32LE(0x04034b50,0);lh.writeUInt16LE(20,4);lh.writeUInt16LE(0,6);
-    lh.writeUInt16LE(0,8);lh.writeUInt16LE(0,10);lh.writeUInt16LE(0,12);
-    lh.writeUInt32LE(crc,14);lh.writeUInt32LE(data.length,18);lh.writeUInt32LE(data.length,22);
-    lh.writeUInt16LE(nameBytes.length,26);lh.writeUInt16LE(0,28);
-    local.push(lh,nameBytes,data);
-    const ch=Buffer.alloc(46);
-    ch.writeUInt32LE(0x02014b50,0);ch.writeUInt16LE(20,4);ch.writeUInt16LE(20,6);
-    ch.writeUInt16LE(0,8);ch.writeUInt16LE(0,10);ch.writeUInt16LE(0,12);ch.writeUInt16LE(0,14);
-    ch.writeUInt32LE(crc,16);ch.writeUInt32LE(data.length,20);ch.writeUInt32LE(data.length,24);
-    ch.writeUInt16LE(nameBytes.length,28);ch.writeUInt16LE(0,30);ch.writeUInt16LE(0,32);
-    ch.writeUInt16LE(0,34);ch.writeUInt16LE(0,36);ch.writeUInt32LE(0,38);ch.writeUInt32LE(offset,42);
-    central.push(ch,nameBytes);
-    offset+=lh.length+nameBytes.length+data.length;
-  }
-  const centralBytes=Buffer.concat(central), centralOffset=offset, localBytes=Buffer.concat(local);
-  const eocd=Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50,0);eocd.writeUInt16LE(0,4);eocd.writeUInt16LE(0,6);
-  eocd.writeUInt16LE(entries.length,8);eocd.writeUInt16LE(entries.length,10);
-  eocd.writeUInt32LE(centralBytes.length,12);eocd.writeUInt32LE(centralOffset,16);eocd.writeUInt16LE(0,20);
-  return Buffer.concat([localBytes,centralBytes,eocd]);
-}
-function xmlEscape(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-function makeDocx(text) {
-  const paragraphs=text.split(/\r?\n/).map(line=>"<w:p><w:r><w:t xml:space=\"preserve\">"+xmlEscape(line)+"</w:t></w:r></w:p>").join("");
-  const contentTypes='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
-  const rels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
-  const document='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+paragraphs+'<w:sectPr/></w:body></w:document>';
-  return makeZip([["[Content_Types].xml",contentTypes],["_rels/.rels",rels],["word/document.xml",document]]);
+async function worker() {
+  return request("/functions/v1/cleanup-cv-objects", {
+    method: "POST",
+    headers: headers(service, service, { "Content-Type": "application/json" }),
+    body: "{}",
+  });
 }
 
-const cases=[
-  {
-    key:"english-pdf-standard",
-    format:"pdf",
-    text:[
-      "PROFILE","Backend engineer focused on services.",
-      "COURSES","Advanced SQL | Coursera | 2024 | 12 hours",
-      "CERTIFICATIONS","AWS Certified Cloud Practitioner | Amazon Web Services | 2023",
-      "WORK EXPERIENCE","Backend Engineer | Northstar Systems","Jan 2021 - Feb 2023",
-      "Built integrations using Python, Docker and PostgreSQL. Kotlin and SQL.",
-    ].join("\n"),
-    expected:{
-      skills:["PYTHON","DOCKER","POSTGRESQL","KOTLIN","SQL","AWS"],
-      experiences:[{company_name:"Northstar Systems",job_title:"Backend Engineer",start_date:"2021-01-01",end_date:"2023-02-28",is_current:false}],
-      certifications:[{title:"AWS Certified Cloud Practitioner",issuer:"Amazon Web Services",issue_date:"2023-01-01"}],
-      courses:[{title:"Advanced SQL",issuer:"Coursera",issue_date:"2024-01-01",duration:"12 hours"}],
-    },
-  },
-  {
-    key:"arabic-docx",
-    format:"docx",
-    text:[
-      "السيرة المهنية",
-      "الخبرة العملية","مهندس برمجيات | شركة النور","03/2020 - 11/2021","عمل على خدمات داخلية باستخدام Python وSQL وKotlin.",
-      "الشهادات","شهادة الأمن السيبراني | أكاديمية التقنية | 2022",
-      "الدورات التدريبية","تحليل البيانات | منصة التعلم | 2023 | 6 weeks",
-    ].join("\n"),
-    expected:{
-      skills:["PYTHON","SQL","KOTLIN"],
-      experiences:[{company_name:"شركة النور",job_title:"مهندس برمجيات",start_date:"2020-03-01",end_date:"2021-11-30",is_current:false}],
-      certifications:[{title:"شهادة الأمن السيبراني",issuer:"أكاديمية التقنية",issue_date:"2022-01-01"}],
-      courses:[{title:"تحليل البيانات",issuer:"منصة التعلم",issue_date:"2023-01-01",duration:"6 weeks"}],
-    },
-  },
-  {
-    key:"english-pdf-alternate-order",
-    format:"pdf",
-    text:[
-      "LICENSES","Microsoft Power BI Data Analyst | Microsoft | 2024",
-      "EMPLOYMENT HISTORY","Data Analyst at Insight Analytics","2021 - 2022","Prepared reports with Power BI, Excel, Tableau and Statistics.",
-      "PROFESSIONAL DEVELOPMENT","Data Visualization with Tableau | Tableau | 2023 | 4 weeks",
-    ].join("\n"),
-    expected:{
-      skills:["POWER_BI","EXCEL","TABLEAU","STATISTICS","DATA_VISUALIZATION"],
-      experiences:[{company_name:"Insight Analytics",job_title:"Data Analyst",start_date:"2021-01-01",end_date:"2022-12-31",is_current:false}],
-      certifications:[{title:"Microsoft Power BI Data Analyst",issuer:"Microsoft",issue_date:"2024-01-01"}],
-      courses:[{title:"Data Visualization with Tableau",issuer:"Tableau",issue_date:"2023-01-01",duration:"4 weeks"}],
-    },
-  },
-  {
-    key:"pdf-layout-limitation",
-    format:"pdf",
-    text:[
-      "EXPERIENCE","Product Analyst          Bright Analytics","2019 - 2020","Analysed product reports with Excel and SQL.",
-      "CERTIFICATIONS","Professional Scrum Master | Scrum.org | 2020",
-      "COURSES","Agile Delivery | Open Learning | 2019",
-    ].join("\n"),
-    expected:{
-      skills:["EXCEL","SQL","AGILE"],
-      experiences:[{company_name:"Bright Analytics",job_title:"Product Analyst",start_date:"2019-01-01",end_date:"2020-12-31",is_current:false}],
-      certifications:[{title:"Professional Scrum Master",issuer:"Scrum.org",issue_date:"2020-01-01"}],
-      courses:[{title:"Agile Delivery",issuer:"Open Learning",issue_date:"2019-01-01"}],
-    },
-  },
-];
-
-const norm=(v)=>String(v).trim().replace(/\s+/g," ").toLowerCase();
-function fieldsForExperiences(rows) {
-  const keys=["company_name","job_title","start_date","end_date","is_current"];
-  return rows.flatMap(row=>keys.filter(k=>row[k]!==undefined).map(k=>k+":"+norm(row[k])));
-}
-function fieldsForCredentials(rows) {
-  const keys=["title","issuer","issue_date","duration"];
-  return rows.flatMap(row=>keys.filter(k=>row[k]!==undefined).map(k=>k+":"+norm(row[k])));
-}
-function metric(expected,actual) {
-  const e=new Set(expected),a=new Set(actual);
-  const tp=[...e].filter(x=>a.has(x)).length;
-  const fp=[...a].filter(x=>!e.has(x)).length;
-  const fn=[...e].filter(x=>!a.has(x)).length;
-  return {true_positive:tp,false_positive:fp,false_negative:fn,precision:tp/(tp+fp||1),recall:tp/(tp+fn||1),expected:e.size,actual:a.size,
-    false_positive_fields:[...a].filter(x=>!e.has(x)),missed_fields:[...e].filter(x=>!a.has(x))};
-}
-async function upload(uid,token,doc) {
-  const id=randomUUID(), path=uid+"/cv-eval-"+id+"."+(doc.format==="docx"?"docx":"pdf");
-  const bytes=doc.format==="docx"?makeDocx(doc.text):makePdf(doc.text);
-  const mime=doc.format==="docx"?"application/vnd.openxmlformats-officedocument.wordprocessingml.document":"application/pdf";
-  const up=await request("/storage/v1/object/cv-documents/"+path.split("/").map(encodeURIComponent).join("/"),{
-    method:"POST",headers:headers(anon,token,{"Content-Type":mime,"x-upsert":"false"}),body:bytes,
-  });
-  assert.ok(up.status===200||up.status===201,doc.key+" upload failed: "+up.raw);
-  const meta=await request("/rest/v1/cv_documents",{
-    method:"POST",headers:headers(anon,token,{"Content-Type":"application/json",Prefer:"return=representation"}),
-    body:JSON.stringify({graduate_id:uid,storage_path:path,file_type:doc.format,size_bytes:bytes.length}),
-  });
-  assert.equal(meta.status,201,doc.key+" metadata failed: "+meta.raw);
-  return {id:meta.data[0].id,path,bytes,mime};
-}
-async function cleanup(_token,_path,id) {
-  // Delete metadata first so migration 0027 enqueues the object, then drain it through the worker.
-  if (id) {
-    const metadata = await request("/rest/v1/cv_documents?id=eq."+id,{
-      method:"DELETE",headers:headers(service,service,{Prefer:"return=minimal"}),
-    });
-    if (![200,204].includes(metadata.status)) throw new Error("CV metadata cleanup failed: "+metadata.raw);
-  }
-  for (let attempt=0; attempt<5; attempt++) {
-    const worker = await request("/functions/v1/cleanup-cv-objects",{
-      method:"POST",headers:headers(service,service,{"Content-Type":"application/json"}),
-      body:"{}",
-    });
-    if (worker.status !== 200) throw new Error("CV Storage cleanup worker failed: "+worker.raw);
-    if ((worker.data?.failed ?? 0) > 0) throw new Error("CV Storage cleanup worker reported failures: "+JSON.stringify(worker.data));
-    if ((worker.data?.processed ?? 0) === 0) break;
-  }
-}
-
-const loginResult=await login();
-const records=[];
-const cleanupList=[];
+const accounts = [await login(userEmail)];
+const cleanupIssues = [];
+const uploaded = [];
+const records = [];
 try {
-  for(const doc of cases) {
-    const file=await upload(loginResult.id,loginResult.token,doc);
-    cleanupList.push(file);
-    const parsed=await request("/functions/v1/parse-cv",{
-      method:"POST",headers:headers(anon,loginResult.token,{"Content-Type":"application/json"}),
-      body:JSON.stringify({cv_document_id:file.id}),
+  for (const [index, scenario] of corpus.scenarios.entries()) {
+    const bucket = Math.floor(index / DOCUMENTS_PER_ACCOUNT);
+    if (bucket >= accounts.length) await createSyntheticAccount(bucket);
+    const account = accounts[bucket];
+    assert.ok(account, "missing evaluation account for " + scenario.id);
+
+    const fixture = buildFixture(scenario);
+    assert.ok(fixture.bytes.length > 0, scenario.id + " generated an empty document");
+    const file = await upload(account, scenario, fixture.bytes, fixture.mime);
+    uploaded.push({ ...file, account });
+
+    const parsed = await parse(account, file.id);
+    assert.equal(parsed.status, 200, scenario.id + " parse failed: " + parsed.raw);
+    assert.equal(parsed.data?.status, "DONE", scenario.id + " did not reach DONE");
+    assert.equal(parsed.data?.confirmation_required, true, scenario.id + " must require graduate review");
+    const rows = await request("/rest/v1/cv_suggestions?select=kind,payload,status&cv_document_id=eq." + file.id, {
+      headers: headers(anon, account.token),
     });
-    assert.equal(parsed.status,200,doc.key+" parse failed: "+parsed.raw);
-    const rows=await request("/rest/v1/cv_suggestions?select=kind,payload,status&cv_document_id=eq."+file.id,{
-      headers:headers(anon,loginResult.token),
-    });
-    assert.equal(rows.status,200,doc.key+" suggestion read failed: "+rows.raw);
-    const suggestions=rows.data??[];
-    const pending=suggestions.every(row=>row.status==="PENDING");
-    assert.ok(pending,doc.key+" produced non-pending suggestions");
-    const actual={
-      skills:suggestions.filter(x=>x.kind==="SKILL").map(x=>x.payload?.skill_id).filter(Boolean),
-      experiences:suggestions.filter(x=>x.kind==="EXPERIENCE").map(x=>x.payload??{}),
-      certifications:suggestions.filter(x=>x.kind==="CERTIFICATION").map(x=>x.payload??{}),
-      courses:suggestions.filter(x=>x.kind==="COURSE").map(x=>x.payload??{}),
+    assert.equal(rows.status, 200, scenario.id + " suggestion read failed: " + rows.raw);
+    const suggestions = rows.data ?? [];
+    assert.ok(suggestions.every((row) => row.status === "PENDING"), scenario.id + " produced non-pending suggestions");
+
+    const actual = {
+      skills: suggestions.filter((row) => row.kind === "SKILL").map((row) => row.payload?.skill_id).filter(Boolean),
+      experiences: suggestions.filter((row) => row.kind === "EXPERIENCE").map((row) => row.payload ?? {}),
+      certifications: suggestions.filter((row) => row.kind === "CERTIFICATION").map((row) => row.payload ?? {}),
+      courses: suggestions.filter((row) => row.kind === "COURSE").map((row) => row.payload ?? {}),
     };
-    const expected=doc.expected;
-    const report={
-      key:doc.key,format:doc.format,pending_suggestions:pending,
-      metrics:{
-        skills:metric(expected.skills,actual.skills),
-        experience_fields:metric(fieldsForExperiences(expected.experiences),fieldsForExperiences(actual.experiences)),
-        certification_fields:metric(fieldsForCredentials(expected.certifications),fieldsForCredentials(actual.certifications)),
-        course_fields:metric(fieldsForCredentials(expected.courses),fieldsForCredentials(actual.courses)),
+    const scored = scoreScenario(scenario, actual);
+    records.push({
+      id: scenario.id,
+      format: scenario.format,
+      language: scenario.language,
+      layout: scenario.layout,
+      fixture_sha256_length: fixture.bytes.length,
+      pending_suggestions: true,
+      suggestions: {
+        skills: actual.skills.length,
+        experiences: actual.experiences.length,
+        certifications: actual.certifications.length,
+        courses: actual.courses.length,
       },
-    };
-    records.push(report);
+      ...scored,
+    });
   }
 } finally {
-  for(const item of cleanupList) await cleanup(loginResult.token,item.path,item.id);
+  // Owner RPC first (the only supported client path), then drain the durable Storage cleanup queue.
+  for (const item of uploaded) {
+    await request("/rest/v1/rpc/delete_cv_document", {
+      method: "POST",
+      headers: headers(anon, item.account.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_cv_document_id: item.id }),
+    }).catch(() => {});
+  }
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const drained = await worker();
+    if (drained.status !== 200 || (drained.data?.processed ?? 0) === 0) break;
+  }
+  for (const account of accounts) {
+    if (!account.synthetic) continue;
+    const removed = await request("/auth/v1/admin/users/" + account.id, {
+      method: "DELETE",
+      headers: headers(service, service),
+    }).catch(() => null);
+    const after = await request("/auth/v1/admin/users/" + account.id, { headers: headers(service, service) }).catch(() => null);
+    if (!after || after.status !== 404) {
+      cleanupIssues.push(`${account.email}: delete=${removed?.status ?? "error"} read=${after?.status ?? "error"}`);
+    }
+  }
+  // The seeded benchmark identity is shared with other suites and must survive this run.
+  const seeded = await request("/auth/v1/admin/users/" + accounts[0].id, { headers: headers(service, service) });
+  if (seeded.status !== 200) cleanupIssues.push("seeded benchmark account is missing: read=" + seeded.status);
 }
-const categories=["skills","experience_fields","certification_fields","course_fields"];
-const aggregate={};
-for(const category of categories) {
-  const values=records.map(x=>x.metrics[category]);
-  const tp=values.reduce((n,x)=>n+x.true_positive,0), fp=values.reduce((n,x)=>n+x.false_positive,0), fn=values.reduce((n,x)=>n+x.false_negative,0);
-  aggregate[category]={true_positive:tp,false_positive:fp,false_negative:fn,precision:tp/(tp+fp||1),recall:tp/(tp+fn||1)};
+
+assert.deepEqual(cleanupIssues, [], "CV evaluation cleanup left Auth users in an unexpected state: " + cleanupIssues.join("; "));
+
+const expectedIds = corpus.scenarios.map((scenario) => scenario.id).sort();
+const evaluatedIds = records.map((record) => record.id).sort();
+assert.deepEqual(evaluatedIds, expectedIds, "every corpus fixture must be evaluated exactly once");
+
+const aggregate = aggregateScores(records);
+const gates = gateReport(aggregate);
+const byId = new Map(records.map((record) => [record.id, record]));
+
+// Explicit regression assertions, independent of the aggregate gates.
+const arabic = byId.get("ar-docx-attached-skills-v1");
+assert.ok(arabic, "Arabic DOCX regression fixture is missing");
+assert.ok(!arabic.metrics.skills.missed_fields.includes("SQL"), "Arabic DOCX regression: SQL was missed");
+assert.ok(!arabic.metrics.skills.missed_fields.includes("KOTLIN"), "Arabic DOCX regression: Kotlin was missed");
+
+const twoColumn = byId.get("en-pdf-two-column-sidebar-v1");
+assert.ok(twoColumn, "multi-column PDF fixture is missing");
+assert.deepEqual(twoColumn.metrics.experience_fields.missed_fields, [], "multi-column PDF lost experience fields");
+assert.deepEqual(twoColumn.metrics.experience_fields.false_positive_fields, [], "multi-column PDF merged experience fields");
+
+const negatives = records.filter((record) => record.id.startsWith("negative-"));
+assert.ok(negatives.length >= 2, "the corpus must contain at least two negative fixtures");
+for (const negative of negatives) {
+  assert.deepEqual(negative.violations, [], negative.id + " extracted a forbidden field");
+  assert.equal(negative.total_suggestions, 0, negative.id + " produced suggestions that are not in its ground truth");
 }
-const report={
-  evaluation:"synthetic local CV parser field-level benchmark",
-  generated_at:new Date().toISOString(),
-  formats:{pdf:cases.filter(x=>x.format==="pdf").length,docx:cases.filter(x=>x.format==="docx").length},
-  supported_formats:["text-based PDF","DOCX document.xml text"],
-  unsupported_formats:["scanned/image-only PDF (OCR intentionally not implemented or invoked)"],
-  limitations:["Multi-column flattened text can merge employer and job-title columns; see pdf-layout-limitation case and its field-level false negatives."],
-  documents:records,aggregate,
+for (const record of records) {
+  if (record.id.startsWith("negative-")) continue;
+  assert.ok(record.total_suggestions > 0, record.id + " produced no suggestions, which would hide a broken fixture");
+}
+
+const report = {
+  evaluation: "synthetic local CV parser field-level benchmark",
+  corpus_version: corpus.version,
+  generated_at: new Date().toISOString(),
+  formats: {
+    pdf: corpus.scenarios.filter((scenario) => scenario.format === "pdf").length,
+    docx: corpus.scenarios.filter((scenario) => scenario.format === "docx").length,
+    scenarios: corpus.scenarios.length,
+    negative_scenarios: negatives.length,
+  },
+  supported_formats: ["text-based PDF", "DOCX document.xml text, tables and bullets"],
+  unsupported_formats: ["scanned/image-only PDF (OCR intentionally not implemented or invoked)"],
+  quality_gates: QUALITY_GATES,
+  limitations: [
+    "Synthetic, curated documents only: these results do not establish accuracy on real-world CVs.",
+    "Arabic PDF text is not evaluated because the synthetic PDF generator uses a Latin font; Arabic is evaluated through DOCX.",
+    "A representative, owner-approved, consented and anonymized real-CV corpus is still required before any real-world accuracy claim.",
+  ],
+  regression_checks: {
+    arabic_docx_sql_and_kotlin: true,
+    multi_column_pdf_employer_and_title_preserved: true,
+    negative_fixtures_clean: true,
+  },
+  corpus_integrity: {
+    ids_evaluated: evaluatedIds.length,
+    ids_expected: expectedIds.length,
+    duplicate_ids: false,
+  },
+  documents: records,
+  aggregate,
+  gates,
 };
-mkdirSync(".ci-logs",{recursive:true});
-writeFileSync(".ci-logs/cv-parser-evaluation.json",JSON.stringify(report,null,2)+"\n");
-console.log("CV PARSER EVALUATION");
-console.log(JSON.stringify({formats:report.formats,aggregate,limitations:report.limitations,unsupported_formats:report.unsupported_formats},null,2));
+
+mkdirSync(".ci-logs", { recursive: true });
+writeFileSync(".ci-logs/cv-parser-evaluation.json", JSON.stringify(report, null, 2) + "\n");
+console.log("CV PARSER EVALUATION (synthetic corpus v" + corpus.version + ")");
+console.log("documents: " + corpus.scenarios.length + " (" + report.formats.pdf + " PDF, " + report.formats.docx + " DOCX)");
+for (const category of CATEGORIES) {
+  const score = aggregate[category];
+  console.log(`  ${category.padEnd(22)} TP=${score.true_positive} FP=${score.false_positive} FN=${score.false_negative} ` +
+    `P=${(score.precision * 100).toFixed(1)}% R=${(score.recall * 100).toFixed(1)}% F1=${(score.f1 * 100).toFixed(1)}%`);
+}
+for (const record of records) {
+  const missed = CATEGORIES.reduce((sum, category) => sum + record.metrics[category].false_negative, 0);
+  const falsePositives = CATEGORIES.reduce((sum, category) => sum + record.metrics[category].false_positive, 0);
+  console.log(`  ${record.id} (${record.format}) missed=${missed} false_positives=${falsePositives} violations=${record.violations.length}`);
+}
+if (!gates.passed) {
+  for (const failure of gates.failures) console.error("GATE FAILURE: " + failure);
+}
 console.log("Full synthetic field-level metrics: .ci-logs/cv-parser-evaluation.json");
-const core=aggregate.skills.recall>=0.75&&aggregate.experience_fields.recall>=0.70&&aggregate.certification_fields.recall>=0.75&&aggregate.course_fields.recall>=0.75;
-assert.ok(core,"CV parser field recall fell below the declared minimums; inspect .ci-logs/cv-parser-evaluation.json");
+assert.deepEqual(gates.failures, [], "CV parser quality gates failed; inspect .ci-logs/cv-parser-evaluation.json");
+console.log("CV PARSER EVALUATION PASSED: synthetic field-level gates met");

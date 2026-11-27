@@ -15,6 +15,19 @@ LOCAL_ENV="$(mktemp)"
 FUNCTION_PID=""
 CURRENT_SUITE=""
 note_suite() { CURRENT_SUITE="$1"; }
+# The decisive lines of the CV suites are published to the public job summary: workflow logs need
+# repository-admin credentials, and a passing run must still be inspectable from outside.
+publish_suite_result() {
+  local log="$LOG_DIR/$1" last
+  [ -f "$log" ] || return 0
+  last="$(grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 1 | cut -c1-400)"
+  # A public run annotation makes the decisive line readable outside the admin-only logs.
+  [ -n "$last" ] && printf '::notice title=CV_PARSER_SUITE::%s | %s\n' "$1" "$last"
+  [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+  { printf '**%s**\n\n```\n' "$1"
+    grep -a . "$log" | grep -aviE 'eyJ|bearer|apikey' | tail -n 12 | cut -c1-300
+    printf '```\n\n'; } >> "$GITHUB_STEP_SUMMARY"
+}
 cleanup() {
   local status=$?
   trap - EXIT
@@ -133,11 +146,16 @@ note_suite "http-integration.log"
 timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
 note_suite "cv-parse-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
-# Real Storage object lifecycle: owner deletion, replacement, retry, lease, exhaustion, account deletion.
 note_suite "cv-cleanup-integration.log"
 timeout 300s node tests/integration/cv-cleanup.integration.mjs 2>&1 | tee "$LOG_DIR/cv-cleanup-integration.log"
+publish_suite_result "cv-cleanup-integration.log"
+# Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
+note_suite "cv-parser-robustness.log"
+timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"
+publish_suite_result "cv-parser-robustness.log"
 note_suite "cv-parser-evaluation.log"
 timeout 300s node scripts/evaluate-cv-parser-local.mjs 2>&1 | tee "$LOG_DIR/cv-parser-evaluation.log"
+publish_suite_result "cv-parser-evaluation.log"
 # Ten independent graduate accounts: unique CVs, profile tracks, review and full app journeys.
 note_suite "career-cohort-round1.log"
 timeout 900s node tests/integration/career-cohort.integration.mjs round1 2>&1 | tee "$LOG_DIR/career-cohort-round1.log"

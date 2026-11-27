@@ -203,7 +203,7 @@ CREATE_STATUS="$(curl -sS -o "$TMP/create-user.response" -w '%{http_code}' \
   -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
   --data-binary "@$TMP/create-user.json")"
-check "local Auth provisions the disposable race account" "1" "$([ "$CREATE_STATUS" = "200" ] || [ "$CREATE_STATUS" = "201" ] && echo 1 || echo 0)"
+check "local Auth provisions the disposable race account" "1" "$(case "$CREATE_STATUS" in 200|201) echo 1 ;; *) echo 0 ;; esac)"
 OWNER="$(node --input-type=module - "$TMP/create-user.response" <<'NODE'
 import { readFileSync } from "node:fs";
 const user = JSON.parse(readFileSync(process.argv[2], "utf8"));
@@ -294,6 +294,7 @@ P "create schema issue18_storage_race;
    begin
      if new.bucket_id = 'cv-documents' and new.name = '$UPLOAD_PATH' then
        perform pg_catalog.pg_advisory_lock($UPLOAD_BARRIER);
+       perform pg_catalog.pg_advisory_unlock($UPLOAD_BARRIER);
      end if;
      return new;
    end

@@ -1,7 +1,7 @@
 // End-to-end CV Storage cleanup (issue #18) against the disposable LOCAL Supabase stack only.
 //
-// Proves the durable queue against REAL private Storage objects: owner deletion, replacement, a
-// re-used object key, an already-missing object, a rejected unsafe path, scheduled retry after a
+// Proves the durable queue against REAL private Storage objects: owner deletion, replacement under
+// a fresh key, permanent retired-path rejection, an already-missing object, a rejected unsafe path, scheduled retry after a
 // recorded failure, an expired worker lease, concurrent claims, exhausted attempts with the operator
 // requeue, the full approved account-deletion lifecycle, and worker/queue authorization.
 //

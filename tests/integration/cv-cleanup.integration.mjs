@@ -67,12 +67,15 @@ async function login(email) {
 const encodePath = (path) => path.split("/").map(encodeURIComponent).join("/");
 const uploadPath = (path) => "/storage/v1/object/cv-documents/" + encodePath(path);
 const downloadPath = (path) => "/storage/v1/object/cv-documents/" + encodePath(path);
-async function upload(token, path, bytes, { upsert = false } = {}) {
+async function upload(token, path, bytes) {
   return request(uploadPath(path), {
     method: "POST",
-    headers: headers(token, { "Content-Type": "application/pdf", "x-upsert": String(upsert) }),
+    headers: headers(token, { "Content-Type": "application/pdf", "x-upsert": "false" }),
     body: bytes,
   });
+}
+async function removeObject(token, path) {
+  return request(downloadPath(path), { method: "DELETE", headers: headers(token) });
 }
 async function download(token, path) {
   const res = await fetch(base + downloadPath(path), {
@@ -232,9 +235,13 @@ try {
   const reuseMeta = await createMetadata(owner.token, owner.id, reusePath, reuseBytes);
   await deleteMetadata(owner.token, reuseMeta.json?.[0]?.id);
   pass("deleting the first metadata row queues the path", queueCount(reusePath) === 1);
-  // The first object is still present because its cleanup is only queued: re-uploading the same key is
-  // an explicit upsert, which is the operation a client performs when it re-uses a path.
-  const reupload = await upload(owner.token, reusePath, reuseBytes, { upsert: true });
+  // A client that re-uses a key removes the old object first (the bucket deliberately has no UPDATE
+  // policy, so an in-place upsert is not a supported client operation), then uploads the same key
+  // again and registers it. The queued cleanup must be cancelled rather than deleting the new bytes.
+  const reuseRemove = await removeObject(owner.token, reusePath);
+  pass("the owner removes the old object before re-using the key",
+    reuseRemove.status === 200 || reuseRemove.status === 204, reuseRemove);
+  const reupload = await upload(owner.token, reusePath, reuseBytes);
   const reuseAgain = await createMetadata(owner.token, owner.id, reusePath, reuseBytes);
   pass("the same object key can be re-registered after re-upload",
     (reupload.status === 200 || reupload.status === 201) && reuseAgain.status === 201, { reupload, reuseAgain });

@@ -22,7 +22,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: issue-44-artifact-forensics
+  # New commits get an independent scan; duplicate push/PR events for the same SHA serialize.
+  group: issue-44-artifact-forensics-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:

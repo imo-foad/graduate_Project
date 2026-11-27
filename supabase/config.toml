@@ -9,6 +9,19 @@ schemas = ["public"]
 [auth]
 enable_signup = false   # demo accounts are provisioned by scripts/provision-demo-users.mjs
 
+[auth.sms]
+# Keep local phone/password Auth enabled for Auth-Admin-provisioned synthetic accounts.
+# Supabase CLI disables the phone provider when no SMS transport is configured.
+# CI never requests an SMS and never sends a message; these credentials are deliberately fake.
+enabled = true
+enable_confirmations = true
+
+[auth.sms.twilio]
+enabled = true
+account_sid = "AC_LOCAL_TEST_ONLY"
+message_service_sid = "MG_LOCAL_TEST_ONLY"
+auth_token = "LOCAL_TEST_ONLY_NOT_A_SECRET"
+
 [functions.recommend]
 verify_jwt = true
 
@@ -22,4 +35,17 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.delete-graduate]
+verify_jwt = true
+
+# Operator/cron-only worker: drains private.cv_cleanup_queue through the Storage API.
+[functions.cleanup-cv-objects]
+verify_jwt = true
+
+# Public registration: the caller has no JWT yet. The handler uses the service role internally and
+# never returns the National ID. Rate limiting belongs at the gateway/host level.
+[functions.register]
+verify_jwt = false
+
+# Requires the phone-user JWT issued after OTP confirmation.
+[functions.finalize-registration]
 verify_jwt = true

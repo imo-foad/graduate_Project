@@ -42,7 +42,8 @@ do $$ begin
   perform tests.mk_opp('j_closed', 'JOB',   '{"deadline_days":5,"status":"CLOSED"}');
   perform tests.mk_opp('j_cert',   'JOB',   '{"deadline_days":5}');
   perform tests.mk_opp('j_sample', 'JOB',   '{"deadline_days":5}');
-  perform tests.mk_opp('e_evt',    'EVENT', '{"deadline_days":5}');
+  perform tests.mk_opp('i_ok', 'INTERNSHIP', '{"deadline_days":5}');
+  perform tests.mk_opp('t_training', 'TRAINING', '{"deadline_days":5}');
   insert into public.opportunity_eligibility (opportunity_id, required_certifications) values (tests.id('j_cert'), array['Security+']);
   insert into public.skills (id, canonical_name, category) values ('T_SKILL_A','T Skill A','Test'), ('T_SKILL_B','T Skill B','Test');
   insert into public.cv_documents (id, graduate_id, storage_path, file_type, size_bytes)
@@ -62,15 +63,42 @@ select tests.login('a1');
 select throws_ok($q$select public.apply_for_job(tests.id('j_ok'))$q$, 'PT409', 'ALREADY_APPLIED', 'duplicate application');
 select throws_ok($q$select public.apply_for_job(tests.id('j_exp'))$q$, 'PT422', 'OPPORTUNITY_CLOSED', 'expired deadline');
 select throws_ok($q$select public.apply_for_job(tests.id('j_closed'))$q$, 'PT422', 'OPPORTUNITY_CLOSED', 'status CLOSED');
-select throws_ok($q$select public.apply_for_job(tests.id('e_evt'))$q$, 'PT422', 'NOT_A_JOB', 'not a job');
+select throws_ok($q$select public.apply_for_job(tests.id('t_training'))$q$, 'PT422', 'NOT_APPLICATION_OPPORTUNITY',
+  'TRAINING is not an application opportunity');
 select throws_ok($q$select public.apply_for_job(gen_random_uuid())$q$, 'PT404', 'OPPORTUNITY_NOT_FOUND', 'unknown opportunity');
 select throws_ok($q$select public.apply_for_job(tests.id('j_cert'))$q$, 'PT422', 'NOT_ELIGIBLE', 'mandatory certification missing');
 select is((select count(*)::int from public.applications where graduate_id = tests.id('a1')), 1, 'rejected attempts created no rows');
+
+-- INTERNSHIP uses the same application RPC, state source, history and notification contract as JOB.
+reset role;
+select tests.login('a2');
+select is((public.apply_for_job(tests.id('i_ok'))).status, 'SUBMITTED',
+  'INTERNSHIP uses the same shared application lifecycle as JOB');
+reset role;
+select is((select status_source from public.applications where graduate_id = tests.id('a2') and opportunity_id = tests.id('i_ok')),
+  'APP_ACTION', 'INTERNSHIP application uses the same APP_ACTION source');
+select is((select count(*)::int from public.application_status_history h
+  join public.applications a on a.id = h.application_id
+  where a.graduate_id = tests.id('a2') and a.opportunity_id = tests.id('i_ok')
+    and h.new_status = 'SUBMITTED'), 1, 'INTERNSHIP application writes the same status history');
+select is((select count(*)::int from public.notifications
+  where profile_id = tests.id('a2') and type = 'APPLICATION_SUBMITTED'), 1,
+  'INTERNSHIP application writes the same submission notification');
+
 select is(public.get_opportunity_eligibility(tests.id('j_cert')), array['MISSING_CERTIFICATION:Security+'], 'eligibility failures are reported');
 reset role;
-insert into public.certifications (graduate_id, title) values (tests.id('a1'), 'security+');
+insert into public.certifications (graduate_id, title) values (tests.id('a2'), 'CompTIA Network+');
+select tests.login('a2');
+select is(public.get_opportunity_eligibility(tests.id('j_cert')),
+  array['MISSING_CERTIFICATION:Security+'],
+  'a different CompTIA certification does not satisfy the Security+ requirement');
+reset role;
+insert into public.certifications (graduate_id, title) values (tests.id('a1'), 'COMPtia   SECURITY +');
 select tests.login('a1');
-select is((public.apply_for_job(tests.id('j_cert'))).status, 'SUBMITTED', 'eligible once certification exists (case-insensitive)');
+select is(public.get_opportunity_eligibility(tests.id('j_cert')), '{}'::text[],
+  'CompTIA-prefixed Security+ satisfies the shorthand requirement');
+select is((public.apply_for_job(tests.id('j_cert'))).status, 'SUBMITTED',
+  'application succeeds when the equivalent CompTIA Security+ certification exists');
 select throws_ok($q$select public.apply_for_job(tests.id('j_ok'), '00000000-0000-0000-0000-0000000000c2')$q$, 'PT404', 'CV_NOT_FOUND', 'cannot attach another graduate''s CV (and duplicate check is not reached first)');
 
 -- withdraw_application

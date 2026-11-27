@@ -1,102 +1,210 @@
-# Android integration notes (backend contract v0.2)
+# Android integration contract — Alumni Connect AI
 
-Backend only: no Android code lives here. Full contract: `docs/openapi.yaml` (checked against the SQL by `npm run test:contract`).
+Backend only: this repository contains the Supabase backend contract; the Android client is a separate Native Android/Kotlin + Jetpack Compose workstream. The machine-readable contract is `docs/openapi.yaml`.
 
-1. **Config** the app needs: `SUPABASE_URL` and the **anon/publishable key** only. Never ship the service-role key,
-   `DEMO_PASSWORD`, or any AI key in the APK.
-2. **Headers.** EVERY request carries `apikey: <anon key>`. Every request except login/refresh also carries
-   `Authorization: Bearer <access_token>`.
-3. **Login** (password grant; no sign-up, no role selection):
-   ```
-   POST {SUPABASE_URL}/auth/v1/token?grant_type=password
-   apikey: <anon key>
-   {"email": "graduate.demo@alumni.test", "password": "<from team>"}
-   ```
-   **Refresh** (refresh_token grant: body has ONLY the refresh token, no email/password):
-   ```
-   POST {SUPABASE_URL}/auth/v1/token?grant_type=refresh_token
-   apikey: <anon key>
-   {"refresh_token": "<refresh_token from the last response>"}
-   ```
-   Both return `access_token`, `refresh_token`, `expires_in`. Store the NEW refresh token after every refresh.
-   400 = bad credentials / used refresh token, 401 = missing or wrong `apikey`.
-4. **Never send a graduate id** to an RPC: identity comes from the JWT. (Direct inserts into `graduate_skills`,
-   `saved_opportunities` carry `graduate_id` = your own uid; any other value is rejected by RLS.)
-5. **Catalogue is read-only**: GET `/rest/v1/opportunities` with PostgREST filters/pagination. Do not write catalogue or activity tables directly; use the documented business-rule RPCs for submissions and registrations.
-6. **Errors**: RPC failures return HTTP 401/404/409/422 with `{"message": "<CODE>", "details": ...}`.
-   Map `message` to UI strings: `ALREADY_APPLIED`, `ALREADY_REGISTERED`, `EVENT_FULL`, `OPPORTUNITY_CLOSED`,
-   `REGISTRATION_CLOSED`, `NOT_ELIGIBLE` (details = failed requirements), `CANNOT_WITHDRAW`, ...
-7. **Application status**: new applications are `SUBMITTED` (or `WITHDRAWN`). Statuses starting with `SAMPLE_`
-   (`status_source = SEED_SAMPLE`) are demo history: label them as sample data in the UI (BR-011/BR-023).
-8. **Recommendations**: `POST /functions/v1/recommend` (cached unless profile inputs changed). Show `score` as
-   "Match Score" with the band, reasons and gaps, plus the disclaimer. It is not a hiring probability.
-   **Availability (v0.4):** every item carries `availability_status`. `OPEN` = register now; `UPCOMING` =
-   `opportunity.registration_opens_at` is in the future (score is 0, so it ranks low but stays discoverable);
-   `WAITLIST_ONLY` = capacity is reached but `waitlist_enabled`, so label the action "Join waitlist"; `null` =
-   the opportunity has no registration window/capacity (jobs, internships). Closed opportunities and full
-   events without a waitlist are never returned, cached or fresh, so the app cannot offer a registration that
-   the backend would reject with `EVENT_FULL`/`REGISTRATION_CLOSED`.
-   **New in v0.2:** it can answer `409 {"error":"STALE_SNAPSHOT","retryable":true}` when the profile kept changing during
-   the calculation; the previous cache is intact, so show it (or a spinner) and call again later. `ai_mode` is
-   `deterministic`; if the call fails, keep manual search/filter working (BR-021).
-   The same response includes `career_profile`: `primary_path` is the highest-ranked inferred path and
-   `paths` contains every path supported by at least two core skills. Each path includes a 0–100 weighted
-   skill-coverage score, matched core/supporting skills, missing core skills, up to three next skills, and
-   Arabic explanation. Core skills count three times as much as supporting skills; proficiency levels are
-   normalized against the catalogue's 1–5 scale. Backend, Data Science and Cybersecurity also require at least one path-specific signal, so general-purpose languages, analytics fundamentals or networking alone do not falsely imply a specialization. Frontend, Backend, Data Analytics, Data Science and
-   Cybersecurity are explicitly mapped; other existing paths (Mobile, DevOps/Cloud, QA and UI/UX) remain
-   available. One graduate may match several paths. The score is an explainable skills-coverage indicator,
-   not a hiring probability. Only rows in `graduate_skills` are considered; pending CV suggestions are excluded.
-9. **CV upload and parsing**: upload to private bucket `cv-documents` at `<uid>/<file>.pdf|docx` (max 5 MB),
-   then insert `cv_documents` metadata (`graduate_id`, `storage_path`, `file_type`, `size_bytes`). Call
-   `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<id>" }`; the verified JWT determines ownership.
-   Digital-text PDF and DOCX files are parsed for dictionary-matched skills plus section-based work experience,
-   certifications and courses. Every extracted item is a `PENDING` row in `cv_suggestions`; education and
-   projects are intentionally ignored. Review/adjust/reject items through
-   `POST /rest/v1/rpc/review_cv_suggestions` with `p_decisions: [{id,status,payload?}]`. Only confirmed items
-   reach `graduate_skills`, `career_history`, `certifications` or `courses`. The older
-   `confirm_cv_suggestions` RPC remains available for skill-only clients. Scanned/image-only PDFs requiring OCR
-   are not supported by the free local parser.
-10. **Notifications**: in-app only (`notifications` table); no FCM in this scope.
+## 1. Client configuration and security
 
+The Android app receives only:
+- `SUPABASE_URL`
+- the Supabase anon/publishable key
 
-11. **Career market gaps**: call `POST /rest/v1/rpc/get_career_market_insights`. Demand counts are based only on
-    active JOB/INTERNSHIP posts in this platform, not an external market survey. The response includes your confirmed
-    skills, experience years, top-demand skills and missing skills with matching learning opportunities.
-12. **Recommendation feedback**: use `POST /rest/v1/rpc/record_recommendation_interaction` to log
-    `IMPRESSION`, `VIEW`, `DISMISS` or `NOT_INTERESTED` for a recommendation owned by the caller. SAVE,
-    APPLY and REGISTER are captured automatically from their existing operations. A later view/save/apply/register
-    can reactivate an opportunity previously dismissed.
-13. **Job experience requirement**: the company owner/recruiter (or platform admin) calls
-    `POST /rest/v1/rpc/set_job_experience_requirement` while the job is DRAFT with
-    `p_opportunity_id`, `p_minimum_experience_years` (number or null) and `p_is_required`. Mandatory minimums
-    exclude candidates below the threshold; preferred minimums reduce the experience match score.
+Send `apikey: <anon key>` with every Auth, REST and Edge Function request. After authentication, send `Authorization: Bearer <access_token>` on authenticated requests.
 
-14. **Cancelled product lines — Scholarship and Competition**: these features were removed from the active
-    product scope by product decision. Do not build screens for them and do not call their old endpoints.
-    - `SCHOLARSHIP` and `COMPETITION` are inactive opportunity types. They are excluded from
-      `/rest/v1/opportunities` discovery, from the deterministic recommendation engine and from all cached
-      recommendations. Sample rows were removed from the seed catalogue.
-    - The former RPCs (`apply_for_scholarship`, `withdraw_scholarship_application`, `apply_for_competition`,
-      `withdraw_competition_application`, the internal scholarship admin and delivery routines) return HTTP 403
-      for client roles. The former Edge Functions (`submit-scholarship`, `deliver-scholarship`,
-      `get-scholarship-review-cv`, `scholarship-provider-callback`) are no longer deployed.
-    - The `scholarship_applications`, `scholarship_application_status_history`, `competition_applications` and
-      `competition_application_status_history` table paths are not readable by clients. Historical rows are
-      retained server-side only for data integrity; there is no client API for them.
-    - Any client behaviour that previously depended on these features should be removed rather than hidden.
+Never ship a service-role key, National-ID HMAC secret, institutional provider token, SMS provider credential, demo password or AI key in the APK. Do not log or persist a raw National ID. A National ID is used only during institutional registration verification; it is never a login credential.
 
-15. **Opportunity-type scope**: the only active types are `JOB`, `INTERNSHIP`, `TRAINING`, `EVENT`,
-    `CONFERENCE` and `VOLUNTEER`. The backend rejects creation of any other type with
-    `CANCELLED_OPPORTUNITY_TYPE`, and clients should treat the `type` field as an open-ended string that may
-    gain new values in the future instead of hard-coding the cancelled ones.
+## 2. Registration: National ID + phone + password + OTP
 
-16. **Social Feed**:
-    - Feed reads go through `POST /rest/v1/rpc/get_social_feed` with optional `p_limit` (1–50, default 20). For the next page send both `p_before_created_at` and `p_before_id` from the last item in the previous page; send both as null for the first page.
-    - The response contains post content/timestamps, like/comment counts, `liked_by_me`, and only the author's display name plus avatar URL when `avatar_url` is not hidden in their profile preferences. Email, phone, college, major, CV and other profile fields are never part of this projection. Suspended authors are omitted; suspended accounts cannot use the feed.
-    - Create a post with `POST /rest/v1/rpc/create_social_post` and `{ "p_content": "..." }`; edit with `update_social_post` and `{ "p_post_id": "<uuid>", "p_content": "..." }`; delete with `delete_social_post` and `{ "p_post_id": "<uuid>" }`. Post text must contain 1–5,000 characters after trimming.
-    - Read comments with `POST /rest/v1/rpc/get_social_post_comments` using `p_post_id`, optional paired cursor values and `p_limit` (1–50). The response applies the same display-name/avatar privacy rules.
-    - Add a comment with `add_social_comment` (`p_post_id`, `p_content`), edit your own with `update_social_comment` (`p_comment_id`, `p_content`) and delete your own with `delete_social_comment` (`p_comment_id`). Comment text must contain 1–2,000 characters after trimming.
-    - Like/unlike using `like_social_post` or `unlike_social_post` with `p_post_id`. The feed returns only the total likes and the caller's `liked_by_me` flag; there is no endpoint exposing the identities of other likers.
-    - All posts/comments/likes tables deny direct client table access; use these RPCs only. Posts can be edited/deleted only by their author; comments can be edited/deleted only by their author. Deleting a post cascades its comments and likes.
-    - This scope does not add followers, teams, direct messages or media uploads. Moderation and reporting are available through the dedicated admin RPCs documented in `docs/openapi.yaml`.
+Registration is a two-step flow. The client must not choose an account role.
+
+**Step A — submit registration details**
+
+```http
+POST {SUPABASE_URL}/functions/v1/register
+apikey: <anon key>
+Content-Type: application/json
+
+{
+  "national_id": "<national ID>",
+  "phone": "+201XXXXXXXXX",
+  "password": "<password>",
+  "full_name": "<full name>"
+}
+```
+
+The phone must be E.164 format. The Edge Function asks the configured institutional identity provider to verify the National ID and the institution-provided affiliations. It then creates a phone Auth user, records only a keyed National-ID digest (not plaintext), and requests the mandatory SMS OTP.
+
+Expected outcomes:
+- `202 PENDING_OTP`: the account exists but is not active. Continue to SMS confirmation.
+- `409 PHONE_ALREADY_REGISTERED` or `IDENTITY_ALREADY_LINKED`: resolve the existing account/identity; do not create aliases.
+- `422`: invalid input or the provider rejected the identity.
+- `503 IDENTITY_PROVIDER_UNAVAILABLE`: no approved provider/configuration is available. This is a real blocker, not a successful verification. Do not bypass it or fabricate an identity.
+- `503 OTP_DELIVERY_FAILED`: the account remains pending and OTP delivery must be retried.
+- **Safe OTP resend:** resubmit the same registration request using the same phone number and National ID. The server compares the normalized phone with the keyed National-ID digest and resumes only that exact `PENDING_VERIFICATION` account; it sends a new OTP without creating a second Auth user. A different identity, a different phone, or an already-active account is not eligible for this retry and receives the normal conflict response. This retry does not change the password already stored for the pending Auth account; use password recovery if it must be changed.
+
+The mock identity provider is allowed only when `ALLOW_MOCK_IDENTITY=true` **and** the Edge Function's `SUPABASE_URL` uses HTTP with a local host (`localhost`, `127.0.0.1`, `kong` or `supabase_kong`). The Edge Function rejects mock mode with `503 MOCK_IDENTITY_LOCAL_ONLY` on any hosted/non-local URL, even if the flag is accidentally enabled. It must never silently replace an unavailable institutional provider in a shared or production environment.
+
+**Step B — confirm the SMS code**
+
+Use Supabase Auth's phone OTP verification flow (SMS type) with the phone number and the code sent to that number:
+
+```http
+POST {SUPABASE_URL}/auth/v1/verify
+apikey: <anon key>
+Content-Type: application/json
+
+{ "type": "sms", "phone": "+201XXXXXXXXX", "token": "<SMS code>" }
+```
+
+The response contains the access token needed by the finalize-registration Edge Function. Keep the resulting access token only after Auth confirms the phone.
+
+Then call:
+
+```http
+POST {SUPABASE_URL}/functions/v1/finalize-registration
+apikey: <anon key>
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{}
+```
+
+This activates the account only when both conditions are true:
+1. Supabase Auth has a `phone_confirmed_at` timestamp.
+2. At least one institution-verified human identity is present.
+
+Until then, ordinary account operations are blocked. A pending owner may still read their own verification status/identities as documented.
+
+## 3. Login and refresh
+
+**Login uses phone + password only. Never send the National ID to the token endpoint.**
+
+```http
+POST {SUPABASE_URL}/auth/v1/token?grant_type=password
+apikey: <anon key>
+Content-Type: application/json
+
+{
+  "phone": "+201XXXXXXXXX",
+  "password": "<password>"
+}
+```
+
+**Refresh** uses only the latest refresh token:
+
+```http
+POST {SUPABASE_URL}/auth/v1/token?grant_type=refresh_token
+apikey: <anon key>
+Content-Type: application/json
+
+{ "refresh_token": "<latest refresh_token>" }
+```
+
+Persist the new refresh token returned after each successful refresh. Never store a stale refresh token as the current token.
+
+## 4. Human identities and account capabilities
+
+One human account may have multiple institution-verified identities:
+- `STUDENT`
+- `GRADUATE`
+- `FACULTY`
+
+The institution provider determines the identities; the user cannot self-select or grant a privileged role. Use `POST /rest/v1/rpc/list_my_identities` to read the caller's own identities. The response is caller-scoped.
+
+A `graduate_profiles` career profile is provisioned only for an institution-verified `GRADUATE` identity (legacy invitation/demo accounts remain compatible). A student/faculty-only identity must not be treated as a graduate just because it has an app account.
+
+Companies are separate entities, not human account types. Company memberships use `OWNER`, `RECRUITER`, and `VIEWER`. Only `OWNER` and `RECRUITER` may manage opportunities or applications; `VIEWER` is read-only. Publishing, new applications and recommendation discovery require a platform-verified company. A transition to `SUSPENDED` or `REJECTED` invalidates cached recommendations and removes that company's listings from fresh candidate results. While unverified, members cannot edit an `ACTIVE` listing; they may close it as a safe deactivation action. DRAFT editing is allowed, but publishing still requires verification. Platform admin access is provisioned out-of-band and cannot be self-selected.
+
+## 5. Opportunity catalogue
+
+The only active product types are:
+- `JOB`
+- `INTERNSHIP`
+- `TRAINING`
+
+`EVENT`, `CONFERENCE`, `VOLUNTEER`, `SCHOLARSHIP` and `COMPETITION` are not active product types. Existing historical records are retained for audit/integrity, but must not be presented as actionable opportunities or reactivated.
+
+Read the catalogue using `GET /rest/v1/opportunities` with PostgREST filters, pagination and an explicit selection, for example:
+
+```
+?type=eq.JOB&order=deadline.asc&limit=20&offset=0&select=*,job_details(*),opportunity_skills(*),requires_cv
+```
+
+The catalogue is read-only to clients. Do not insert, update or delete opportunity rows directly.
+
+## 6. JOB and INTERNSHIP applications
+
+JOB and INTERNSHIP share the same application lifecycle. Both use `POST /rest/v1/rpc/apply_for_job` (the historical RPC name is kept for compatibility):
+
+```json
+{
+  "p_opportunity_id": "<uuid>",
+  "p_cv_document_id": null,
+  "p_note": "Optional note"
+}
+```
+
+CV is optional by default. A verified company OWNER/RECRUITER may set `requires_cv=true` for a specific JOB/INTERNSHIP while that opportunity is still DRAFT, using `POST /rest/v1/rpc/set_opportunity_cv_requirement`. If required, the applicant must supply an active CV document owned by the applicant. An uploaded but inactive or another user's CV is not sufficient.
+
+Candidate application states and allowed movement:
+
+- `SUBMITTED` → `UNDER_REVIEW`, `REJECTED`, or candidate `WITHDRAWN`.
+- `UNDER_REVIEW` → `SHORTLISTED`, `REJECTED`, or candidate `WITHDRAWN`.
+- `SHORTLISTED` → `INTERVIEW`, `REJECTED`, or candidate `WITHDRAWN`.
+- `INTERVIEW` → `ACCEPTED`, `REJECTED`, or candidate `WITHDRAWN`.
+- `ACCEPTED`, `REJECTED` and `WITHDRAWN` are terminal.
+
+Company OWNER/RECRUITER or platform admin processes employer decisions through `POST /rest/v1/rpc/update_application_status`. Candidates withdraw through `POST /rest/v1/rpc/withdraw_application` from any non-terminal phase. No status skipping, reopening or reapplication after `WITHDRAWN` is allowed. The server writes status history and sends in-app notifications; the app should render the persisted status rather than infer transitions.
+
+The unique application key is per graduate and opportunity; a withdrawn application remains in history and cannot be resubmitted.
+
+## 7. TRAINING direct registration and FIFO waitlist
+
+TRAINING registration is direct; no organizer approval is part of this flow. Use:
+- `POST /rest/v1/rpc/register_for_event` to register or join the waitlist.
+- `POST /rest/v1/rpc/cancel_event_registration` to cancel your registration.
+
+The RPC names are historical; the active contract is TRAINING-only. A full program without waitlist enabled returns `EVENT_FULL`. If waitlist is enabled, participants enter FIFO order by `registered_at`, then stable registration ID.
+
+When a confirmed `REGISTERED` participant cancels, the backend decrements the confirmed counter and promotes the oldest eligible `WAITLISTED` participant in the same database transaction. The promoted participant receives an in-app notification. Ineligible queue entries are skipped but remain WAITLISTED for audit/review. If the training is closed/cancelled, registration window has not opened, or waitlisting is disabled, no promotion occurs. Cancelling a `WAITLISTED` participant does not free a seat and does not trigger promotion.
+
+Read current registrations from `/rest/v1/event_registrations`, and their append-only lifecycle from `/rest/v1/event_registration_status_history`. The server records candidate actions and automatic promotion as separate history sources.
+
+## 8. CV upload, parsing and deletion
+
+Upload CV files only to the private `cv-documents` bucket under `<uid>/<filename>.pdf|docx` (maximum 5 MB), then create the caller-owned `cv_documents` metadata. Do not make the bucket public.
+
+Call `POST /functions/v1/parse-cv` with `{ "cv_document_id": "<uuid>" }`. Digital-text PDF and DOCX parsing is supported. Scanned/image-only PDFs requiring OCR are not supported in the current scope. Extracted suggestions stay `PENDING` until the graduate explicitly reviews/accepts/rejects them; never treat extraction as verified profile data automatically. Review/adjust/reject pending suggestions using `POST /rest/v1/rpc/review_cv_suggestions` where available. The legacy skill-only `POST /rest/v1/rpc/confirm_cv_suggestions` accepts `p_confirm` and `p_reject` arrays; only confirmed suggestions become graduate profile skills.
+
+Delete CV metadata using `POST /rest/v1/rpc/delete_cv_document`, not a direct table DELETE. This queues a durable server-side Storage-object cleanup. The operator-only `cleanup-cv-objects` worker removes bytes through the Storage API and records DONE/FAILED for retry/reconciliation. A FAILED row is eligible on the next worker run; abandoned 15-minute worker leases are recovered and reclaimed transactionally. After ten unsuccessful claims, a row remains visible as exhausted until an operator explicitly requeues it. The reconciliation report separates retry-ready, retry-scheduled and exhausted rows. Never call the worker with a user token and never grant the app service-role access.
+
+## 9. Recommendations and career insights
+
+Call `POST /functions/v1/recommend` to refresh recommendations. Show the score as a skills/profile match indicator, not a hiring probability. Use its availability field when present:
+- `OPEN`: registration can be started now.
+- `UPCOMING`: registration window has not opened.
+- `WAITLIST_ONLY`: capacity is reached but a waitlist is enabled.
+- `null`: availability is not modelled for this opportunity (for example, a JOB or INTERNSHIP).
+
+Closed opportunities and full TRAINING without waitlist are not actionable recommendations. If recommendation generation returns retryable `STALE_SNAPSHOT`, keep the previously displayed cache and retry rather than discarding it.
+
+Use `POST /rest/v1/rpc/get_career_market_insights` for the platform's career-demand and skill-gap insights. Demand is computed from this platform's active JOB/INTERNSHIP catalogue, not an external labour-market survey.
+
+## 10. In-app notifications
+
+Read `/rest/v1/notifications?order=created_at.desc`. Mark only the caller's own notification as read using the documented `is_read` update. In-app notifications are the product scope; FCM/push delivery is not required currently.
+
+## 11. Social Feed
+
+Social Feed remains a core product capability and must not regress. Use the documented RPCs in `docs/openapi.yaml` for keyset-paginated feed reads, post/comment creation and edits, likes, reports and moderation. Do not write social tables directly. Feed projections expose only display name and avatar when not hidden by profile privacy settings; do not expect email, phone, CV or private education fields in the feed.
+
+## 12. General client rules
+
+- Never send another user's profile ID as an identity input; normal authenticated RPCs derive the caller from the JWT.
+- Never write catalogue, application state, training counters, training status history, notification content or social moderation tables directly.
+- Treat stable RPC error `message` values as user-facing business outcomes; use `details` only where the contract documents safe requirement information.
+- Distinguish seeded sample history (`status_source = SEED_SAMPLE`) from real applications.
+- Do not implement tuition/fees, instalments, financial assistance, lectures, exams or course-content features in this app scope.
+
+## Student and faculty academic records
+
+Migration 0034 adds typed `student_academic_records` and `faculty_academic_records`. Authenticated users may read only their own academic row under RLS; writes are service-role only. Student rows expose department, major, academic track, academic level, GPA and explicit `gpa_scale=4.0`. This is a synthetic local fixture convention, not an institutional grading policy. Synthetic identities have `verification_source=SYNTHETIC_SEED` and must never be presented as institution-verified. Administrators are represented only by `private.platform_admins`, not by a public human identity type.

@@ -22,6 +22,8 @@ export function opps(failures: Record<string, string[]> = {}): OpportunityInput[
     .filter((o: { status: string; deadline_days?: number }) => o.status === "ACTIVE" && (o.deadline_days ?? 1) >= 0)
     .map((o: any) => ({
       id: o.seed_key, type: o.type, title: o.title, description: o.description, location: o.location, status: o.status,
+      deadline: o.deadline_days == null ? null : new Date(Date.now() + o.deadline_days * 86_400_000).toISOString(),
+      end_at: o.end_days == null ? null : new Date(Date.now() + o.end_days * 86_400_000).toISOString(),
       attendance_mode: o.attendance_mode, target_fields: o.target_fields, skills: o.skills,
       experience_level: o.job?.experience_level ?? null, target_audience: o.event?.target_audience ?? null,
       registration_opens_at: null, capacity: o.capacity ?? null,

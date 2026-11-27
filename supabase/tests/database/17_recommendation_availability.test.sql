@@ -35,12 +35,12 @@ create function tests.cand(p_candidates jsonb, p_key text) returns jsonb languag
 
 do $$ begin
   perform tests.mk_user('u1');
-  perform tests.mk_opp('e_open', 'EVENT', '{"capacity":10,"deadline_days":5}');
-  perform tests.mk_opp('e_upcoming', 'EVENT', '{"capacity":10,"deadline_days":5}');
-  perform tests.mk_opp('e_wait', 'EVENT', '{"capacity":1,"waitlist":true,"deadline_days":5}');
-  perform tests.mk_opp('e_full', 'EVENT', '{"capacity":1,"deadline_days":5}');
+  perform tests.mk_opp('e_open', 'TRAINING', '{"capacity":10,"deadline_days":5,"end_days":6}');
+  perform tests.mk_opp('e_upcoming', 'TRAINING', '{"capacity":10,"deadline_days":5}');
+  perform tests.mk_opp('e_wait', 'TRAINING', '{"capacity":1,"waitlist":true,"deadline_days":5}');
+  perform tests.mk_opp('e_full', 'TRAINING', '{"capacity":1,"deadline_days":5}');
   perform tests.mk_opp('j_job', 'JOB', '{"deadline_days":5}');
-  perform tests.mk_opp('e_closed', 'EVENT', '{"capacity":5,"status":"CLOSED","deadline_days":5}');
+  perform tests.mk_opp('e_closed', 'TRAINING', '{"capacity":5,"status":"CLOSED","deadline_days":5}');
 end $$;
 
 -- Availability state the projection must expose to the Edge Function.
@@ -52,18 +52,28 @@ update public.opportunities set registered_count = 1 where id = tests.id('e_full
 create table tests.candidates as
   select public.get_recommendation_candidates(tests.id('u1')) as body;
 
-select ok((tests.cand((select body from tests.candidates), 'e_open') ? 'registration_opens_at')
+select ok((tests.cand((select body from tests.candidates), 'e_open') ? 'status')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'deadline')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'end_at')
+       and (tests.cand((select body from tests.candidates), 'e_open') ? 'registration_opens_at')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'capacity')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'registered_count')
        and (tests.cand((select body from tests.candidates), 'e_open') ? 'waitlist_enabled'),
-       'candidate projection exposes registration window and capacity fields');
+       'candidate projection exposes lifecycle, registration window and capacity fields');
+
+select is(tests.cand((select body from tests.candidates), 'e_open') ->> 'status', 'ACTIVE',
+       'open opportunity status reaches the scorer');
+select ok((tests.cand((select body from tests.candidates), 'e_open') ->> 'deadline')::timestamptz > now(),
+       'open opportunity deadline reaches the scorer');
+select ok((tests.cand((select body from tests.candidates), 'e_open') ->> 'end_at')::timestamptz > now(),
+       'open opportunity end_at reaches the scorer');
 
 select is((tests.cand((select body from tests.candidates), 'e_open') ->> 'capacity')::int, 10,
-       'open event exposes its capacity');
+       'open training exposes its capacity');
 select is((tests.cand((select body from tests.candidates), 'e_open') ->> 'registered_count')::int, 0,
-       'open event exposes its registered count');
+       'open training exposes its registered count');
 select is((tests.cand((select body from tests.candidates), 'e_open') ->> 'waitlist_enabled')::boolean, false,
-       'open event exposes its waitlist flag');
+       'open training exposes its waitlist flag');
 
 select is(tests.cand((select body from tests.candidates), 'e_upcoming') ->> 'registration_opens_at' is not null, true,
        'upcoming registration window is exposed');
@@ -72,15 +82,15 @@ select is((tests.cand((select body from tests.candidates), 'e_upcoming') ->> 're
 
 select is((tests.cand((select body from tests.candidates), 'e_wait') ->> 'registered_count')::int,
        (tests.cand((select body from tests.candidates), 'e_wait') ->> 'capacity')::int,
-       'waitlist event is at capacity and exposes the reached capacity');
+       'waitlist training is at capacity and exposes the reached capacity');
 select is((tests.cand((select body from tests.candidates), 'e_wait') ->> 'waitlist_enabled')::boolean, true,
-       'waitlist event exposes waitlist_enabled = true');
+       'waitlist training exposes waitlist_enabled = true');
 
 select is((tests.cand((select body from tests.candidates), 'e_full') ->> 'registered_count')::int,
        (tests.cand((select body from tests.candidates), 'e_full') ->> 'capacity')::int,
-       'full event is at capacity');
+       'full training is at capacity');
 select is((tests.cand((select body from tests.candidates), 'e_full') ->> 'waitlist_enabled')::boolean, false,
-       'full event has no waitlist, so the Edge Function must drop it');
+       'full training has no waitlist, so the Edge Function must drop it');
 
 select is(tests.cand((select body from tests.candidates), 'e_closed'), null,
        'closed opportunities never reach the recommendation projection');

@@ -17,8 +17,11 @@ const demoData = demos.find((item) => item.email === "graduate.data@alumni.test"
 const demoCyber = demos.find((item) => item.email === "graduate.cyber@alumni.test");
 assert.ok(demoData && demoCyber, "data and cybersecurity demo graduates are required");
 let passed = 0;
-const pass = (name, condition = true) => {
-  assert.equal(Boolean(condition), true, name);
+const pass = (name, condition = true, details = undefined) => {
+  const message = details === undefined
+    ? name
+    : `${name}; diagnostics=${JSON.stringify(details)}`;
+  assert.equal(Boolean(condition), true, message);
   passed++;
   console.log(`PASS ${name}`);
 };
@@ -128,11 +131,50 @@ try {
   pass("recommend endpoint rejects invalid JWT", invalidAuth.status === 401,
     { status: invalidAuth.status, body: invalidAuth.json ?? invalidAuth.text });
 
+  // Capture the exact input to the recommendation engine so an empty result cannot masquerade as a cache failure.
+  const rawCatalogue = await request(
+    "/rest/v1/opportunities?select=id,seed_key,type,status,deadline,end_at,company_id,company_verification_status&order=seed_key.asc",
+    { headers: headers(service) },
+  );
+  const candidateProjection = await request("/rest/v1/rpc/get_recommendation_candidates", {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ p_graduate_id: a.id }),
+  });
+  const rawRows = Array.isArray(rawCatalogue.json) ? rawCatalogue.json : [];
+  const projectedRows = Array.isArray(candidateProjection.json?.opportunities)
+    ? candidateProjection.json.opportunities
+    : [];
+  console.info("recommendation candidate diagnostics", JSON.stringify({
+    raw_status: rawCatalogue.status,
+    raw_count: rawRows.length,
+    raw_active_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
+    raw_company_owned: rawRows.filter((row) => row.company_id !== null).length,
+    raw_examples: rawRows.slice(0, 5).map(({ seed_key, type, status, company_id, company_verification_status }) =>
+      ({ seed_key, type, status, company_id, company_verification_status })),
+    candidate_status: candidateProjection.status,
+    candidate_error: candidateProjection.json?.message ?? candidateProjection.json?.error ?? null,
+    candidate_count: projectedRows.length,
+    candidate_types: projectedRows.reduce((out, row) => {
+      out[row.type] = (out[row.type] ?? 0) + 1;
+      return out;
+    }, {}),
+    candidate_examples: projectedRows.slice(0, 5).map(({ id, type, title, eligibility_failures }) =>
+      ({ id, type, title, eligibility_failures })),
+  }));
+  pass("recommendation SQL candidate projection returns active, rankable listings",
+    candidateProjection.status === 200 && Array.isArray(candidateProjection.json?.opportunities) &&
+      candidateProjection.json.opportunities.length > 0,
+    { status: candidateProjection.status, diagnostics: {
+      raw_open_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
+      candidate_count: projectedRows.length,
+      candidate_types: projectedRows.reduce((out, row) => { out[row.type] = (out[row.type] ?? 0) + 1; return out; }, {}),
+    }, body: candidateProjection.json ?? candidateProjection.text });
   const first = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   pass("recommend endpoint computes recommendations for user A", first.status === 200 &&
-    first.json?.source === "computed" && Array.isArray(first.json?.items) &&
+    first.json?.source === "computed" && Array.isArray(first.json?.items) && first.json.items.length > 0 &&
     first.json?.ai_mode === "deterministic" && typeof first.json?.model_version === "string" &&
     typeof first.json?.disclaimer === "string" && Array.isArray(first.json?.career_profile?.paths));
   pass("career intelligence returns Sara's inferred Data Analytics path", hasCareerPath(first, "DATA_ANALYTICS"));
@@ -144,7 +186,14 @@ try {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });
   pass("recommend endpoint serves user A cache on second request", second.status === 200 &&
-    second.json?.source === "cache" && Array.isArray(second.json?.items));
+    second.json?.source === "cache" && Array.isArray(second.json?.items) && second.json.items.length > 0, {
+      status: second.status,
+      source: second.json?.source ?? null,
+      error: second.json?.error ?? null,
+      code: second.json?.code ?? null,
+      items_count: Array.isArray(second.json?.items) ? second.json.items.length : null,
+      body: second.json ?? second.text,
+    });
   pass("career profile is recalculated from the caller's own skills on cache hits", hasCareerPath(second, "DATA_ANALYTICS"));
   const forced = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: JSON.stringify({ force: true }),
@@ -198,15 +247,15 @@ try {
   pass("recommendations query for user B exposes only B rows", recB.status === 200 &&
     Array.isArray(recB.json) && recB.json.every((x) => x.graduate_id === b.id));
 
-  // Availability (issue #16): a full event without a waitlist must never be recommended, a full event with a
-  // waitlist must be labelled WAITLIST_ONLY, and a future registration window must be labelled UPCOMING.
+  // Availability (issue #16): a full training without a waitlist must never be recommended, a full training
+  // with a waitlist must be labelled WAITLIST_ONLY, and a future registration window must be labelled UPCOMING.
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
   const inOneDay = new Date(Date.now() + 86_400_000).toISOString();
   const inOneWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
   const availabilityEvents = [
-    { key: "full", body: { title: "CI full event (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
-    { key: "waitlist", body: { title: "CI waitlist event", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
-    { key: "upcoming", body: { title: "CI upcoming registration event", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
+    { key: "full", body: { title: "CI full training (no waitlist)", capacity: 1, registered_count: 1, waitlist_enabled: false, registration_opens_at: oneHourAgo } },
+    { key: "waitlist", body: { title: "CI waitlist training", capacity: 1, registered_count: 1, waitlist_enabled: true, registration_opens_at: oneHourAgo } },
+    { key: "upcoming", body: { title: "CI upcoming training registration", capacity: 5, registered_count: 0, waitlist_enabled: false, registration_opens_at: inOneDay } },
   ];
   for (const event of availabilityEvents) {
     const created = await request("/rest/v1/opportunities", {
@@ -214,9 +263,9 @@ try {
       headers: headers(service, { "Content-Type": "application/json", Prefer: "return=representation" }),
       body: JSON.stringify({
         seed_key: `ci-availability-${event.key}-${randomUUID()}`,
-        type: "EVENT",
+        type: "TRAINING",
         title: event.body.title,
-        description: "Temporary event created by the local HTTP integration test.",
+        description: "Temporary training created by the local HTTP integration test.",
         location: "Cairo",
         attendance_mode: "ONSITE",
         status: "ACTIVE",
@@ -239,8 +288,8 @@ try {
   });
   const availabilityItems = Array.isArray(availability.json?.items) ? availability.json.items : [];
   const itemFor = (key) => availabilityItems.find((item) => item.opportunity_id === availabilityEvents.find((e) => e.key === key)?.id);
-  pass("recommendations exclude a full event without a waitlist", availability.status === 200 && !itemFor("full"));
-  pass("recommendations label a full event with a waitlist as WAITLIST_ONLY",
+  pass("recommendations exclude a full training without a waitlist", availability.status === 200 && !itemFor("full"));
+  pass("recommendations label a full training with a waitlist as WAITLIST_ONLY",
     itemFor("waitlist")?.availability_status === "WAITLIST_ONLY");
   pass("recommendations keep a future registration window as UPCOMING",
     itemFor("upcoming")?.availability_status === "UPCOMING");
@@ -498,10 +547,22 @@ try {
   const afterDelete = await request(`/storage/v1/object/${bucket}/${encodePath(objectPath)}`, { headers: headers(a.token) });
   pass("Storage API lets A delete own object and it disappears", aDelete.ok && !afterDelete.ok);
 
-  const aMetadataDelete = cvId
+  // Metadata deletion is routed through an owner-scoped RPC that also enqueues Storage cleanup.
+  // Direct PostgREST DELETE is revoked so a failure cannot bypass the cleanup ledger.
+  const directDelete = cvId
     ? await request(`/rest/v1/cv_documents?id=eq.${cvId}`, { method: "DELETE", headers: headers(a.token) })
     : { ok: false, status: 0 };
-  pass("A can delete own CV metadata row", aMetadataDelete.ok);
+  pass("direct CV metadata DELETE is rejected for clients", !directDelete.ok,
+    { status: directDelete.status, body: directDelete.json ?? directDelete.text });
+  const aMetadataDelete = cvId
+    ? await request("/rest/v1/rpc/delete_cv_document", {
+      method: "POST",
+      headers: headers(a.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_cv_document_id: cvId }),
+    })
+    : { ok: false, status: 0 };
+  pass("A can delete own CV metadata through the owner-scoped RPC",
+    aMetadataDelete.status === 200 && aMetadataDelete.json?.deleted === true, { status: aMetadataDelete.status });
 } finally {
   // Remove only temporary skill rows inserted for these career-path integration cases.
   for (const injected of injectedSkillRows) {

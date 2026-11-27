@@ -771,6 +771,17 @@ def classify_gitleaks_findings(findings: list[dict[str, Any]], exposure: Path,
         classified[key]["observed_count"] += 1
     return list(classified.values()), unclassified
 
+def workflow_run_has_no_jobs(api: str, run_id: int):
+    """Return True only when GitHub confirms a workflow run has zero jobs."""
+    status, payload = api_json(api + "/actions/runs/" + str(run_id) + "/jobs?per_page=1")
+    if status != 200 or not isinstance(payload, dict):
+        return None
+    total = payload.get("total_count")
+    if not isinstance(total, int) or total < 0:
+        return None
+    return total == 0
+
+
 def main() -> int:
     repo = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["GITHUB_TOKEN"]
@@ -882,6 +893,7 @@ def main() -> int:
 
     run_logs_downloaded = 0
     run_log_inventory = []
+    run_logs_skipped_no_jobs = []
     for run in selected_runs:
         print(
             "RUN_LOG_TO_SCAN id=" + str(int(run["id"])) +
@@ -898,6 +910,17 @@ def main() -> int:
             api + "/actions/runs/" + str(run_id) + "/logs", archive_path
         )
         if not ok:
+            if http_status == 404 and workflow_run_has_no_jobs(api, run_id) is True:
+                run_logs_skipped_no_jobs.append(run_id)
+                print(
+                    "RUN_LOG_SKIPPED_NO_JOBS id=" + str(run_id) +
+                    " reason=workflow-run-created-no-jobs-and-no-log-archive",
+                    flush=True,
+                )
+                run_log_inventory.append({
+                    "run_id": run_id, "downloaded": False, "skipped": "no-jobs-no-log-archive"
+                })
+                continue
             state.record_incomplete(
                 origin, "<archive>", reason + "-http-" + str(http_status)
             )
@@ -1128,6 +1151,7 @@ def main() -> int:
         f"- Actions runs enumerated: {len(runs_all)} / {expected_runs} across {run_partition_count} disjoint time partitions; completed logs selected: {len(selected_runs)}.",
         f"- Current forensic run skipped: {current_run_skipped}; non-completed runs skipped: {noncompleted_runs_skipped}; newer runs: {newer_runs}.",
         f"- Run logs downloaded: {run_logs_downloaded} / {len(selected_runs)}.",
+        f"- Workflow runs confirmed to have zero jobs and no log archive: {len(run_logs_skipped_no_jobs)}.",
         f"- Repository artifacts enumerated: {artifacts_listed} / {expected_artifacts}.",
         f"- Artifacts in snapshot / downloaded: {len(selected_artifacts)} / {artifacts_downloaded}.",
         f"- Expired artifacts: {expired_artifacts}; created after snapshot cutoff: {artifacts_newer_than_cutoff}.",
@@ -1150,6 +1174,11 @@ def main() -> int:
             "- DEFERRED ARTIFACT: id=" + str(int(artifact["id"])) +
             "; run_id=" + str(int(workflow_run.get("id", 0))) +
             "; name=" + safe_text(artifact.get("name"), 160) + "."
+        )
+    for run_id in run_logs_skipped_no_jobs:
+        summary.append(
+            "- RUN LOG SKIPPED (GitHub confirms zero jobs; no log archive exists): id=" +
+            str(run_id) + "."
         )
     if incremental_mode:
         summary.append(

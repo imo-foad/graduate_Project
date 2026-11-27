@@ -347,6 +347,21 @@ class ArtifactForensicsTests(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), b"PK\\x03\\x04test")
 
 
+    def test_run_log_404_is_skipped_only_when_github_confirms_zero_jobs(self):
+        api = "https://api.github.com/repos/example/repo"
+        with mock.patch.object(
+            MODULE, "api_json", return_value=(200, {"total_count": 0, "jobs": []})
+        ):
+            self.assertTrue(MODULE.workflow_run_has_no_jobs(api, 46057935915))
+        with mock.patch.object(
+            MODULE, "api_json", return_value=(200, {"total_count": 2, "jobs": [{"id": 1}]})
+        ):
+            self.assertFalse(MODULE.workflow_run_has_no_jobs(api, 46057935915))
+        with mock.patch.object(MODULE, "api_json", return_value=(403, None)):
+            self.assertIsNone(MODULE.workflow_run_has_no_jobs(api, 46057935915))
+        with mock.patch.object(MODULE, "api_json", return_value=(200, {"jobs": []})):
+            self.assertIsNone(MODULE.workflow_run_has_no_jobs(api, 46057935915))
+
     def test_noncompleted_runs_are_deferred_without_becoming_incomplete(self):
         runs = [
             {"id": 21, "status": "completed", "name": "backend-tests",

@@ -51,6 +51,9 @@ begin
       'SYNTHETIC_SEED',
       now()
     );
+    -- These fixtures represent a verified local synthetic identity. Keep the account ACTIVE while
+    -- deliberately leaving graduate_profiles absent for STUDENT/FACULTY.
+    update public.profiles set account_status = 'ACTIVE' where id = v_id;
   elsif p_identity_type <> 'GRADUATE' then
     raise exception 'INVALID_TEST_IDENTITY';
   end if;

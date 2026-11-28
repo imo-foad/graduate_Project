@@ -209,7 +209,7 @@ class Scripts(unittest.TestCase):
         pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
         race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
-        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "Files=21", "bash tests/db/cv-cleanup-concurrency.sh"):
+        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "23_profile_career_management", "Files=22", "bash tests/db/cv-cleanup-concurrency.sh"):
             self.assertIn(needle, runner)
         self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
         self.assertIn("createdUsers.push(targetId)", integration)

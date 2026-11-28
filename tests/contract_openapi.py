@@ -20,6 +20,15 @@ PREEXISTING_UNDOCUMENTED_ADMIN_RPCS = {
     "transfer_company_creator",
 }
 
+# Historical applications are retained for audit/data integrity but are intentionally not part of
+# the client API after product scope cancellation (migration 0025). Only service_role retains SELECT.
+SERVICE_ROLE_ONLY_HISTORICAL_TABLES = {
+    "scholarship_applications",
+    "scholarship_application_status_history",
+    "competition_applications",
+    "competition_application_status_history",
+}
+
 
 def split_top(s):
     out, depth, cur = [], 0, ""
@@ -160,8 +169,17 @@ class Contract(unittest.TestCase):
         self.assertIn("update", grants["profiles"],
                       "full_name remains writable after avatar_url is revoked")
 
+    def test_cancelled_application_tables_remain_service_role_only(self):
+        migration = open(os.path.join(ROOT, "supabase/migrations/0025_cancel_scholarship_and_competition.sql")).read()
+        self.assertIn("revoke all on public.scholarship_applications", migration)
+        self.assertIn("revoke all on public.competition_applications", migration)
+        self.assertIn("to service_role", migration)
+        self.assertIn("CANCELLED FEATURE", migration)
+
     def test_every_granted_table_capability_is_documented(self):
         for table, privs in table_grants().items():
+            if table in SERVICE_ROLE_ONLY_HISTORICAL_TABLES:
+                continue
             ops = API["paths"].get(f"/rest/v1/{table}")
             self.assertIsNotNone(ops, f"{table}: granted but undocumented")
             documented = {METHOD_PRIV[m] for m in ops}

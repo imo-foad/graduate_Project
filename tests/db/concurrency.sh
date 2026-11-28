@@ -148,6 +148,20 @@ check "Social Feed like race: exactly one like edge" "1" "$(P -c "select count(*
 check "Social Feed like race: all competing requests rejected as ALREADY_LIKED" "$((N-1))" "$(count_matches 'ALREADY_LIKED' "$OUT")"
 rm -f "$OUT"
 
+# --- 8b. concurrent duplicate shares as one actor: one row, every other caller gets ALREADY_SHARED
+SOCIAL_ACTOR=$(P -c "select id from public.social_actors where actor_type = 'HUMAN' and profile_id = '$SOCIAL_UID'")
+[ -n "$SOCIAL_ACTOR" ] || { echo "PREREQUISITE FAILED: no personal social actor for the race user" >&2; exit 2; }
+SHARE_TARGET=$(P -c "insert into public.social_posts (actor_id, author_profile_id, content) values ('$SOCIAL_ACTOR', '$SOCIAL_UID', '${TAG} share-target') returning id")
+[ -n "$SHARE_TARGET" ] || { echo "PREREQUISITE FAILED: could not create the share target" >&2; exit 2; }
+OUT=$(mktemp); TEMP_FILES+=("$OUT"); PIDS=()
+for i in $(seq 1 $N); do
+  ( as_user "$SOCIAL_UID" "select public.share_social_post('$SOCIAL_ACTOR', '$SHARE_TARGET')" >>"$OUT" ) & PIDS+=($!)
+done
+wait "${PIDS[@]}"
+check "Social share race: exactly one share row" "1" "$(P -c "select count(*) from public.social_posts where shared_post_id='$SHARE_TARGET' and actor_id='$SOCIAL_ACTOR'")"
+check "Social share race: all competing requests rejected as ALREADY_SHARED" "$((N-1))" "$(count_matches 'ALREADY_SHARED' "$OUT")"
+rm -f "$OUT"
+
 # --- 9. cancelled product scope: no role may create a Scholarship opportunity, even concurrently.
 OUT=$(mktemp); TEMP_FILES+=("$OUT"); PIDS=()
 for i in $(seq 1 $N); do

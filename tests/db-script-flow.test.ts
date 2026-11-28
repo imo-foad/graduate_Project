@@ -12,7 +12,7 @@ const MIGS = readdirSync(join(ROOT, "supabase/migrations")).filter((f) => f.ends
 const VERSIONS = MIGS.map((m) => m.split("_")[0]).join(",");
 const SKILLS = JSON.parse(readFileSync(join(ROOT, "fixtures/skills.json"), "utf8")).length;
 const OPPS = JSON.parse(readFileSync(join(ROOT, "fixtures/opportunities.json"), "utf8")).length;
-const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "19_product_lifecycle", "20_synthetic_identity_registry", "21_cv_cleanup_lifecycle", "22_registration_email_idempotency"];
+const TESTS = ["01_register_for_event", "02_rpc_rules", "03_rls_security", "04_storage_cv_ownership", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "19_product_lifecycle", "20_synthetic_identity_registry", "21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "23_social_multi_actor_media_sharing"];
 
 function fakeBin() {
   const dir = mkdtempSync(join(tmpdir(), "fake-"));
@@ -35,7 +35,7 @@ case "$1 $2" in
   "--version "*) echo "2.0.0";;
   "start "*) echo "Started supabase local development setup.";;
   "db reset") for f in ${MIGS.map((m) => `"${m}"`).join(" ")}; do [ "$f" = "$FAKE_MISSING" ] || echo "Applying migration $f..."; done;;
-  "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Files=21, Tests=693, 0 wallclock secs"; echo "Result: PASS"; exit \${FAKE_TEST_EXIT:-0};;
+  "test db") for t in ${TESTS.join(" ")}; do [ "$t" = "$FAKE_TEST_MISSING" ] || echo "supabase/tests/database/$t.test.sql .. ok"; done; echo "Files=22, Tests=997, 0 wallclock secs"; echo "Result: PASS"; exit \${FAKE_TEST_EXIT:-0};;
 esac`);
   put("bash", `echo "INVOKED: bash $*"; case "$1" in *cv-cleanup-concurrency.sh) echo "CV CLEANUP CONCURRENCY PASSED"; exit \${FAKE_CV_CLEANUP_CONC_EXIT:-0};; *concurrency.sh) echo "ALL CONCURRENCY CHECKS PASSED"; exit \${FAKE_CONC_EXIT:-0};; *run-local-integrations.sh) echo "LOCAL HTTP INTEGRATION PASSED: 20 checks"; exit \${FAKE_INTEGRATION_EXIT:-0};; esac\nexec /bin/bash "$@"`);
   return dir;

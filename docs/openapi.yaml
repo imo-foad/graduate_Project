@@ -178,6 +178,98 @@ components:
         content: { type: string, minLength: 1, maxLength: 2000 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    SocialActor:
+      type: object
+      description: One publishing identity the caller may act as. Server-assigned; the client never sends actor_type,
+        roles or profile ids.
+      required: [actor_id, actor_type, display_name, avatar_url, organization_verified, membership_role, can_publish]
+      properties:
+        actor_id: { type: string, format: uuid }
+        actor_type: { type: string, enum: [HUMAN, ORGANIZATION] }
+        display_name: { type: string }
+        avatar_url: { type: string, nullable: true }
+        organization_verified: { type: boolean, description: True only for a VERIFIED company actor }
+        membership_role: { type: string, nullable: true, description: 'OWNER/RECRUITER/VIEWER for company actors;
+          null for a personal actor.' }
+        can_publish: { type: boolean, description: False for VIEWER memberships and inactive actors }
+    SocialPostMedia:
+      type: object
+      required: [media_id, storage_path, mime_type, size_bytes, width, height, alt_text, sort_order]
+      properties:
+        media_id: { type: string, format: uuid }
+        storage_path: { type: string, description: Object key in the private social-media bucket; readable only
+          while the post is visible to the caller. }
+        mime_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        size_bytes: { type: integer, maximum: 5242880 }
+        width: { type: integer }
+        height: { type: integer }
+        alt_text: { type: string, nullable: true }
+        sort_order: { type: integer, minimum: 0 }
+    SocialOriginalPost:
+      type: object
+      description: Projection of the shared original; null when the original is deleted or no longer visible, so a
+        share can never outlive moderation.
+      nullable: true
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_type: { type: string, enum: [HUMAN, ORGANIZATION] }
+        actor_name: { type: string }
+        actor_avatar_url: { type: string, nullable: true }
+        actor_verified: { type: boolean }
+        content: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        media: { type: array, items: { $ref: '#/components/schemas/SocialPostMedia' } }
+    SocialFeedItemV2:
+      type: object
+      required: [id, actor_id, actor_type, actor_name, actor_avatar_url, actor_verified, content, created_at,
+        updated_at, likes_count, comments_count, shares_count, liked_by_me, shared_by_me, media, shared_post]
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_type: { type: string, enum: [HUMAN, ORGANIZATION] }
+        actor_name: { type: string }
+        actor_avatar_url: { type: string, nullable: true }
+        actor_verified: { type: boolean }
+        content: { type: string, nullable: true, maxLength: 5000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        edited_at: { type: string, format: date-time, nullable: true }
+        likes_count: { type: integer, format: int64 }
+        comments_count: { type: integer, format: int64 }
+        shares_count: { type: integer, format: int64 }
+        liked_by_me: { type: boolean, description: True when the caller's personal actor liked the post }
+        shared_by_me: { type: boolean, description: True when the caller's personal actor already shared the post }
+        media: { type: array, items: { $ref: '#/components/schemas/SocialPostMedia' } }
+        shared_post: { $ref: '#/components/schemas/SocialOriginalPost' }
+    SocialPostV2:
+      type: object
+      required: [id, actor_id, actor_type, content, created_at, updated_at, media, shared_post]
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_type: { type: string, enum: [HUMAN, ORGANIZATION] }
+        content: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        edited_at: { type: string, format: date-time, nullable: true }
+        media: { type: array, items: { $ref: '#/components/schemas/SocialPostMedia' } }
+        shared_post: { $ref: '#/components/schemas/SocialOriginalPost' }
+    SocialCommentV2:
+      type: object
+      required: [id, post_id, actor_id, actor_type, actor_name, actor_avatar_url, actor_verified, content,
+        created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        actor_type: { type: string, enum: [HUMAN, ORGANIZATION] }
+        actor_name: { type: string }
+        actor_avatar_url: { type: string, nullable: true }
+        actor_verified: { type: boolean }
+        content: { type: string, maxLength: 2000 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     EventRegistration:
       type: object
       properties:
@@ -452,6 +544,11 @@ components:
         CV_EXPERIENCE_NEEDS_REVIEW, INVALID_CV_DATE_RANGE, CV_CREDENTIAL_NEEDS_REVIEW,
         INVALID_INTERACTION, JOB_NOT_DRAFT, INVALID_IDENTITY, IDENTITY_WITHOUT_VERIFIED_ROLE,
         ACCOUNT_UNAVAILABLE, ADMIN_TARGET_NOT_VERIFIED, SOCIAL_POST_NOT_FOUND, SOCIAL_COMMENT_NOT_FOUND, ALREADY_LIKED, NOT_LIKED.
+        403 SOCIAL_ACTOR_NOT_FOUND, SOCIAL_ACTOR_NOT_AUTHORIZED, ORGANIZATION_NOT_VERIFIED, ORGANIZATION_SUSPENDED, SOCIAL_MEDIA_NOT_OWNED.
+        404 SOCIAL_POST_NOT_FOUND, SOCIAL_SHARE_NOT_FOUND.
+        409 ALREADY_SHARED, ALREADY_LIKED, SOCIAL_MEDIA_ALREADY_REGISTERED.
+        422 SOCIAL_MEDIA_INVALID, SOCIAL_MEDIA_TOO_LARGE, SOCIAL_MEDIA_NOT_ATTACHABLE, SOCIAL_MEDIA_UPLOAD_MISSING,
+        SOCIAL_MEDIA_LIMIT_EXCEEDED, SOCIAL_MEDIA_RETIRED, SOCIAL_SHARE_NOT_ALLOWED, NOT_LIKED.
         409 ALREADY_REPORTED, SOCIAL_REPORT_ALREADY_REVIEWED, SOCIAL_CONTENT_ALREADY_VISIBLE.
         422 CANNOT_REPORT_OWN_CONTENT, INVALID_RATE_LIMIT_SUBJECT.
         403 MODERATION_AUDIT_IMMUTABLE, SERVICE_ROLE_REQUIRED, SOCIAL_AUTHOR_MISMATCH.
@@ -989,6 +1086,305 @@ paths:
       responses:
         '200': { description: true when unliked }
         4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_my_social_actors:
+    post:
+      summary: Publishing identities available to the caller (personal account plus organizations the caller may represent)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+      responses:
+        '200':
+          description: Caller-scoped actor list. actor_type is server-assigned; a personal actor exists for every
+            active student/graduate/faculty account and organizations appear only with verified membership and
+            publishing permission.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialActor' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_feed_v2:
+    post:
+      summary: Multi-actor feed page with images and shared-post projections
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                p_before_created_at: { type: string, format: date-time, nullable: true }
+                p_before_id: { type: string, format: uuid, nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Feed page ordered by created_at DESC, id DESC. Hidden, removed and suspended content is absent.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialFeedItemV2' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/register_social_media:
+    post:
+      summary: Register pending image metadata after the caller uploaded an object under their own namespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_actor_id, p_storage_path, p_mime_type, p_size_bytes, p_width, p_height]
+              properties:
+                p_actor_id: { type: string, format: uuid }
+                p_storage_path: { type: string, description: 'Must start with the caller''s auth uid and match the
+                  private social-media bucket object metadata (mime, size).' }
+                p_mime_type: { type: string, enum: [image/jpeg, image/png, image/webp] }
+                p_size_bytes: { type: integer, minimum: 1, maximum: 5242880 }
+                p_width: { type: integer, minimum: 1, maximum: 8000 }
+                p_height: { type: integer, minimum: 1, maximum: 8000 }
+                p_alt_text: { type: string, maxLength: 500, nullable: true }
+      responses:
+        '200':
+          description: '{media_id, status: PENDING, mime_type, size_bytes, width, height, alt_text}. The row is
+            attached later by create_social_post_v2 or update_social_post_v2.'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/authorize_social_media:
+    post:
+      summary: Confirm that every media id belongs to a post the caller can currently read, and return delivery info
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_media_ids]
+              properties:
+                p_media_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Authorized media rows (media_id, bucket_id, storage_path, mime_type, size_bytes, width,
+            height, alt_text). Objects are read from the private social-media bucket with the user JWT; the Storage
+            policy re-checks post visibility on every download.
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/create_social_post_v2:
+    post:
+      summary: Create a post, an image post or a share as a validated social actor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_actor_id]
+              properties:
+                p_actor_id: { type: string, format: uuid }
+                p_content: { type: string, maxLength: 5000, nullable: true }
+                p_media_ids:
+                  type: array
+                  maxItems: 10
+                  nullable: true
+                  items: { type: string, format: uuid }
+                p_shared_post_id: { type: string, format: uuid, nullable: true }
+      responses:
+        '200':
+          description: Created post projection (id, actor, media, shared_post, counts). A post needs text, at least
+            one owned PENDING image, or a shared post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialPostV2' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_social_post_v2:
+    post:
+      summary: Edit the caller actor's post; pass the complete desired image list to add, remove or reorder images
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_content: { type: string, maxLength: 5000, nullable: true }
+                p_media:
+                  type: array
+                  maxItems: 10
+                  nullable: true
+                  description: 'Ordered desired state; each entry is {media_id, alt_text?}. Omitted means "keep the
+                    current images". Removed images are retired and queued for Storage cleanup.'
+                  items:
+                    type: object
+                    required: [media_id]
+                    properties:
+                      media_id: { type: string, format: uuid }
+                      alt_text: { type: string, maxLength: 500, nullable: true }
+      responses:
+        '200':
+          description: Updated post projection
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialPostV2' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/share_social_post:
+    post:
+      summary: Share (repost) a visible post, optionally with commentary, as a validated actor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_actor_id, p_post_id]
+              properties:
+                p_actor_id: { type: string, format: uuid }
+                p_post_id: { type: string, format: uuid }
+                p_commentary: { type: string, maxLength: 5000, nullable: true }
+      responses:
+        '200':
+          description: '{share_post_id, shared_post_id, actor_id}. Retrying the same pair returns ALREADY_SHARED
+            instead of creating a second row.'
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/unshare_social_post:
+    post:
+      summary: Remove the caller actor's own share
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_share_post_id]
+              properties:
+                p_share_post_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: true when the share row was removed
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/get_social_post_comments_v2:
+    post:
+      summary: Comments for a visible post with actor attribution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_before_created_at: { type: string, format: date-time, nullable: true }
+                p_before_id: { type: string, format: uuid, nullable: true }
+                p_limit: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Comments ordered by created_at ASC, id ASC
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SocialCommentV2' }
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/add_social_comment_v2:
+    post:
+      summary: Add a comment as a validated social actor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id, p_actor_id, p_content]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_actor_id: { type: string, format: uuid }
+                p_content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: Created comment (id, post_id, actor_id, actor_name, content, created_at, updated_at)
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/update_social_comment_v2:
+    post:
+      summary: Edit only the caller actor's own comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_comment_id, p_content]
+              properties:
+                p_comment_id: { type: string, format: uuid }
+                p_content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200':
+          description: Updated comment
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/like_social_post_v2:
+    post:
+      summary: Like a visible post as a validated social actor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id, p_actor_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_actor_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: true when the like was created; duplicate likes return 409 ALREADY_LIKED
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /rest/v1/rpc/unlike_social_post_v2:
+    post:
+      summary: Remove the caller actor's like
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_post_id, p_actor_id]
+              properties:
+                p_post_id: { type: string, format: uuid }
+                p_actor_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: true when the caller actor's like row was removed
+        4XX: { $ref: '#/components/responses/BusinessError' }
+  /functions/v1/social-media-upload:
+    post:
+      summary: Upload one validated image (multipart/form-data) into the caller's private namespace
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, actor_id]
+              properties:
+                file: { type: string, format: binary, description: JPEG, PNG or WebP, max 5 MB, max 8000x8000 }
+                actor_id: { type: string, format: uuid }
+                alt_text: { type: string, maxLength: 500 }
+      responses:
+        '201':
+          description: '{media_id, status: PENDING, bucket_id, storage_path, mime_type, size_bytes, width, height,
+            alt_text}. The real container signature is validated; a declared MIME mismatch, SVG/HTML payload, oversized file
+            or excessive dimensions returns 422 SOCIAL_MEDIA_INVALID / SOCIAL_MEDIA_TOO_LARGE.'
+        '401': { description: UNAUTHENTICATED }
+        '403': { description: SOCIAL_ACTOR_NOT_AUTHORIZED, ACCOUNT_UNAVAILABLE }
+        '422': { description: SOCIAL_MEDIA_INVALID, SOCIAL_MEDIA_TOO_LARGE, SOCIAL_MEDIA_LIMIT_EXCEEDED }
+        '503': { description: SOCIAL_MEDIA_UPLOAD_FAILED }
   /rest/v1/rpc/create_social_content_report:
     post:
       summary: Report another graduate's visible post or comment; one open report per reporter and target

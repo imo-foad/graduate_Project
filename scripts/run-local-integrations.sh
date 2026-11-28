@@ -148,6 +148,10 @@ node tests/integration/university-dataset.integration.mjs 2>&1 | tee "$LOG_DIR/u
 
 note_suite "http-integration.log"
 timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
+# Social Feed v2: multi-actor publishing, private images, shares and moderation through the real gateway.
+note_suite "social-feed-integration.log"
+timeout 300s node tests/integration/social-feed.integration.mjs 2>&1 | tee "$LOG_DIR/social-feed-integration.log"
+publish_suite_result "social-feed-integration.log"
 note_suite "cv-parse-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
 note_suite "cv-cleanup-integration.log"

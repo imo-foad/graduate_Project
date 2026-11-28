@@ -158,7 +158,7 @@ function detectColumnSplit(segmented: Segment[][], gapThreshold: number): number
   return best.split;
 }
 
-const JOB_TITLE = /(?:^|[^\\p{L}])(?:developer|engineer|analyst|designer|intern|manager|consultant|administrator|specialist|architect|lead|officer|technician|tester|qa|scientist|researcher|coordinator|accountant|teacher|مدير|مهندس|محلل|مصمم|متدرب|مطور|باحث|فني|محاسب|معلم)(?=$|[^\\p{L}])/iu;
+const JOB_TITLE = /(?:^|[^\p{L}])(?:developer|engineer|analyst|designer|intern|manager|consultant|administrator|specialist|architect|lead|officer|technician|tester|qa|scientist|researcher|coordinator|accountant|teacher|مدير|مهندس|محلل|مصمم|متدرب|مطور|باحث|فني|محاسب|معلم)(?=$|[^\p{L}])/iu;
 const ORGANIZATION_SUFFIX = /(?:\b(?:systems?|analytics|labs?|group|limited|ltd|inc|corp(?:oration)?|technologies|technology|studio|services|solutions|university|hospital|bank|agency|company)\b|^شركة\s|^مؤسسة\s|^جامعة\s)/i;
 
 /** Pair cross-column employer/title fragments only when both sides carry strong lexical cues. */

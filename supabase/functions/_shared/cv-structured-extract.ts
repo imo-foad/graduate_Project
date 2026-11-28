@@ -50,11 +50,11 @@ const MONTHS: Record<string, string> = {
   "ديسمبر": "12", "كانون الأول": "12",
 };
 const DATE_YEAR = "(?:19|20)[0-9٠-٩۰-۹]{2}";
-const DATE_MONTH_NAME = "(?:[A-Za-z]{3,9}|يناير|كانون\\\\s+الثاني|فبراير|شباط|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين\\\\s+الأول|نوفمبر|تشرين\\\\s+الثاني|ديسمبر|كانون\\\\s+الأول)";
-const DATE_TOKEN = "(?:" + DATE_MONTH_NAME + "\\\\s+)?" + DATE_YEAR +
-  "|(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})\\\\/(?:19|20)[0-9٠-٩۰-۹]{2}" +
-  "|(?:19|20)[0-9٠-٩۰-۹]{2}-(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})";
-const DATE_RANGE = new RegExp("(" + DATE_TOKEN + ")\\\\s*(?:-|–|—|to|until|through|إلى|حتى)\\\\s*(present|current|now|ongoing|مستمر|حاليا|حاليًا|(" + DATE_TOKEN + "))", "i");
+const DATE_MONTH_NAME = "(?:[A-Za-z]{3,9}|يناير|كانون\\s+الثاني|فبراير|شباط|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين\\s+الأول|نوفمبر|تشرين\\s+الثاني|ديسمبر|كانون\\s+الأول)";
+const DATE_TOKEN = "(?:19|20)[0-9٠-٩۰-۹]{2}-(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})" +
+  "|(?:" + DATE_MONTH_NAME + "\\s+)?" + DATE_YEAR +
+  "|(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})\\/(?:19|20)[0-9٠-٩۰-۹]{2}";
+const DATE_RANGE = new RegExp("(" + DATE_TOKEN + ")\\s*(?:-|–|—|to|until|through|إلى|حتى)\\s*(present|current|now|ongoing|مستمر|حاليا|حاليًا|(" + DATE_TOKEN + "))", "i");
 const ROLE = /developer|engineer|analyst|designer|intern|manager|consultant|administrator|specialist|architect|lead|officer|technician|tester|qa|scientist|researcher|coordinator|accountant|teacher|مدير|مهندس|محلل|مصمم|متدرب|مطور|باحث|فني|محاسب|معلم/i;
 const DESCRIPTION_START = /^(?:built|build|developed|develop|managed|led|created|designed|worked|supported|prepared|analy[sz]ed|implemented|maintained|delivered|assisted|helped|responsible|responsible for|contributed|delivered|عملت|عمل|طورت|أدرت|قمت|ساهمت)\b/i;
 const PLACEHOLDER_CREDENTIAL = /^(?:none|no|n\/?a|nil|nothing|لا يوجد|لا توجد|بدون|لا شيء)[\s.!]*$/i;

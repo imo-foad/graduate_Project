@@ -134,6 +134,10 @@ done
 note_suite "onboarding-integration.log"
 timeout 300s node tests/integration/onboarding.integration.mjs 2>&1 | tee "$LOG_DIR/onboarding-integration.log"
 
+# Email-first registration against the local synthetic registry: no SMS, real Mailpit confirmation.
+note_suite "registration-integration.log"
+timeout 300s node tests/integration/registration.integration.mjs 2>&1 | tee "$LOG_DIR/registration-integration.log"
+
 # Provision/apply the typed synthetic university data twice; target guards run before Auth/database I/O.
 echo "Provisioning and applying synthetic university dataset (local only)"
 note_suite "university-seed.log"

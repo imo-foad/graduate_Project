@@ -6,7 +6,7 @@ This document describes a controlled process only. It does not authorize deploym
 
 **Local disposable environment:** developer Supabase CLI stack and CI runner. Synthetic fixtures, local-only Auth Admin provisioning and local platform-admin demo grants are allowed. The synthetic university seed requires API localhost:54321 and DB localhost:54322 and must never target hosted infrastructure.
 
-**Staging:** use a separate Supabase project and separate credentials, only after explicit owner approval. Do not import local synthetic administrator grants or synthetic phone accounts. Use isolated non-production provider credentials. Institutional identity and SMS integrations remain BLOCKED_EXTERNAL until real contracts and credentials are supplied.
+**Staging:** use a separate Supabase project and separate credentials, only after explicit owner approval. Do not import local synthetic administrator grants or synthetic phone accounts. Use isolated non-production provider credentials. The demo MVP uses the local synthetic identity registry and email confirmation; it does not require institutional or SMS credentials. Any production claim of real institutional verification or SMS delivery remains BLOCKED_EXTERNAL until real contracts and credentials are supplied.
 
 **Production:** use production-specific secrets in protected environment secret storage. Never commit .env files, service-role keys, database passwords, provider secrets or DEMO_PASSWORD. No local fixture provisioning, no synthetic admin grants and no shared credentials.
 

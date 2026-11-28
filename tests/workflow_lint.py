@@ -30,7 +30,7 @@ class Workflow(unittest.TestCase):
     def test_existing_jobs_preserved(self):
         self.assertTrue({"static", "database"} <= set(WF["jobs"]))
         r = runs("static")
-        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
+        for needle in ("npm test", "tests/contract_openapi.py", "bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh", "node --check tests/integration/local-supabase.integration.mjs", "node --check tests/integration/cv-parse.integration.mjs", "node --check tests/integration/career-cohort.integration.mjs", "node --check tests/integration/onboarding.integration.mjs", "node --check tests/integration/registration.integration.mjs", "node --check tests/integration/rate-limits.integration.mjs"): self.assertIn(needle, r)
 
     def test_database_job_prepares_and_runs_real_tests(self):
         r = runs("database")
@@ -88,7 +88,7 @@ class Scripts(unittest.TestCase):
     def test_run_script_covers_all_phases_and_migrations(self):
         s = SCRIPTS["scripts/run-db-tests.sh"]
         for needle in ("supabase start", "supabase db reset", "build:seed", "supabase test db", "concurrency.sh", "run-local-integrations.sh", "schema_migrations",
-                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "set -euo pipefail"):
+                       "01_register_for_event", "05_recommendation_cache", "06_company_workflow", "07_admin_company_controls", "08_cv_parse_lifecycle", "09_cv_intelligence", "10_cancelled_scope_guard", "12_social_feed", "13_social_moderation_rate_limits", "14_secure_graduate_onboarding", "15_three_type_scope", "16_cv_cleanup_queue", "17_recommendation_availability", "18_identity_and_organizations", "20_synthetic_identity_registry", "set -euo pipefail"):
             self.assertIn(needle, s)
         self.assertNotRegex(s, r"0001\.\.0006")
         migration_dir = os.path.join(ROOT, "supabase/migrations")
@@ -145,6 +145,7 @@ class Scripts(unittest.TestCase):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
         self.assertIn("onboarding.integration.mjs", runner)
+        self.assertIn("registration.integration.mjs", runner)
         self.assertIn("rate-limits.integration.mjs", runner)
         onboarding_http = code(open(os.path.join(ROOT, "tests/integration/onboarding.integration.mjs")).read())
         rate_http = code(open(os.path.join(ROOT, "tests/integration/rate-limits.integration.mjs")).read())
@@ -208,7 +209,7 @@ class Scripts(unittest.TestCase):
         pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
         race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
-        for needle in ("21_cv_cleanup_lifecycle", "Files=19", "bash tests/db/cv-cleanup-concurrency.sh"):
+        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "Files=21", "bash tests/db/cv-cleanup-concurrency.sh"):
             self.assertIn(needle, runner)
         self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
         self.assertIn("createdUsers.push(targetId)", integration)

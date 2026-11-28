@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Alumni Connect AI - Backend API (Supabase)
   version: 0.1.0
-  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token, public phone-first registration and SMS OTP verification endpoints do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
+  description: 'Contract for the Android team. Every request needs `apikey: <anon key>`. Password/refresh token, public email-first registration and the Supabase email confirmation endpoint do not need a user JWT; every other operation needs `Authorization: Bearer <user JWT>`. Registration verifies a fake `SYNTH-...` identifier against the local synthetic registry; it is not real institutional or National-ID verification and it never requests an SMS OTP. Phone is optional contact data. Errors from RPCs: HTTP status = business meaning, `message` = stable error code, `details` = optional extra. All data is synthetic. Match Score is NOT a hiring probability.'
 servers:
 - url: '{supabaseUrl}'
   variables:
@@ -344,14 +344,20 @@ components:
     PasswordGrantRequest:
       type: object
       required:
-      - phone
       - password
       additionalProperties: false
+      oneOf:
+      - required: [email]
+      - required: [phone]
       properties:
+        email:
+          type: string
+          format: email
+          description: Canonical identifier for email-first accounts.
         phone:
           type: string
           pattern: '^\+[1-9][0-9]{7,14}$'
-          description: E.164 phone number. National ID is never used as a login credential.
+          description: Legacy synthetic demo accounts only. Phone is not used for new registrations.
         password:
           type: string
           format: password
@@ -438,7 +444,7 @@ components:
         401 UNAUTHENTICATED.
         403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
         404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, IDENTITY_NOT_FOUND.
-        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, IDENTITY_ALREADY_LINKED, PHONE_NOT_VERIFIED, IDENTITY_NOT_VERIFIED.
+        409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, IDENTITY_ALREADY_LINKED, EMAIL_ALREADY_REGISTERED, EMAIL_NOT_VERIFIED, IDENTITY_NOT_VERIFIED.
         422 NOT_A_JOB, NOT_APPLICATION_OPPORTUNITY, CV_REQUIRED, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
         INVALID_INPUT, START_BEFORE_PREVIOUS, COMPANY_NOT_VERIFIED, OPPORTUNITY_NOT_EDITABLE, OPPORTUNITY_NOT_DRAFT,
         OPPORTUNITY_NOT_OPEN, APPLICATION_NOT_UPDATABLE, INVALID_STATUS_TRANSITION,
@@ -605,7 +611,7 @@ paths:
           description: Updated
   /functions/v1/register:
     post:
-      summary: Public phone-first signup; requires institutional National ID verification and sends a mandatory phone OTP
+      summary: Public email-first signup against the local synthetic identity registry; requests an email confirmation and never sends an SMS OTP
       security:
       - apiKeyAuth: []
       requestBody:
@@ -615,25 +621,28 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [national_id, phone, password, full_name]
+              required: [email, password, full_name, synthetic_id]
               properties:
-                national_id: { type: string, minLength: 10, maxLength: 32 }
-                phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$' }
+                email: { type: string, format: email, maxLength: 254, description: Canonical Auth identifier and confirmation target. }
+                phone: { type: string, pattern: '^\+[1-9][0-9]{7,14}$', description: Optional contact data. Never used as an Auth identifier or for OTP. }
                 password: { type: string, format: password, minLength: 10, maxLength: 128 }
                 full_name: { type: string, minLength: 2, maxLength: 200 }
+                synthetic_id: { type: string, pattern: '^SYNTH-[A-Z0-9]+(-[A-Z0-9]+)*$', maxLength: 48, description: 'Fake demo identifier from the local registry, e.g. SYNTH-STUDENT-0001. A real National ID is rejected.' }
+                resend_confirmation: { type: boolean, default: false, description: 'Set true only when the user explicitly asks for another confirmation email. Normal retries are idempotent and do not send again.' }
       responses:
-        '202': { description: 'PENDING_OTP; confirm the SMS code and complete registration' }
-        '409': { description: 'PHONE_ALREADY_REGISTERED or IDENTITY_ALREADY_LINKED' }
-        '422': { description: 'Invalid input or institutional verification rejected' }
-        '503': { description: 'IDENTITY_PROVIDER_UNAVAILABLE, OTP_DELIVERY_FAILED, or REGISTRATION_RETRY_UNAVAILABLE. Resubmitting the exact pending phone + National-ID digest pair resends OTP without creating a second Auth user; a retry never changes the pending account password.' }
+        '202': { description: 'PENDING_EMAIL_VERIFICATION. email_confirmation is REQUESTED for a new message, RESENT for an explicit resend, or ALREADY_REQUESTED for an idempotent retry; email_delivery is always UNCONFIRMED until independently verified. Auth accepting the request is not proof of delivery.' }
+        '409': { description: 'PHONE_ALREADY_REGISTERED, EMAIL_ALREADY_REGISTERED or IDENTITY_ALREADY_LINKED' }
+        '422': { description: 'Invalid input, INVALID_RESEND_CONFIRMATION, INVALID_SYNTHETIC_ID, or SYNTHETIC_IDENTITY_NOT_FOUND' }
+        '429': { description: 'EMAIL_RESEND_COOLDOWN (includes retry_after_seconds) or EMAIL_RESEND_MAX_ATTEMPTS. An explicit resend is limited to five attempts with a 60-second cooldown.' }
+        '503': { description: 'SYNTHETIC_REGISTRY_UNAVAILABLE, EMAIL_CONFIRMATION_REQUEST_FAILED, REGISTRATION_RETRY_UNAVAILABLE, or REGISTRATION_EMAIL_STATE_UNAVAILABLE.' }
   /functions/v1/finalize-registration:
     post:
-      summary: Activate the pending phone-first account after Supabase confirms SMS OTP and the institution has verified at least one identity
+      summary: Activate the pending email-first account after Supabase confirms the email and at least one synthetic identity is associated
       responses:
-        '200': { description: 'Account activated; requires a confirmed Auth phone and at least one VERIFIED human identity' }
+        '200': { description: 'Account activated; requires auth.users.email_confirmed_at and at least one VERIFIED human identity' }
         '401': { description: 'UNAUTHENTICATED' }
         '403': { description: 'ACCOUNT_UNAVAILABLE' }
-        '409': { description: 'PHONE_NOT_VERIFIED or IDENTITY_NOT_VERIFIED' }
+        '409': { description: 'EMAIL_NOT_VERIFIED or IDENTITY_NOT_VERIFIED' }
         '500': { description: 'REGISTRATION_FINALIZE_FAILED' }
   /rest/v1/opportunities:
     get:
@@ -730,11 +739,11 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/finalize_registration:
     post:
-      summary: Complete phone-first registration after OTP confirmation and institutional identity verification
+      summary: Complete email-first registration after email confirmation and synthetic identity association
       responses:
         '200':
-          description: '{account_status: ACTIVE, verified_identities: n}. Requires auth.users.phone_confirmed_at and
-            at least one VERIFIED human identity.'
+          description: '{account_status: ACTIVE, verified_identities: n, email_verified_at}. Requires auth.users.email_confirmed_at
+            and at least one VERIFIED human identity.'
         4XX:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/list_my_identities:

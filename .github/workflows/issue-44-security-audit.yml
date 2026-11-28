@@ -1,0 +1,82 @@
+name: issue-44-public-secret-audit
+
+on:
+  push:
+    branches:
+      - security/issue-44-audit-main-2026-11-27
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - ".github/workflows/issue-44-security-audit.yml"
+      - ".github/workflows/issue-44-artifact-forensics.yml"
+      - "scripts/security/issue-44-audit.py"
+      - "scripts/security/issue-44-artifact-forensics.py"
+      - "scripts/security/issue-44-gitleaks.toml"
+      - "tests/security/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+  pull-requests: read
+  security-events: read
+
+concurrency:
+  group: issue-44-public-secret-audit-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Full public repository secret exposure audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: Checkout audit branch and full history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install and verify pinned Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="8.30.1"
+          EXPECTED_SHA256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+          INSTALL_DIR="$RUNNER_TEMP/gitleaks-$VERSION"
+          mkdir -p "$INSTALL_DIR"
+          ARCHIVE="$RUNNER_TEMP/gitleaks_${VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v$VERSION/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            --output "$ARCHIVE"
+          printf '%s  %s\n' "$EXPECTED_SHA256" "$ARCHIVE" | sha256sum --check --status
+          tar -xzf "$ARCHIVE" -C "$INSTALL_DIR" gitleaks
+          chmod 700 "$INSTALL_DIR/gitleaks"
+          "$INSTALL_DIR/gitleaks" version
+          "$INSTALL_DIR/gitleaks" --help > "$RUNNER_TEMP/gitleaks-root-help.txt"
+          "$INSTALL_DIR/gitleaks" git --help > "$RUNNER_TEMP/gitleaks-git-help.txt"
+          "$INSTALL_DIR/gitleaks" dir --help > "$RUNNER_TEMP/gitleaks-dir-help.txt"
+          grep -q -- '--redact' "$RUNNER_TEMP/gitleaks-root-help.txt"
+          grep -q -- '--log-opts' "$RUNNER_TEMP/gitleaks-git-help.txt"
+          grep -q -- '--report-path' "$RUNNER_TEMP/gitleaks-dir-help.txt"
+          echo "GITLEAKS_VERSION=$VERSION CHECKSUM=VERIFIED CLI_HELP=READ"
+
+      - name: Scan history, files, Actions logs/artifacts and public discussion
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/security/issue-44-audit.py

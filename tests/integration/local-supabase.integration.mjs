@@ -145,31 +145,32 @@ try {
   const projectedRows = Array.isArray(candidateProjection.json?.opportunities)
     ? candidateProjection.json.opportunities
     : [];
-  console.info("recommendation candidate diagnostics", JSON.stringify({
+  const rawActiveScopedCount = rawRows.filter((row) =>
+    row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length;
+  const rawCompanyOwnedCount = rawRows.filter((row) => row.company_id !== null).length;
+  const candidateTypeCounts = projectedRows.reduce((out, row) => {
+    out[row.type] = (out[row.type] ?? 0) + 1;
+    return out;
+  }, {});
+  const candidateErrorPresent = Boolean(
+    candidateProjection.json?.message ?? candidateProjection.json?.error ?? candidateProjection.text
+  );
+  // Public CI logs contain aggregate diagnostics only; never print synthetic identifiers or response bodies.
+  const recommendationDiagnostics = {
     raw_status: rawCatalogue.status,
     raw_count: rawRows.length,
-    raw_active_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
-    raw_company_owned: rawRows.filter((row) => row.company_id !== null).length,
-    raw_examples: rawRows.slice(0, 5).map(({ seed_key, type, status, company_id, company_verification_status }) =>
-      ({ seed_key, type, status, company_id, company_verification_status })),
+    raw_active_scoped_count: rawActiveScopedCount,
+    raw_company_owned_count: rawCompanyOwnedCount,
     candidate_status: candidateProjection.status,
-    candidate_error: candidateProjection.json?.message ?? candidateProjection.json?.error ?? null,
+    candidate_error_present: candidateErrorPresent,
     candidate_count: projectedRows.length,
-    candidate_types: projectedRows.reduce((out, row) => {
-      out[row.type] = (out[row.type] ?? 0) + 1;
-      return out;
-    }, {}),
-    candidate_examples: projectedRows.slice(0, 5).map(({ id, type, title, eligibility_failures }) =>
-      ({ id, type, title, eligibility_failures })),
-  }));
+    candidate_types: candidateTypeCounts,
+  };
+  console.info("recommendation candidate diagnostics", JSON.stringify(recommendationDiagnostics));
   pass("recommendation SQL candidate projection returns active, rankable listings",
     candidateProjection.status === 200 && Array.isArray(candidateProjection.json?.opportunities) &&
       candidateProjection.json.opportunities.length > 0,
-    { status: candidateProjection.status, diagnostics: {
-      raw_open_scoped: rawRows.filter((row) => row.status === "ACTIVE" && ["JOB", "INTERNSHIP", "TRAINING"].includes(row.type)).length,
-      candidate_count: projectedRows.length,
-      candidate_types: projectedRows.reduce((out, row) => { out[row.type] = (out[row.type] ?? 0) + 1; return out; }, {}),
-    }, body: candidateProjection.json ?? candidateProjection.text });
+    { status: candidateProjection.status, diagnostics: recommendationDiagnostics });
   const first = await request("/functions/v1/recommend", {
     method: "POST", headers: headers(a.token, { "Content-Type": "application/json" }), body: "{}",
   });

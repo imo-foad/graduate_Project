@@ -1,0 +1,171 @@
+name: issue-44-incremental-unscanned-artifact-audit
+
+on:
+  push:
+    branches:
+      - security/issue-44-audit-main-2026-11-27
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: issue-44-incremental-artifact-audit-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  incremental:
+    name: Incremental inventory and defer active runs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    outputs:
+      deferred_run_ids: ${{ steps.scan.outputs.deferred_run_ids }}
+    steps:
+      - name: Checkout audit scanner
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install and verify pinned Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$RUNNER_TEMP/gitleaks-8.30.1"
+          mkdir -p "$INSTALL_DIR"
+          ARCHIVE="$INSTALL_DIR/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" \
+            --output "$ARCHIVE"
+          printf '%s  %s\n' \
+            "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" \
+            "$ARCHIVE" | sha256sum --check --status
+          tar -xzf "$ARCHIVE" -C "$INSTALL_DIR" gitleaks
+          chmod 700 "$INSTALL_DIR/gitleaks"
+          "$INSTALL_DIR/gitleaks" version
+
+      - name: Run scanner safety self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/security/issue-44-artifact-forensics.py
+          python3 -m unittest discover -s tests/security -p 'test_issue_44_artifact_forensics.py' -v
+
+      - name: Inventory the prior unscanned scope and defer active runs
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          ISSUE_44_DEFER_ONLY: "1"
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
+          ISSUE_44_PRIOR_RUN_CUTOFF: "2026-11-27T05:00:29Z"
+          ISSUE_44_PRIOR_ARTIFACT_CUTOFF: "2026-11-27T05:01:29Z"
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/security/issue-44-artifact-forensics.py
+
+  deferred-rescan:
+    name: Scan the prior scope after deferred runs complete
+    needs: incremental
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: Checkout the same audit revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install and verify pinned Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$RUNNER_TEMP/gitleaks-8.30.1"
+          mkdir -p "$INSTALL_DIR"
+          ARCHIVE="$INSTALL_DIR/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" \
+            --output "$ARCHIVE"
+          printf '%s  %s\n' \
+            "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" \
+            "$ARCHIVE" | sha256sum --check --status
+          tar -xzf "$ARCHIVE" -C "$INSTALL_DIR" gitleaks
+          chmod 700 "$INSTALL_DIR/gitleaks"
+          "$INSTALL_DIR/gitleaks" version
+
+      - name: Wait for the deferred workflow runs (never print response bodies)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DEFERRED_RUN_IDS: ${{ needs.incremental.outputs.deferred_run_ids }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          token = os.environ["GITHUB_TOKEN"]
+          run_ids = [int(item) for item in os.environ["DEFERRED_RUN_IDS"].split(",") if item]
+          deadline = time.monotonic() + 320 * 60
+          pending = set(run_ids)
+
+          while pending:
+              completed = set()
+              for run_id in sorted(pending):
+                  request = urllib.request.Request(
+                      f"https://api.github.com/repos/{repo}/actions/runs/{run_id}",
+                      headers={
+                          "Accept": "application/vnd.github+json",
+                          "Authorization": f"Bearer {token}",
+                          "X-GitHub-Api-Version": "2022-11-28",
+                      },
+                  )
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          payload = json.load(response)
+                  except urllib.error.HTTPError as error:
+                      print(f"DEFERRED_RUN_LOOKUP_FAILED id={run_id} http={error.code}")
+                      raise SystemExit(2)
+                  except (urllib.error.URLError, TimeoutError, OSError):
+                      print(f"DEFERRED_RUN_LOOKUP_FAILED id={run_id} transport=unavailable")
+                      raise SystemExit(2)
+                  if payload.get("status") == "completed":
+                      completed.add(run_id)
+              pending -= completed
+              print("DEFERRED_RUNS_COMPLETED=" + str(len(run_ids) - len(pending)) + "/" + str(len(run_ids)))
+              if pending:
+                  if time.monotonic() >= deadline:
+                      print("DEFERRED_RUN_WAIT_TIMEOUT=" + ",".join(str(item) for item in sorted(pending)))
+                      raise SystemExit(2)
+                  time.sleep(30)
+          print("ALL_DEFERRED_RUNS_COMPLETED=" + ",".join(str(item) for item in run_ids))
+          PY
+
+      - name: Rescan completed deferred Actions logs and artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          RUNNER_TEMP: ${{ runner.temp }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITLEAKS_BIN: ${{ runner.temp }}/gitleaks-8.30.1/gitleaks
+          ISSUE_44_PRIOR_RUN_CUTOFF: "2026-11-27T05:00:29Z"
+          ISSUE_44_PRIOR_ARTIFACT_CUTOFF: "2026-11-27T05:01:29Z"
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/security/issue-44-artifact-forensics.py

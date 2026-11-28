@@ -124,6 +124,15 @@ async function login(user) {
   const finalized = await rpc(token, "finalize_registration");
   assert.equal(finalized.status, 200, "finalize email-first registration for " + user.label + ": " + finalized.text.slice(0, 200));
   assert.equal(finalized.json?.account_status, "ACTIVE", "verified synthetic identity activates " + user.label);
+
+  const graduateCount = sql(`select count(*) from public.graduate_profiles where profile_id = '${user.id}'`);
+  const expectedGraduateCount = user.identityType === "GRADUATE" ? "1" : "0";
+  pass(user.label + " receives a graduate profile only for GRADUATE identity",
+    graduateCount === expectedGraduateCount, { expected: expectedGraduateCount, actual: graduateCount });
+
+  const humanActorCount = sql(`select count(*) from public.social_actors where actor_type = 'HUMAN' and profile_id = '${user.id}' and company_id is null and is_active`);
+  pass(user.label + " receives one server-provisioned HUMAN social actor", humanActorCount === "1",
+    { expected: "1", actual: humanActorCount });
   return { ...user, token };
 }
 
@@ -204,7 +213,7 @@ async function main() {
         ('${companyId}', '${viewer.id}', 'VIEWER')`);
 
   // --- Scenario A: student personal publishing, text then image, then delete ----------------------
-  pass("student has no graduate profile", sql(`select count(*) from public.graduate_profiles where graduate_id = '${student.id}'`) === "0");
+  pass("student has no graduate profile", sql(`select count(*) from public.graduate_profiles where profile_id = '${student.id}'`) === "0");
   const studentActor = await personalActor(student);
   pass("student personal actor can publish", studentActor.can_publish === true);
 
@@ -325,7 +334,7 @@ async function main() {
   pass("removed share leaves the feed", findPost(await feed(student.token), share.json.share_post_id) === null);
 
   // --- Scenario C: faculty publishing without a graduate profile ----------------------------------
-  pass("faculty has no graduate profile", sql(`select count(*) from public.graduate_profiles where graduate_id = '${faculty.id}'`) === "0");
+  pass("faculty has no graduate profile", sql(`select count(*) from public.graduate_profiles where profile_id = '${faculty.id}'`) === "0");
   const facultyActor = await personalActor(faculty);
   const facultyPost = await rpc(faculty.token, "create_social_post_v2", { p_actor_id: facultyActor.actor_id, p_content: "Synthetic faculty post" });
   pass("faculty publishes as themselves", facultyPost.status === 200);

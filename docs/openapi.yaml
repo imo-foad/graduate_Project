@@ -1415,6 +1415,8 @@ paths:
       responses:
         '204':
           description: Updated
+        4XX:
+          $ref: '#/components/responses/BusinessError'
   /rest/v1/projects:
     get:
       summary: Own projects

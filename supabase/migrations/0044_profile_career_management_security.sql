@@ -69,7 +69,7 @@ begin
   perform 1
     from public.graduate_profiles gp
    where gp.profile_id = v_uid
-   for update;
+   for no key update;
 
   select *
     into cur

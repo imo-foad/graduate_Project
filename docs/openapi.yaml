@@ -442,7 +442,7 @@ components:
       description: >-
         HTTP status mirrors the business meaning; body.message is a stable code.
         401 UNAUTHENTICATED.
-        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER.
+        403 ADMIN_REQUIRED, NOT_COMPANY_MEMBER, GRADUATE_PROFILE_REQUIRED.
         404 OPPORTUNITY_NOT_FOUND, APPLICATION_NOT_FOUND, REGISTRATION_NOT_FOUND, CV_NOT_FOUND, COMPANY_NOT_FOUND, USER_NOT_FOUND, MEMBERSHIP_NOT_FOUND, JOB_NOT_FOUND, RECOMMENDATION_NOT_FOUND, CV_SUGGESTION_NOT_FOUND, ACCOUNT_DELETION_REQUEST_NOT_FOUND, ADMIN_MEMBERSHIP_NOT_FOUND, IDENTITY_NOT_FOUND.
         409 ALREADY_APPLIED, ALREADY_REGISTERED, ALREADY_CANCELLED, EVENT_FULL, CURRENT_JOB_CONFLICT, LAST_ACTIVE_ADMIN, ADMIN_ACCOUNT_REQUIRES_MANUAL_TRANSFER, ACCOUNT_DELETION_REQUEST_NOT_REVIEWABLE, ACCOUNT_DELETION_ALREADY_OPEN, IDENTITY_ALREADY_LINKED, EMAIL_ALREADY_REGISTERED, EMAIL_NOT_VERIFIED, IDENTITY_NOT_VERIFIED.
         422 NOT_A_JOB, NOT_APPLICATION_OPPORTUNITY, CV_REQUIRED, NOT_REGISTRABLE, OPPORTUNITY_CLOSED, REGISTRATION_CLOSED, NOT_ELIGIBLE, CANNOT_WITHDRAW,
@@ -1219,7 +1219,7 @@ paths:
           $ref: '#/components/responses/BusinessError'
   /rest/v1/rpc/set_current_job:
     post:
-      summary: Close the current job (if any) and start a new one atomically; sets employment_status=EMPLOYED
+      summary: Graduate-only. Requires the caller's own graduate_profiles row (403 GRADUATE_PROFILE_REQUIRED). Closes the current job (if any) and starts a new one atomically; sets employment_status=EMPLOYED.
       requestBody:
         content:
           application/json:
@@ -1411,7 +1411,7 @@ paths:
         '200':
           description: OK
     patch:
-      summary: Update full_name / avatar_url only
+      summary: Update full_name only. avatar_url is server-managed; no client avatar upload endpoint is currently supported.
       responses:
         '204':
           description: Updated

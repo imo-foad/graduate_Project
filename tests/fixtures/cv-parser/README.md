@@ -66,3 +66,5 @@ The current main baseline passes the original Arabic attached-skill and two-colu
 This extension adds Arabic month names with Arabic-Indic digits, `YYYY-MM` dates, alternate
 Arabic/English headings, and an ambiguous employer/title negative control. Ambiguous two-part headers
 without a recognized role token are intentionally left unassigned.
+
+A second positioned PDF regression now separates the role and employer into opposite columns on the same baseline. The layout reconstruction pairs them only when the left fragment resembles a known role and the right fragment carries a conservative organization marker; ordinary sidebar skill labels remain in the sidebar stream.

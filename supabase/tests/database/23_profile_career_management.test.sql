@@ -76,6 +76,23 @@ as $f$
   ) || p_sql
 $f$;
 
+-- Called under the current authenticated role; RLS applies as INVOKER and the row count is observable.
+create function tests.try_cross_account_history_update()
+returns integer
+language plpgsql
+set search_path = ''
+as $f$
+declare
+  v_changed integer;
+begin
+  update public.career_history
+     set job_title = 'Forged Cross Account Title'
+   where graduate_id = tests.id('graduate_a');
+  get diagnostics v_changed = row_count;
+  return v_changed;
+end
+$f$;
+
 select tests.mk_user('student_a', 'STUDENT');
 select tests.mk_user('student_b', 'STUDENT');
 select tests.mk_user('faculty_a', 'FACULTY');
@@ -397,13 +414,7 @@ select is(
 );
 
 select is(
-  (with changed as (
-    update public.career_history
-       set job_title = 'Forged Cross Account Title'
-     where graduate_id = tests.id('graduate_a')
-    returning id
-  )
-  select count(*)::int from changed),
+  tests.try_cross_account_history_update(),
   0,
   'RLS prevents another user from modifying graduate career-history rows'
 );

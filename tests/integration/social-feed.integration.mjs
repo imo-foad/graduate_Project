@@ -260,8 +260,8 @@ async function main() {
   pass("student deletes own post", (await rpc(student.token, "delete_social_post", { p_post_id: imagePost.json.post_id })).status === 200);
   pass("deleted post leaves the feed", findPost(await feed(graduate.token), imagePost.json.post_id) === null);
   pass("deleted post image becomes unreadable", (await downloadImage(graduate.token, studentPath)).status >= 400);
-  const queued = sql(`select status from private.social_media_cleanup_queue q join public.social_post_media m on m.id = q.media_id where m.storage_path = '${studentPath}'`).trim();
-  pass("deleted post media is queued for Storage cleanup", queued === "" ? sql(`select count(*) from private.social_media_cleanup_queue where storage_path = '${studentPath}'`) === "1" : true);
+  const queued = sql(`select q.status from private.social_media_cleanup_queue q join public.social_post_media m on m.id = q.media_id where m.storage_path = '${studentPath}'`).trim();
+  pass("deleted post media is queued for Storage cleanup", queued === "PENDING", { status: queued });
   const claim = await rpc(service, "claim_social_media_cleanup", { p_limit: 10 });
   pass("service role claims cleanup work", claim.status === 200 && claim.json.length >= 1, claim.text);
   const claimed = claim.json.find((item) => item.storage_path === studentPath);

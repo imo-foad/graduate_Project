@@ -331,8 +331,8 @@ select is((select shared_post ->> 'actor_name' from public.get_social_feed_v2()
   'a share shows the original author');
 select is((select actor_name from public.get_social_feed_v2() where id = tests.id('student_share')), 'student',
   'a share shows the sharing actor');
-select is((select shared_post ->> 'post_id' from public.get_social_feed_v2() where id = tests.id('student_share')),
-  tests.id('grad_post')::text, 'a share references the original post');
+select is((select shared_post ->> 'id' from public.get_social_feed_v2() where id = tests.id('student_share')),
+  tests.id('grad_post')::text, 'a share references the original post using the documented id field');
 select throws_ok($q$select public.share_social_post(tests.human_actor('student'), tests.id('grad_post'), null)$q$,
   'PT409', 'ALREADY_SHARED', 'one actor cannot share the same post twice');
 

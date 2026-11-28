@@ -489,7 +489,7 @@ begin
          private.social_post_media_json(sp.id),
          case when sp.shared_post_id is null then null else (
            select jsonb_build_object(
-             'post_id', o.id,
+             'id', o.id,
              'actor_id', o.actor_id,
              'actor_type', oac.actor_type,
              'actor_name', oac.display_name,

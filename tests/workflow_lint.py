@@ -147,6 +147,14 @@ class Scripts(unittest.TestCase):
         self.assertIn("social-feed.integration.mjs", runner)
         social_http = code(open(os.path.join(ROOT, "tests/integration/social-feed.integration.mjs")).read())
         self.assertIn("SOCIAL FEED HTTP INTEGRATION PASSED", social_http)
+        self.assertIn('registration_flow: "EMAIL_IDENTITY_VERIFICATION"', social_http)
+        self.assertIn("record_identity_verification", social_http)
+        self.assertIn("finalize_registration", social_http)
+        self.assertIn("SYNTHETIC_SEED", social_http)
+        self.assertNotIn("insert into public.profiles", social_http.lower(),
+                         "Auth's handle_new_user trigger provisions profiles and the HUMAN actor")
+        self.assertIn("where profile_id = '${student.id}'", social_http)
+        self.assertIn("where profile_id = '${faculty.id}'", social_http)
         for needle in ("get_my_social_actors", "create_social_post_v2", "share_social_post", "unshare_social_post",
                        "/functions/v1/social-media-upload", "social-media", "SOCIAL_ACTOR_NOT_AUTHORIZED",
                        "SOCIAL_MEDIA_INVALID", "ALREADY_SHARED", "assertLocalDbUrl"):

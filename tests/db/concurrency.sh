@@ -135,30 +135,63 @@ check "concurrent saves: row belongs to one of the payloads" "1" "$(P -c "select
 check "concurrent saves: version unchanged by saving" "$V2" "$(ver)"
 
 
-# --- 8. concurrent duplicate Social Feed likes: one private edge, all other callers get ALREADY_LIKED
+# --- 8. concurrent duplicate Social Feed likes: one HUMAN actor edge, all others get ALREADY_LIKED
 SOCIAL_UID=$(usr 3)
-SOCIAL_POST=$(P -c "insert into public.social_posts (author_id, content) values ('$SOCIAL_UID', '${TAG} social-like-race') returning id")
-[ -n "$SOCIAL_POST" ] || { echo "PREREQUISITE FAILED: could not create Social Feed race post" >&2; exit 2; }
+[ -n "$SOCIAL_UID" ] || { echo "PREREQUISITE FAILED: usr 3 did not return an Auth user id" >&2; exit 2; }
+
+# These Auth fixtures use an email address, so handle_new_user must have provisioned both profile rows.
+SOCIAL_PROFILE_COUNT=$(P -c "select count(*) from public.profiles where id = '$SOCIAL_UID' and account_status = 'ACTIVE'")
+[ "$SOCIAL_PROFILE_COUNT" = "1" ] || {
+  echo "PREREQUISITE FAILED: social race user has no ACTIVE public.profiles row (user=$SOCIAL_UID)" >&2
+  exit 2
+}
+SOCIAL_GRADUATE_COUNT=$(P -c "select count(*) from public.graduate_profiles where profile_id = '$SOCIAL_UID'")
+[ "$SOCIAL_GRADUATE_COUNT" = "1" ] || {
+  echo "PREREQUISITE FAILED: social race fixture requires the matching graduate_profiles row for legacy author_id / graduate_id (user=$SOCIAL_UID)" >&2
+  exit 2
+}
+
+# The actor is server-provisioned by profiles_social_actor. Never invent or insert an actor id in this fixture.
+SOCIAL_ACTOR_COUNT=$(P -c "select count(*) from public.social_actors where actor_type = 'HUMAN' and profile_id = '$SOCIAL_UID' and company_id is null and is_active")
+[ "$SOCIAL_ACTOR_COUNT" = "1" ] || {
+  echo "PREREQUISITE FAILED: expected exactly one active server-provisioned HUMAN actor for profile $SOCIAL_UID; found $SOCIAL_ACTOR_COUNT" >&2
+  exit 2
+}
+SOCIAL_ACTOR=$(P -c "select id from public.social_actors where actor_type = 'HUMAN' and profile_id = '$SOCIAL_UID' and company_id is null and is_active")
+[ -n "$SOCIAL_ACTOR" ] || { echo "PREREQUISITE FAILED: HUMAN social actor lookup returned no id for $SOCIAL_UID" >&2; exit 2; }
+
+SOCIAL_POST=$(P -c "insert into public.social_posts (author_id, actor_id, author_profile_id, content) values ('$SOCIAL_UID', '$SOCIAL_ACTOR', '$SOCIAL_UID', '${TAG} social-like-race') returning id")
+[ -n "$SOCIAL_POST" ] || { echo "PREREQUISITE FAILED: could not create Social Feed race post with author_id, actor_id and author_profile_id" >&2; exit 2; }
+[ "$(P -c "select count(*) from public.social_posts where id = '$SOCIAL_POST' and author_id = '$SOCIAL_UID' and actor_id = '$SOCIAL_ACTOR' and author_profile_id = '$SOCIAL_UID'")" = "1" ] || {
+  echo "PREREQUISITE FAILED: Social Feed race post does not reference the expected Graduate, HUMAN actor and author profile" >&2
+  exit 2
+}
 OUT=$(mktemp); TEMP_FILES+=("$OUT"); PIDS=()
 for i in $(seq 1 $N); do
   ( as_user "$SOCIAL_UID" "select public.like_social_post('$SOCIAL_POST')" >>"$OUT" ) & PIDS+=($!)
 done
 wait "${PIDS[@]}"
-check "Social Feed like race: exactly one like edge" "1" "$(P -c "select count(*) from public.social_post_likes where post_id='$SOCIAL_POST' and graduate_id='$SOCIAL_UID'")"
-check "Social Feed like race: all competing requests rejected as ALREADY_LIKED" "$((N-1))" "$(count_matches 'ALREADY_LIKED' "$OUT")"
+# Actor identity is the new model's uniqueness key. Keep a separate assertion for the legacy
+# graduate_id projection because this particular synthetic account has a real Graduate profile.
+check "Social Feed like race: exactly one edge for the HUMAN actor" "1" "$(P -c "select count(*) from public.social_post_likes where post_id='$SOCIAL_POST' and actor_id='$SOCIAL_ACTOR'")"
+check "Social Feed like race: legacy graduate_id is retained for the Graduate fixture" "1" "$(P -c "select count(*) from public.social_post_likes where post_id='$SOCIAL_POST' and actor_id='$SOCIAL_ACTOR' and graduate_id='$SOCIAL_UID'")"
+check "Social Feed like race: all competing legacy RPC calls rejected as ALREADY_LIKED" "$((N-1))" "$(count_matches 'ALREADY_LIKED' "$OUT")"
 rm -f "$OUT"
 
-# --- 8b. concurrent duplicate shares as one actor: one row, every other caller gets ALREADY_SHARED
-SOCIAL_ACTOR=$(P -c "select id from public.social_actors where actor_type = 'HUMAN' and profile_id = '$SOCIAL_UID'")
-[ -n "$SOCIAL_ACTOR" ] || { echo "PREREQUISITE FAILED: no personal social actor for the race user" >&2; exit 2; }
-SHARE_TARGET=$(P -c "insert into public.social_posts (actor_id, author_profile_id, content) values ('$SOCIAL_ACTOR', '$SOCIAL_UID', '${TAG} share-target') returning id")
-[ -n "$SHARE_TARGET" ] || { echo "PREREQUISITE FAILED: could not create the share target" >&2; exit 2; }
+# --- 8b. concurrent duplicate shares as one HUMAN actor: one row, every other caller gets ALREADY_SHARED
+# Reuse the same server-provisioned actor, but give the share target complete post ownership metadata.
+SHARE_TARGET=$(P -c "insert into public.social_posts (author_id, actor_id, author_profile_id, content) values ('$SOCIAL_UID', '$SOCIAL_ACTOR', '$SOCIAL_UID', '${TAG} share-target') returning id")
+[ -n "$SHARE_TARGET" ] || { echo "PREREQUISITE FAILED: could not create the share target with complete ownership metadata" >&2; exit 2; }
+[ "$(P -c "select count(*) from public.social_posts where id = '$SHARE_TARGET' and moderation_status = 'VISIBLE' and actor_id = '$SOCIAL_ACTOR' and author_profile_id = '$SOCIAL_UID' and author_id = '$SOCIAL_UID'")" = "1" ] || {
+  echo "PREREQUISITE FAILED: share target is not visible or its actor/profile/graduate references do not match" >&2
+  exit 2
+}
 OUT=$(mktemp); TEMP_FILES+=("$OUT"); PIDS=()
 for i in $(seq 1 $N); do
   ( as_user "$SOCIAL_UID" "select public.share_social_post('$SOCIAL_ACTOR', '$SHARE_TARGET')" >>"$OUT" ) & PIDS+=($!)
 done
 wait "${PIDS[@]}"
-check "Social share race: exactly one share row" "1" "$(P -c "select count(*) from public.social_posts where shared_post_id='$SHARE_TARGET' and actor_id='$SOCIAL_ACTOR'")"
+check "Social share race: exactly one share row for the HUMAN actor" "1" "$(P -c "select count(*) from public.social_posts where shared_post_id='$SHARE_TARGET' and actor_id='$SOCIAL_ACTOR' and author_profile_id='$SOCIAL_UID' and author_id='$SOCIAL_UID'")"
 check "Social share race: all competing requests rejected as ALREADY_SHARED" "$((N-1))" "$(count_matches 'ALREADY_SHARED' "$OUT")"
 rm -f "$OUT"
 

@@ -159,3 +159,14 @@ test("company verification invalidates recommendation caches with an explicit al
   assert.ok(finalDefinition.includes("where profile_id is not null"),
     "intentional all-graduate invalidation must include the explicit non-null primary-key predicate");
 });
+
+test("profile and career management hardening remains forward-only and least-privilege", () => {
+  const migration = readMigration("0044_profile_career_management_security.sql");
+  assert.match(migration, /revoke update \\(avatar_url\\) on public\\.profiles from authenticated/i);
+  assert.match(migration, /create policy ch_insert[\\s\\S]*graduate_profiles/i);
+  assert.match(migration, /GRADUATE_PROFILE_REQUIRED/);
+  const currentJob = finalFunctions(allMigrationsSql()).get("set_current_job");
+  assert.ok(currentJob);
+  assert.match(currentJob.body, /GRADUATE_PROFILE_REQUIRED/);
+  assert.match(currentJob.body, /START_BEFORE_PREVIOUS/);
+});

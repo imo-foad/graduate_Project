@@ -162,8 +162,8 @@ test("company verification invalidates recommendation caches with an explicit al
 
 test("profile and career management hardening remains forward-only and least-privilege", () => {
   const migration = readMigration("0044_profile_career_management_security.sql");
-  assert.match(migration, /revoke update \\(avatar_url\\) on public\\.profiles from authenticated/i);
-  assert.match(migration, /create policy ch_insert[\\s\\S]*graduate_profiles/i);
+  assert.ok(migration.includes("revoke update (avatar_url) on public.profiles from authenticated"));
+  assert.ok(migration.includes("create policy ch_insert") && migration.includes("from public.graduate_profiles gp"));
   assert.match(migration, /GRADUATE_PROFILE_REQUIRED/);
   const currentJob = finalFunctions(allMigrationsSql()).get("set_current_job");
   assert.ok(currentJob);

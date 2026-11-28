@@ -146,9 +146,24 @@ note_suite "http-integration.log"
 timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
 note_suite "cv-parse-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
-note_suite "cv-cleanup-integration.log"
-timeout 300s node tests/integration/cv-cleanup.integration.mjs 2>&1 | tee "$LOG_DIR/cv-cleanup-integration.log"
-publish_suite_result "cv-cleanup-integration.log"
+# Repeat the focused cleanup suites three consecutive times to expose race flakiness.
+for attempt in 1 2 3; do
+  echo "=== CV cleanup HTTP integration pass $attempt/3"
+  note_suite "cv-cleanup-integration-$attempt.log"
+  timeout 300s node tests/integration/cv-cleanup.integration.mjs 2>&1 | tee "$LOG_DIR/cv-cleanup-integration-$attempt.log"
+  publish_suite_result "cv-cleanup-integration-$attempt.log"
+
+  echo "=== CV Storage upload race pass $attempt/3"
+  note_suite "cv-storage-upload-race-$attempt.log"
+  timeout 300s bash tests/db/cv-storage-upload-race.sh 2>&1 | tee "$LOG_DIR/cv-storage-upload-race-$attempt.log"
+  publish_suite_result "cv-storage-upload-race-$attempt.log"
+done
+
+for attempt in 1 2 3; do
+  echo "=== CV cleanup runner unit tests pass $attempt/3"
+  note_suite "cv-cleanup-runner-$attempt.log"
+  node --experimental-strip-types --disable-warning=ExperimentalWarning --test tests/cv-cleanup-runner.test.ts 2>&1 | tee "$LOG_DIR/cv-cleanup-runner-$attempt.log"
+done
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
 note_suite "cv-parser-robustness.log"
 timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"

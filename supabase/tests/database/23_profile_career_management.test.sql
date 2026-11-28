@@ -120,13 +120,10 @@ select is(has_table_privilege('anon', 'public.career_history', 'SELECT'), false,
   'anonymous viewers cannot read private career history');
 
 -- ---- Basic profiles are independent of graduate_profiles --------------------------------------------
-select tests.as_user(
-  tests.id('student_a'),
-  format(
-    'update public.profiles set full_name = %L where id = auth.uid()',
-    'Student A Updated'
-  )
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('student_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.profiles set full_name = 'Student A Updated' where id = auth.uid();
+reset role;
 select is(
   (select full_name from public.profiles where id = tests.id('student_a')),
   'Student A Updated',
@@ -149,14 +146,10 @@ select is(
 );
 
 -- A forged target id does not change another account's basic profile.
-select tests.as_user(
-  tests.id('student_a'),
-  format(
-    'update public.profiles set full_name = %L where id = %L',
-    'Forged Cross Account Name',
-    tests.id('student_b')
-  )
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('student_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.profiles set full_name = 'Forged Cross Account Name' where id = tests.id('student_b');
+reset role;
 select is(
   (select full_name from public.profiles where id = tests.id('student_b')),
   'student_b',
@@ -164,15 +157,15 @@ select is(
 );
 
 -- ---- Professional profile PATCH semantics and privacy settings -------------------------------------
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$update public.graduate_profiles
-        set major = 'Software Engineering',
-            location = 'Synthetic Test City',
-            career_interests = array['BACKEND'],
-            work_preferences = '{"remote":true}'::jsonb
-      where profile_id = auth.uid()$q$
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.graduate_profiles
+   set major = 'Software Engineering',
+       location = 'Synthetic Test City',
+       career_interests = array['BACKEND'],
+       work_preferences = '{"remote":true}'::jsonb
+ where profile_id = auth.uid();
+reset role;
 select is(
   (select major from public.graduate_profiles where profile_id = tests.id('graduate_a')),
   'Software Engineering',
@@ -185,12 +178,10 @@ select is(
 );
 
 -- An omitted field is unchanged by PATCH; only the explicitly supplied field changes.
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$update public.graduate_profiles
-        set department = 'Computer Science'
-      where profile_id = auth.uid()$q$
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.graduate_profiles set department = 'Computer Science' where profile_id = auth.uid();
+reset role;
 select is(
   (select location from public.graduate_profiles where profile_id = tests.id('graduate_a')),
   'Synthetic Test City',
@@ -203,19 +194,19 @@ select is(
 );
 
 -- Null clears a nullable text field; empty string is a distinct, persisted value in this schema.
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$update public.graduate_profiles set location = null where profile_id = auth.uid()$q$
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.graduate_profiles set location = null where profile_id = auth.uid();
+reset role;
 select is(
   (select location from public.graduate_profiles where profile_id = tests.id('graduate_a')),
   null,
   'explicit null clears a nullable professional field'
 );
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$update public.graduate_profiles set location = '' where profile_id = auth.uid()$q$
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.graduate_profiles set location = '' where profile_id = auth.uid();
+reset role;
 select is(
   (select location from public.graduate_profiles where profile_id = tests.id('graduate_a')),
   '',
@@ -245,12 +236,12 @@ select throws_ok(
   '23514', null,
   'unsupported hidden fields are rejected by the existing constraint'
 );
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$update public.graduate_profiles
-        set hidden_fields = array['location','career_interests','work_preferences','avatar_url']
-      where profile_id = auth.uid()$q$
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.graduate_profiles
+   set hidden_fields = array['location','career_interests','work_preferences','avatar_url']
+ where profile_id = auth.uid();
+reset role;
 select is(
   (select hidden_fields from public.graduate_profiles where profile_id = tests.id('graduate_a')),
   array['location','career_interests','work_preferences','avatar_url']::text[],
@@ -281,17 +272,11 @@ select throws_ok(
 );
 
 -- ---- Career history lifecycle, date semantics, ownership and preservation -----------------------------
-select tests.as_user(
-  tests.id('graduate_a'),
-  format(
-    'insert into public.career_history(graduate_id,company_name,job_title,start_date,end_date) values (%L,%L,%L,%L,%L)',
-    tests.id('graduate_a'),
-    'Synthetic Employer',
-    'Junior Engineer',
-    '2020-01-01',
-    '2020-01-01'
-  )
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+insert into public.career_history(graduate_id,company_name,job_title,start_date,end_date)
+values (auth.uid(),'Synthetic Employer','Junior Engineer','2020-01-01','2020-01-01');
+reset role;
 select is(
   (select count(*)::int from public.career_history
     where graduate_id = tests.id('graduate_a')
@@ -304,15 +289,12 @@ select is(
   'a past career record allows equal start/end dates and receives SELF_REPORTED source'
 );
 
-select tests.as_user(
-  tests.id('graduate_a'),
-  format(
-    'update public.career_history set job_title = %L where graduate_id = %L and company_name = %L',
-    'Software Engineer',
-    tests.id('graduate_a'),
-    'Synthetic Employer'
-  )
-);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+update public.career_history
+   set job_title = 'Software Engineer'
+ where graduate_id = auth.uid() and company_name = 'Synthetic Employer';
+reset role;
 select is(
   (select job_title from public.career_history
     where graduate_id = tests.id('graduate_a') and company_name = 'Synthetic Employer'),
@@ -402,9 +384,8 @@ select is(
 );
 
 -- Another account cannot read or mutate the graduate's private career history.
-select tests.as_user(tests.id('student_b'), $q$
-  select 1
-$q$);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('student_b'), 'role', 'authenticated')::text, true);
+set local role authenticated;
 select is(
   (select count(*)::int from public.career_history
     where graduate_id = tests.id('graduate_a')),
@@ -412,7 +393,6 @@ select is(
   'after switching to an unrelated caller, RLS returns no foreign career-history rows'
 );
 
-select tests.as_user(tests.id('student_b'), '');
 select is(
   (with changed as (
     update public.career_history

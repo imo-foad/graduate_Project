@@ -9,19 +9,46 @@
       "language": "en",
       "layout": "single-column",
       "content": [
-        { "line": "PROFILE" },
-        { "line": "Backend engineer focused on reliable services." },
-        { "line": "COURSES" },
-        { "line": "Advanced SQL | Coursera | 2024 | 12 hours" },
-        { "line": "CERTIFICATIONS" },
-        { "line": "AWS Certified Cloud Practitioner | Amazon Web Services | 2023" },
-        { "line": "WORK EXPERIENCE" },
-        { "line": "Backend Engineer | Northstar Systems" },
-        { "line": "Jan 2021 - Feb 2023" },
-        { "line": "Built integrations using Python, Docker and PostgreSQL. Kotlin and SQL." }
+        {
+          "line": "PROFILE"
+        },
+        {
+          "line": "Backend engineer focused on reliable services."
+        },
+        {
+          "line": "COURSES"
+        },
+        {
+          "line": "Advanced SQL | Coursera | 2024 | 12 hours"
+        },
+        {
+          "line": "CERTIFICATIONS"
+        },
+        {
+          "line": "AWS Certified Cloud Practitioner | Amazon Web Services | 2023"
+        },
+        {
+          "line": "WORK EXPERIENCE"
+        },
+        {
+          "line": "Backend Engineer | Northstar Systems"
+        },
+        {
+          "line": "Jan 2021 - Feb 2023"
+        },
+        {
+          "line": "Built integrations using Python, Docker and PostgreSQL. Kotlin and SQL."
+        }
       ],
       "expected": {
-        "skills": ["PYTHON", "DOCKER", "POSTGRESQL", "KOTLIN", "SQL", "AWS"],
+        "skills": [
+          "PYTHON",
+          "DOCKER",
+          "POSTGRESQL",
+          "KOTLIN",
+          "SQL",
+          "AWS"
+        ],
         "experiences": [
           {
             "company_name": "Northstar Systems",
@@ -32,13 +59,28 @@
           }
         ],
         "certifications": [
-          { "title": "AWS Certified Cloud Practitioner", "issuer": "Amazon Web Services", "issue_date": "2023-01-01" }
+          {
+            "title": "AWS Certified Cloud Practitioner",
+            "issuer": "Amazon Web Services",
+            "issue_date": "2023-01-01"
+          }
         ],
         "courses": [
-          { "title": "Advanced SQL", "issuer": "Coursera", "issue_date": "2024-01-01", "duration": "12 hours" }
+          {
+            "title": "Advanced SQL",
+            "issuer": "Coursera",
+            "issue_date": "2024-01-01",
+            "duration": "12 hours"
+          }
         ]
       },
-      "must_not_extract": { "skills": ["JAVA", "JAVASCRIPT", "AGILE"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "JAVASCRIPT",
+          "AGILE"
+        ]
+      }
     },
     {
       "id": "ar-docx-attached-skills-v1",
@@ -46,18 +88,44 @@
       "language": "ar",
       "layout": "single-column",
       "content": [
-        { "line": "السيرة المهنية", "heading": true },
-        { "line": "الخبرة العملية", "heading": true },
-        { "line": "مهندس برمجيات | شركة النور" },
-        { "line": "03/2020 - 11/2021" },
-        { "line": "عمل على خدمات داخلية باستخدام Python وSQL وKotlin." },
-        { "line": "الشهادات", "heading": true },
-        { "line": "شهادة الأمن السيبراني | أكاديمية التقنية | 2022" },
-        { "line": "الدورات التدريبية", "heading": true },
-        { "line": "تحليل البيانات | منصة التعلم | 2023 | 6 weeks" }
+        {
+          "line": "السيرة المهنية",
+          "heading": true
+        },
+        {
+          "line": "الخبرة العملية",
+          "heading": true
+        },
+        {
+          "line": "مهندس برمجيات | شركة النور"
+        },
+        {
+          "line": "03/2020 - 11/2021"
+        },
+        {
+          "line": "عمل على خدمات داخلية باستخدام Python وSQL وKotlin."
+        },
+        {
+          "line": "الشهادات",
+          "heading": true
+        },
+        {
+          "line": "شهادة الأمن السيبراني | أكاديمية التقنية | 2022"
+        },
+        {
+          "line": "الدورات التدريبية",
+          "heading": true
+        },
+        {
+          "line": "تحليل البيانات | منصة التعلم | 2023 | 6 weeks"
+        }
       ],
       "expected": {
-        "skills": ["PYTHON", "SQL", "KOTLIN"],
+        "skills": [
+          "PYTHON",
+          "SQL",
+          "KOTLIN"
+        ],
         "experiences": [
           {
             "company_name": "شركة النور",
@@ -68,13 +136,27 @@
           }
         ],
         "certifications": [
-          { "title": "شهادة الأمن السيبراني", "issuer": "أكاديمية التقنية", "issue_date": "2022-01-01" }
+          {
+            "title": "شهادة الأمن السيبراني",
+            "issuer": "أكاديمية التقنية",
+            "issue_date": "2022-01-01"
+          }
         ],
         "courses": [
-          { "title": "تحليل البيانات", "issuer": "منصة التعلم", "issue_date": "2023-01-01", "duration": "6 weeks" }
+          {
+            "title": "تحليل البيانات",
+            "issuer": "منصة التعلم",
+            "issue_date": "2023-01-01",
+            "duration": "6 weeks"
+          }
         ]
       },
-      "must_not_extract": { "skills": ["JAVA", "JAVASCRIPT"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "JAVASCRIPT"
+        ]
+      }
     },
     {
       "id": "en-pdf-merged-header-v1",
@@ -82,17 +164,37 @@
       "language": "en",
       "layout": "single-column-with-gap",
       "content": [
-        { "line": "EXPERIENCE" },
-        { "line": "Product Analyst\tBright Analytics" },
-        { "line": "2019 - 2020" },
-        { "line": "Analysed product reports with Excel and SQL." },
-        { "line": "CERTIFICATIONS" },
-        { "line": "Professional Scrum Master | Scrum.org | 2020" },
-        { "line": "COURSES" },
-        { "line": "Agile Delivery | Open Learning | 2019" }
+        {
+          "line": "EXPERIENCE"
+        },
+        {
+          "line": "Product Analyst\tBright Analytics"
+        },
+        {
+          "line": "2019 - 2020"
+        },
+        {
+          "line": "Analysed product reports with Excel and SQL."
+        },
+        {
+          "line": "CERTIFICATIONS"
+        },
+        {
+          "line": "Professional Scrum Master | Scrum.org | 2020"
+        },
+        {
+          "line": "COURSES"
+        },
+        {
+          "line": "Agile Delivery | Open Learning | 2019"
+        }
       ],
       "expected": {
-        "skills": ["EXCEL", "SQL", "AGILE"],
+        "skills": [
+          "EXCEL",
+          "SQL",
+          "AGILE"
+        ],
         "experiences": [
           {
             "company_name": "Bright Analytics",
@@ -103,13 +205,26 @@
           }
         ],
         "certifications": [
-          { "title": "Professional Scrum Master", "issuer": "Scrum.org", "issue_date": "2020-01-01" }
+          {
+            "title": "Professional Scrum Master",
+            "issuer": "Scrum.org",
+            "issue_date": "2020-01-01"
+          }
         ],
         "courses": [
-          { "title": "Agile Delivery", "issuer": "Open Learning", "issue_date": "2019-01-01" }
+          {
+            "title": "Agile Delivery",
+            "issuer": "Open Learning",
+            "issue_date": "2019-01-01"
+          }
         ]
       },
-      "must_not_extract": { "skills": ["KOTLIN", "REACT"] }
+      "must_not_extract": {
+        "skills": [
+          "KOTLIN",
+          "REACT"
+        ]
+      }
     },
     {
       "id": "en-pdf-two-column-sidebar-v1",
@@ -141,7 +256,14 @@
         }
       ],
       "expected": {
-        "skills": ["PYTHON", "DOCKER", "KOTLIN", "POSTGRESQL", "GIT", "AWS"],
+        "skills": [
+          "PYTHON",
+          "DOCKER",
+          "KOTLIN",
+          "POSTGRESQL",
+          "GIT",
+          "AWS"
+        ],
         "experiences": [
           {
             "company_name": "Northstar Systems",
@@ -152,13 +274,30 @@
           }
         ],
         "certifications": [
-          { "title": "AWS Certified Developer", "issuer": "Amazon Web Services", "issue_date": "2022-01-01" }
+          {
+            "title": "AWS Certified Developer",
+            "issuer": "Amazon Web Services",
+            "issue_date": "2022-01-01"
+          }
         ],
         "courses": [
-          { "title": "Advanced Python", "issuer": "Coursera", "issue_date": "2023-01-01", "duration": "8 weeks" }
+          {
+            "title": "Advanced Python",
+            "issuer": "Coursera",
+            "issue_date": "2023-01-01",
+            "duration": "8 weeks"
+          }
         ]
       },
-      "must_not_extract": { "skills": ["JAVA", "REACT"], "courses": ["BSc Computer Science"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "REACT"
+        ],
+        "courses": [
+          "BSc Computer Science"
+        ]
+      }
     },
     {
       "id": "en-docx-table-experience-v1",
@@ -166,20 +305,58 @@
       "language": "en",
       "layout": "table",
       "content": [
-        { "line": "WORK EXPERIENCE", "heading": true },
+        {
+          "line": "WORK EXPERIENCE",
+          "heading": true
+        },
         {
           "table": [
-            ["Backend Engineer", "Northstar Systems", "Jan 2021 - Feb 2023"],
-            ["Data Analyst", "Insight Analytics", "2020 - 2021"]
+            [
+              "Backend Engineer",
+              "Northstar Systems",
+              "Jan 2021 - Feb 2023"
+            ],
+            [
+              "Data Analyst",
+              "Insight Analytics",
+              "2020 - 2021"
+            ]
           ]
         },
-        { "line": "CERTIFICATIONS", "heading": true },
-        { "table": [["Microsoft Power BI Data Analyst", "Microsoft", "2024"]] },
-        { "line": "COURSES", "heading": true },
-        { "table": [["Data Visualization with Tableau", "Tableau", "2023", "4 weeks"]] }
+        {
+          "line": "CERTIFICATIONS",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "Microsoft Power BI Data Analyst",
+              "Microsoft",
+              "2024"
+            ]
+          ]
+        },
+        {
+          "line": "COURSES",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "Data Visualization with Tableau",
+              "Tableau",
+              "2023",
+              "4 weeks"
+            ]
+          ]
+        }
       ],
       "expected": {
-        "skills": ["POWER_BI", "DATA_VISUALIZATION", "TABLEAU"],
+        "skills": [
+          "POWER_BI",
+          "DATA_VISUALIZATION",
+          "TABLEAU"
+        ],
         "experiences": [
           {
             "company_name": "Northstar Systems",
@@ -197,7 +374,11 @@
           }
         ],
         "certifications": [
-          { "title": "Microsoft Power BI Data Analyst", "issuer": "Microsoft", "issue_date": "2024-01-01" }
+          {
+            "title": "Microsoft Power BI Data Analyst",
+            "issuer": "Microsoft",
+            "issue_date": "2024-01-01"
+          }
         ],
         "courses": [
           {
@@ -208,7 +389,12 @@
           }
         ]
       },
-      "must_not_extract": { "skills": ["EXCEL", "SQL"] }
+      "must_not_extract": {
+        "skills": [
+          "EXCEL",
+          "SQL"
+        ]
+      }
     },
     {
       "id": "en-pdf-alternate-headings-v1",
@@ -216,17 +402,39 @@
       "language": "en",
       "layout": "single-column",
       "content": [
-        { "line": "LICENSES" },
-        { "line": "Microsoft Power BI Data Analyst | Microsoft | 2024" },
-        { "line": "EMPLOYMENT HISTORY" },
-        { "line": "Data Analyst at Insight Analytics" },
-        { "line": "2021 - 2022" },
-        { "line": "Prepared reports with Power BI, Excel, Tableau and Statistics." },
-        { "line": "PROFESSIONAL DEVELOPMENT" },
-        { "line": "Data Visualization with Tableau | Tableau | 2023 | 4 weeks" }
+        {
+          "line": "LICENSES"
+        },
+        {
+          "line": "Microsoft Power BI Data Analyst | Microsoft | 2024"
+        },
+        {
+          "line": "EMPLOYMENT HISTORY"
+        },
+        {
+          "line": "Data Analyst at Insight Analytics"
+        },
+        {
+          "line": "2021 - 2022"
+        },
+        {
+          "line": "Prepared reports with Power BI, Excel, Tableau and Statistics."
+        },
+        {
+          "line": "PROFESSIONAL DEVELOPMENT"
+        },
+        {
+          "line": "Data Visualization with Tableau | Tableau | 2023 | 4 weeks"
+        }
       ],
       "expected": {
-        "skills": ["POWER_BI", "EXCEL", "TABLEAU", "STATISTICS", "DATA_VISUALIZATION"],
+        "skills": [
+          "POWER_BI",
+          "EXCEL",
+          "TABLEAU",
+          "STATISTICS",
+          "DATA_VISUALIZATION"
+        ],
         "experiences": [
           {
             "company_name": "Insight Analytics",
@@ -237,7 +445,11 @@
           }
         ],
         "certifications": [
-          { "title": "Microsoft Power BI Data Analyst", "issuer": "Microsoft", "issue_date": "2024-01-01" }
+          {
+            "title": "Microsoft Power BI Data Analyst",
+            "issuer": "Microsoft",
+            "issue_date": "2024-01-01"
+          }
         ],
         "courses": [
           {
@@ -248,7 +460,12 @@
           }
         ]
       },
-      "must_not_extract": { "skills": ["AGILE", "KOTLIN"] }
+      "must_not_extract": {
+        "skills": [
+          "AGILE",
+          "KOTLIN"
+        ]
+      }
     },
     {
       "id": "ar-docx-table-mixed-v1",
@@ -256,17 +473,72 @@
       "language": "ar-en",
       "layout": "table",
       "content": [
-        { "line": "المهارات التقنية", "heading": true },
-        { "table": [["Python", "SQL", "Kotlin"], ["Docker", "Git"]] },
-        { "line": "الخبرات", "heading": true },
-        { "table": [["مطور تطبيقات", "شركة الرواد", "01/2019 - 12/2020"]] },
-        { "line": "الشهادات المهنية", "heading": true },
-        { "table": [["شهادة إدارة المشاريع", "معهد الإدارة", "2021"]] },
-        { "line": "الدورات", "heading": true },
-        { "table": [["أساسيات البيانات", "منصة التعلم", "2022", "8 weeks"]] }
+        {
+          "line": "المهارات التقنية",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "Python",
+              "SQL",
+              "Kotlin"
+            ],
+            [
+              "Docker",
+              "Git"
+            ]
+          ]
+        },
+        {
+          "line": "الخبرات",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "مطور تطبيقات",
+              "شركة الرواد",
+              "01/2019 - 12/2020"
+            ]
+          ]
+        },
+        {
+          "line": "الشهادات المهنية",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "شهادة إدارة المشاريع",
+              "معهد الإدارة",
+              "2021"
+            ]
+          ]
+        },
+        {
+          "line": "الدورات",
+          "heading": true
+        },
+        {
+          "table": [
+            [
+              "أساسيات البيانات",
+              "منصة التعلم",
+              "2022",
+              "8 weeks"
+            ]
+          ]
+        }
       ],
       "expected": {
-        "skills": ["PYTHON", "SQL", "KOTLIN", "DOCKER", "GIT"],
+        "skills": [
+          "PYTHON",
+          "SQL",
+          "KOTLIN",
+          "DOCKER",
+          "GIT"
+        ],
         "experiences": [
           {
             "company_name": "شركة الرواد",
@@ -277,13 +549,27 @@
           }
         ],
         "certifications": [
-          { "title": "شهادة إدارة المشاريع", "issuer": "معهد الإدارة", "issue_date": "2021-01-01" }
+          {
+            "title": "شهادة إدارة المشاريع",
+            "issuer": "معهد الإدارة",
+            "issue_date": "2021-01-01"
+          }
         ],
         "courses": [
-          { "title": "أساسيات البيانات", "issuer": "منصة التعلم", "issue_date": "2022-01-01", "duration": "8 weeks" }
+          {
+            "title": "أساسيات البيانات",
+            "issuer": "منصة التعلم",
+            "issue_date": "2022-01-01",
+            "duration": "8 weeks"
+          }
         ]
       },
-      "must_not_extract": { "skills": ["JAVA", "REACT"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "REACT"
+        ]
+      }
     },
     {
       "id": "en-docx-bullets-v1",
@@ -291,19 +577,52 @@
       "language": "en",
       "layout": "bullets",
       "content": [
-        { "line": "PROFILE" },
-        { "line": "Test automation engineer." },
-        { "line": "WORK EXPERIENCE", "heading": true },
-        { "line": "QA Engineer | Quality Works", "bullet": true },
-        { "line": "Feb 2019 - Jan 2021", "bullet": true },
-        { "line": "Built UI tests with JavaScript and Docker.", "bullet": true },
-        { "line": "CERTIFICATIONS", "heading": true },
-        { "line": "ISTQB Foundation Level | ISTQB | 2020", "bullet": true },
-        { "line": "COURSES", "heading": true },
-        { "line": "Continuous Integration | DevOps Academy | 2021 | 6 hours", "bullet": true }
+        {
+          "line": "PROFILE"
+        },
+        {
+          "line": "Test automation engineer."
+        },
+        {
+          "line": "WORK EXPERIENCE",
+          "heading": true
+        },
+        {
+          "line": "QA Engineer | Quality Works",
+          "bullet": true
+        },
+        {
+          "line": "Feb 2019 - Jan 2021",
+          "bullet": true
+        },
+        {
+          "line": "Built UI tests with JavaScript and Docker.",
+          "bullet": true
+        },
+        {
+          "line": "CERTIFICATIONS",
+          "heading": true
+        },
+        {
+          "line": "ISTQB Foundation Level | ISTQB | 2020",
+          "bullet": true
+        },
+        {
+          "line": "COURSES",
+          "heading": true
+        },
+        {
+          "line": "Continuous Integration | DevOps Academy | 2021 | 6 hours",
+          "bullet": true
+        }
       ],
       "expected": {
-        "skills": ["JAVASCRIPT", "DOCKER", "TESTING", "DEVOPS_CI_CD"],
+        "skills": [
+          "JAVASCRIPT",
+          "DOCKER",
+          "TESTING",
+          "DEVOPS_CI_CD"
+        ],
         "experiences": [
           {
             "company_name": "Quality Works",
@@ -314,7 +633,11 @@
           }
         ],
         "certifications": [
-          { "title": "ISTQB Foundation Level", "issuer": "ISTQB", "issue_date": "2020-01-01" }
+          {
+            "title": "ISTQB Foundation Level",
+            "issuer": "ISTQB",
+            "issue_date": "2020-01-01"
+          }
         ],
         "courses": [
           {
@@ -325,7 +648,13 @@
           }
         ]
       },
-      "must_not_extract": { "skills": ["JAVA", "KOTLIN", "AGILE"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "KOTLIN",
+          "AGILE"
+        ]
+      }
     },
     {
       "id": "en-pdf-current-and-numeric-dates-v1",
@@ -333,16 +662,37 @@
       "language": "en",
       "layout": "single-column",
       "content": [
-        { "line": "EXPERIENCE" },
-        { "line": "Frontend Developer | Bright Apps" },
-        { "line": "01/2020 - 12/2021" },
-        { "line": "Built interfaces with React, TypeScript and HTML/CSS." },
-        { "line": "Full Stack Developer | Cloud Nine" },
-        { "line": "03/2022 - Present" },
-        { "line": "Working with Node.js, MongoDB and REST APIs." }
+        {
+          "line": "EXPERIENCE"
+        },
+        {
+          "line": "Frontend Developer | Bright Apps"
+        },
+        {
+          "line": "01/2020 - 12/2021"
+        },
+        {
+          "line": "Built interfaces with React, TypeScript and HTML/CSS."
+        },
+        {
+          "line": "Full Stack Developer | Cloud Nine"
+        },
+        {
+          "line": "03/2022 - Present"
+        },
+        {
+          "line": "Working with Node.js, MongoDB and REST APIs."
+        }
       ],
       "expected": {
-        "skills": ["REACT", "TYPESCRIPT", "HTML_CSS", "NODE_JS", "MONGODB", "REST_API"],
+        "skills": [
+          "REACT",
+          "TYPESCRIPT",
+          "HTML_CSS",
+          "NODE_JS",
+          "MONGODB",
+          "REST_API"
+        ],
         "experiences": [
           {
             "company_name": "Bright Apps",
@@ -361,7 +711,12 @@
         "certifications": [],
         "courses": []
       },
-      "must_not_extract": { "skills": ["JAVA", "KOTLIN"] }
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "KOTLIN"
+        ]
+      }
     },
     {
       "id": "negative-en-pdf-v1",
@@ -369,22 +724,56 @@
       "language": "en",
       "layout": "negative",
       "content": [
-        { "line": "PROFILE" },
-        { "line": "I enjoy hiking and painting with watercolours." },
-        { "line": "EDUCATION" },
-        { "line": "BSc Computer Science, coursework covered relational theory and SQLite storage." },
-        { "line": "CERTIFICATIONS" },
-        { "line": "None" },
-        { "line": "COURSES" },
-        { "line": "N/A" },
-        { "line": "PROJECTS" },
-        { "line": "A personal photo blog; no professional tooling was used." }
+        {
+          "line": "PROFILE"
+        },
+        {
+          "line": "I enjoy hiking and painting with watercolours."
+        },
+        {
+          "line": "EDUCATION"
+        },
+        {
+          "line": "BSc Computer Science, coursework covered relational theory and SQLite storage."
+        },
+        {
+          "line": "CERTIFICATIONS"
+        },
+        {
+          "line": "None"
+        },
+        {
+          "line": "COURSES"
+        },
+        {
+          "line": "N/A"
+        },
+        {
+          "line": "PROJECTS"
+        },
+        {
+          "line": "A personal photo blog; no professional tooling was used."
+        }
       ],
-      "expected": { "skills": [], "experiences": [], "certifications": [], "courses": [] },
+      "expected": {
+        "skills": [],
+        "experiences": [],
+        "certifications": [],
+        "courses": []
+      },
       "must_not_extract": {
-        "skills": ["SQL", "JAVA", "PYTHON", "KOTLIN"],
-        "certifications": ["None"],
-        "courses": ["N/A"]
+        "skills": [
+          "SQL",
+          "JAVA",
+          "PYTHON",
+          "KOTLIN"
+        ],
+        "certifications": [
+          "None"
+        ],
+        "courses": [
+          "N/A"
+        ]
       }
     },
     {
@@ -393,19 +782,60 @@
       "language": "ar",
       "layout": "negative",
       "content": [
-        { "line": "نبذة", "heading": true },
-        { "line": "أحب القراءة والرياضة." },
-        { "line": "التعليم", "heading": true },
-        { "line": "بكالوريوس علوم الحاسب." },
-        { "line": "الشهادات", "heading": true },
-        { "line": "لا يوجد" },
-        { "line": "الدورات", "heading": true },
-        { "line": "لا توجد" },
-        { "line": "المشاريع", "heading": true },
-        { "line": "موقع شخصي بسيط." }
+        {
+          "line": "نبذة",
+          "heading": true
+        },
+        {
+          "line": "أحب القراءة والرياضة."
+        },
+        {
+          "line": "التعليم",
+          "heading": true
+        },
+        {
+          "line": "بكالوريوس علوم الحاسب."
+        },
+        {
+          "line": "الشهادات",
+          "heading": true
+        },
+        {
+          "line": "لا يوجد"
+        },
+        {
+          "line": "الدورات",
+          "heading": true
+        },
+        {
+          "line": "لا توجد"
+        },
+        {
+          "line": "المشاريع",
+          "heading": true
+        },
+        {
+          "line": "موقع شخصي بسيط."
+        }
       ],
-      "expected": { "skills": [], "experiences": [], "certifications": [], "courses": [] },
-      "must_not_extract": { "skills": ["SQL", "KOTLIN"], "certifications": ["لا يوجد"], "courses": ["لا توجد"] }
+      "expected": {
+        "skills": [],
+        "experiences": [],
+        "certifications": [],
+        "courses": []
+      },
+      "must_not_extract": {
+        "skills": [
+          "SQL",
+          "KOTLIN"
+        ],
+        "certifications": [
+          "لا يوجد"
+        ],
+        "courses": [
+          "لا توجد"
+        ]
+      }
     },
     {
       "id": "mixed-docx-certifications-courses-v1",
@@ -413,20 +843,49 @@
       "language": "ar-en",
       "layout": "single-column",
       "content": [
-        { "line": "الملف المهني", "heading": true },
-        { "line": "مهندس أمن معلومات." },
-        { "line": "الشهادات", "heading": true },
-        { "line": "CompTIA Security+ | CompTIA | 2022" },
-        { "line": "الدورات التدريبية", "heading": true },
-        { "line": "تحليل البيانات باستخدام Excel | منصة التعلم | 2023 | 10 hours" },
-        { "line": "المهارات", "heading": true },
-        { "line": "Cybersecurity, SIEM, Linux" }
+        {
+          "line": "الملف المهني",
+          "heading": true
+        },
+        {
+          "line": "مهندس أمن معلومات."
+        },
+        {
+          "line": "الشهادات",
+          "heading": true
+        },
+        {
+          "line": "CompTIA Security+ | CompTIA | 2022"
+        },
+        {
+          "line": "الدورات التدريبية",
+          "heading": true
+        },
+        {
+          "line": "تحليل البيانات باستخدام Excel | منصة التعلم | 2023 | 10 hours"
+        },
+        {
+          "line": "المهارات",
+          "heading": true
+        },
+        {
+          "line": "Cybersecurity, SIEM, Linux"
+        }
       ],
       "expected": {
-        "skills": ["CYBERSECURITY", "SIEM", "LINUX", "EXCEL"],
+        "skills": [
+          "CYBERSECURITY",
+          "SIEM",
+          "LINUX",
+          "EXCEL"
+        ],
         "experiences": [],
         "certifications": [
-          { "title": "CompTIA Security+", "issuer": "CompTIA", "issue_date": "2022-01-01" }
+          {
+            "title": "CompTIA Security+",
+            "issuer": "CompTIA",
+            "issue_date": "2022-01-01"
+          }
         ],
         "courses": [
           {
@@ -437,7 +896,12 @@
           }
         ]
       },
-      "must_not_extract": { "skills": ["PENETRATION_TESTING", "AGILE"] }
+      "must_not_extract": {
+        "skills": [
+          "PENETRATION_TESTING",
+          "AGILE"
+        ]
+      }
     },
     {
       "id": "en-pdf-multiple-entries-v1",
@@ -445,19 +909,43 @@
       "language": "en",
       "layout": "single-column",
       "content": [
-        { "line": "WORK EXPERIENCE" },
-        { "line": "Software Engineer | Alpha Labs" },
-        { "line": "2018 - 2019" },
-        { "line": "Wrote Java services." },
-        { "line": "Senior Software Engineer | Beta Works" },
-        { "line": "2019 - 2021" },
-        { "line": "Led Java and Kotlin migration." },
-        { "line": "Engineering Manager | Gamma Tech" },
-        { "line": "2021 - Present" },
-        { "line": "Managed eight engineers using Agile and Scrum." }
+        {
+          "line": "WORK EXPERIENCE"
+        },
+        {
+          "line": "Software Engineer | Alpha Labs"
+        },
+        {
+          "line": "2018 - 2019"
+        },
+        {
+          "line": "Wrote Java services."
+        },
+        {
+          "line": "Senior Software Engineer | Beta Works"
+        },
+        {
+          "line": "2019 - 2021"
+        },
+        {
+          "line": "Led Java and Kotlin migration."
+        },
+        {
+          "line": "Engineering Manager | Gamma Tech"
+        },
+        {
+          "line": "2021 - Present"
+        },
+        {
+          "line": "Managed eight engineers using Agile and Scrum."
+        }
       ],
       "expected": {
-        "skills": ["JAVA", "KOTLIN", "AGILE"],
+        "skills": [
+          "JAVA",
+          "KOTLIN",
+          "AGILE"
+        ],
         "experiences": [
           {
             "company_name": "Alpha Labs",
@@ -483,7 +971,204 @@
         "certifications": [],
         "courses": []
       },
-      "must_not_extract": { "skills": ["PYTHON", "REACT"] }
+      "must_not_extract": {
+        "skills": [
+          "PYTHON",
+          "REACT"
+        ]
+      }
+    },
+    {
+      "id": "ar-docx-arabic-months-and-headings-v1",
+      "format": "docx",
+      "language": "ar-en",
+      "layout": "single-column",
+      "content": [
+        {
+          "line": "الملف المهني",
+          "heading": true
+        },
+        {
+          "line": "الخبرات الوظيفية",
+          "heading": true
+        },
+        {
+          "line": "مطور تطبيقات | شركة المدار"
+        },
+        {
+          "line": "يناير ٢٠٢١ - مارس ٢٠٢٣"
+        },
+        {
+          "line": "طورت خدمات داخلية باستخدام SQL وKotlin."
+        },
+        {
+          "line": "الرخص المهنية",
+          "heading": true
+        },
+        {
+          "line": "شهادة إدارة الأنظمة | معهد التقنية | فبراير ٢٠٢٤"
+        },
+        {
+          "line": "التدريب والتطوير",
+          "heading": true
+        },
+        {
+          "line": "تحليل البيانات | مركز التدريب | أبريل ٢٠٢٢ | 12 hours"
+        },
+        {
+          "line": "المهارات",
+          "heading": true
+        },
+        {
+          "line": "SQL Kotlin"
+        }
+      ],
+      "expected": {
+        "skills": [
+          "SQL",
+          "KOTLIN"
+        ],
+        "experiences": [
+          {
+            "company_name": "شركة المدار",
+            "job_title": "مطور تطبيقات",
+            "start_date": "2021-01-01",
+            "end_date": "2023-03-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          {
+            "title": "شهادة إدارة الأنظمة",
+            "issuer": "معهد التقنية",
+            "issue_date": "2024-02-01"
+          }
+        ],
+        "courses": [
+          {
+            "title": "تحليل البيانات",
+            "issuer": "مركز التدريب",
+            "issue_date": "2022-04-01",
+            "duration": "12 hours"
+          }
+        ]
+      },
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "JAVASCRIPT"
+        ]
+      }
+    },
+    {
+      "id": "en-docx-iso-month-dates-v1",
+      "format": "docx",
+      "language": "en",
+      "layout": "single-column",
+      "content": [
+        {
+          "line": "CAREER HISTORY",
+          "heading": true
+        },
+        {
+          "line": "Platform Engineer | Cedar Systems"
+        },
+        {
+          "line": "2022-03 - 2024-07"
+        },
+        {
+          "line": "Maintained backend services with Docker and PostgreSQL."
+        },
+        {
+          "line": "LICENSES",
+          "heading": true
+        },
+        {
+          "line": "Cloud Security Associate | Cedar Academy | 2024-06"
+        },
+        {
+          "line": "PROFESSIONAL DEVELOPMENT",
+          "heading": true
+        },
+        {
+          "line": "Reliable APIs | Cedar Academy | 2023-09 | 5 weeks"
+        }
+      ],
+      "expected": {
+        "skills": [
+          "DOCKER",
+          "POSTGRESQL"
+        ],
+        "experiences": [
+          {
+            "company_name": "Cedar Systems",
+            "job_title": "Platform Engineer",
+            "start_date": "2022-03-01",
+            "end_date": "2024-07-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          {
+            "title": "Cloud Security Associate",
+            "issuer": "Cedar Academy",
+            "issue_date": "2024-06-01"
+          }
+        ],
+        "courses": [
+          {
+            "title": "Reliable APIs",
+            "issuer": "Cedar Academy",
+            "issue_date": "2023-09-01",
+            "duration": "5 weeks"
+          }
+        ]
+      },
+      "must_not_extract": {
+        "skills": [
+          "KOTLIN",
+          "JAVA"
+        ]
+      }
+    },
+    {
+      "id": "en-docx-ambiguous-employer-title-v1",
+      "format": "docx",
+      "language": "en",
+      "layout": "ambiguous",
+      "content": [
+        {
+          "line": "WORK EXPERIENCE",
+          "heading": true
+        },
+        {
+          "line": "Orion Group | Northwind Labs"
+        },
+        {
+          "line": "2020-01 - 2021-12"
+        },
+        {
+          "line": "Contributed to internal reporting."
+        }
+      ],
+      "expected": {
+        "skills": [],
+        "experiences": [
+          {
+            "start_date": "2020-01-01",
+            "end_date": "2021-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [],
+        "courses": []
+      },
+      "must_not_extract": {
+        "skills": [
+          "SQL",
+          "PYTHON"
+        ]
+      }
     }
   ]
 }

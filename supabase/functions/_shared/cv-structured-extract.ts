@@ -19,14 +19,17 @@ const HEADINGS: Record<string, string[]> = {
     "work experience", "professional experience", "employment history", "experience",
     "work history", "career history", "employment",
     "الخبرة العملية", "الخبرات العملية", "الخبرة", "الخبرات", "خبرة العمل",
+    "الخبرة الوظيفية", "الخبرات الوظيفية", "المسار المهني", "المسار الوظيفي", "الخبرات المهنية", "التاريخ الوظيفي",
   ],
   certification: [
     "certifications", "certificates", "licenses", "professional certifications",
     "certifications and licenses", "الشهادات", "الشهادات المهنية", "شهادات", "الشهادات والدورات",
+    "الرخص المهنية", "التراخيص المهنية", "اعتمادات مهنية",
   ],
   course: [
     "courses", "courses and training", "courses & training", "training", "professional development",
     "الدورات", "الكورسات", "الدورات التدريبية", "دورات تدريبية", "التدريب",
+    "التدريب والتطوير", "برامج التدريب", "التطوير المهني",
   ],
   ignored: [
     "education", "academic background", "projects", "skills", "technical skills", "core skills",
@@ -39,9 +42,19 @@ const MONTHS: Record<string, string> = {
   jan: "01", january: "01", feb: "02", february: "02", mar: "03", march: "03", apr: "04", april: "04", may: "05",
   jun: "06", june: "06", jul: "07", july: "07", aug: "08", august: "08", sep: "09", sept: "09", september: "09",
   oct: "10", october: "10", nov: "11", november: "11", dec: "12", december: "12",
+  "يناير": "01", "كانون الثاني": "01", "فبراير": "02", "شباط": "02", "مارس": "03",
+  "أبريل": "04", "ابريل": "04", "نيسان": "04", "مايو": "05", "أيار": "05",
+  "يونيو": "06", "حزيران": "06", "يوليو": "07", "تموز": "07", "أغسطس": "08",
+  "اغسطس": "08", "آب": "08", "سبتمبر": "09", "أيلول": "09", "أكتوبر": "10",
+  "اكتوبر": "10", "تشرين الأول": "10", "نوفمبر": "11", "تشرين الثاني": "11",
+  "ديسمبر": "12", "كانون الأول": "12",
 };
-const DATE_TOKEN = "(?:[A-Za-z]{3,9}\\s+)?(?:19|20)\\d{2}|(?:0?[1-9]|1[0-2])\\/(?:19|20)\\d{2}";
-const DATE_RANGE = new RegExp("(" + DATE_TOKEN + ")\\s*(?:-|–|—|to|until|through)\\s*(present|current|now|ongoing|(" + DATE_TOKEN + "))", "i");
+const DATE_YEAR = "(?:19|20)[0-9٠-٩۰-۹]{2}";
+const DATE_MONTH_NAME = "(?:[A-Za-z]{3,9}|يناير|كانون\\\\s+الثاني|فبراير|شباط|مارس|أبريل|ابريل|نيسان|مايو|أيار|يونيو|حزيران|يوليو|تموز|أغسطس|اغسطس|آب|سبتمبر|أيلول|أكتوبر|اكتوبر|تشرين\\\\s+الأول|نوفمبر|تشرين\\\\s+الثاني|ديسمبر|كانون\\\\s+الأول)";
+const DATE_TOKEN = "(?:" + DATE_MONTH_NAME + "\\\\s+)?" + DATE_YEAR +
+  "|(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})\\\\/(?:19|20)[0-9٠-٩۰-۹]{2}" +
+  "|(?:19|20)[0-9٠-٩۰-۹]{2}-(?:0?[1-9]|1[0-2]|[٠-٩۰-۹]{1,2})";
+const DATE_RANGE = new RegExp("(" + DATE_TOKEN + ")\\\\s*(?:-|–|—|to|until|through|إلى|حتى)\\\\s*(present|current|now|ongoing|مستمر|حاليا|حاليًا|(" + DATE_TOKEN + "))", "i");
 const ROLE = /developer|engineer|analyst|designer|intern|manager|consultant|administrator|specialist|architect|lead|officer|technician|tester|qa|scientist|researcher|coordinator|accountant|teacher|مدير|مهندس|محلل|مصمم|متدرب|مطور|باحث|فني|محاسب|معلم/i;
 const DESCRIPTION_START = /^(?:built|build|developed|develop|managed|led|created|designed|worked|supported|prepared|analy[sz]ed|implemented|maintained|delivered|assisted|helped|responsible|responsible for|contributed|delivered|عملت|عمل|طورت|أدرت|قمت|ساهمت)\b/i;
 const PLACEHOLDER_CREDENTIAL = /^(?:none|no|n\/?a|nil|nothing|لا يوجد|لا توجد|بدون|لا شيء)[\s.!]*$/i;
@@ -80,13 +93,23 @@ function extractSections(text: string): Record<string, string[]> {
   return out;
 }
 function dateToIso(token: string, end: boolean): string | undefined {
-  const value = token.trim(), numeric = value.match(/^(\d{1,2})\/(\d{4})$/);
+  const value = token.trim().replace(/[٠-٩۰-۹]/g, (digit) => {
+    const code = digit.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  });
+  const numeric = value.match(/^(\d{1,2})\/(\d{4})$/);
   if (numeric) {
     const month = numeric[1].padStart(2, "0");
     const last = new Date(Date.UTC(Number(numeric[2]), Number(month), 0)).getUTCDate();
     return numeric[2] + "-" + month + (end ? "-" + String(last).padStart(2, "0") : "-01");
   }
-  const named = value.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
+  const yearMonth = value.match(/^(\d{4})-(\d{1,2})$/);
+  if (yearMonth && Number(yearMonth[2]) >= 1 && Number(yearMonth[2]) <= 12) {
+    const month = yearMonth[2].padStart(2, "0");
+    const last = new Date(Date.UTC(Number(yearMonth[1]), Number(month), 0)).getUTCDate();
+    return yearMonth[1] + "-" + month + (end ? "-" + String(last).padStart(2, "0") : "-01");
+  }
+  const named = value.match(/^(.+?)\s+(\d{4})$/);
   if (named && MONTHS[named[1].toLowerCase()]) {
     const month = MONTHS[named[1].toLowerCase()];
     const last = new Date(Date.UTC(Number(named[2]), Number(month), 0)).getUTCDate();
@@ -99,7 +122,7 @@ function dateToIso(token: string, end: boolean): string | undefined {
 function readDateRange(value: string) {
   const match = value.match(DATE_RANGE);
   if (!match) return { is_current: false };
-  const current = /^(present|current|now|ongoing)$/i.test(match[2]);
+  const current = /^(present|current|now|ongoing|مستمر|حاليا|حاليًا)$/i.test(match[2]);
   const start = dateToIso(match[1], false) ?? ((match[1].match(/(?:19|20)\d{2}/)?.[0] ?? "") + "-01-01");
   return {
     start_date: start || undefined,
@@ -117,7 +140,8 @@ function splitHeader(value: string): { company_name?: string; job_title?: string
       const company = parts.find((part, i) => i !== index && !ROLE.test(part));
       return { ...(company ? { company_name: company } : {}), job_title: parts[index] };
     }
-    return { company_name: parts[0], job_title: parts[1] };
+    // Without a recognized role keyword, the two fields are ambiguous. Do not guess their meaning.
+    return {};
   }
   const at = header.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
   if (at) return ROLE.test(at[1]) ? { job_title: at[1].trim(), company_name: at[2].trim() } : { company_name: at[1].trim(), job_title: at[2].trim() };
@@ -194,9 +218,11 @@ function parseCredential(line: string): CvCredentialSuggestion | null {
   const raw = line.slice(0, 1500);
   const url = line.match(/https?:\/\/[^\s)]+/i)?.[0];
   const year = line.match(/\b(?:19|20)\d{2}\b/);
+  const dateToken = line.match(new RegExp(DATE_TOKEN, "i"));
   const duration = line.match(/\b\d+\s*(?:hours?|hrs?|weeks?|months?|days?)\b/i)?.[0];
   const clean = line
     .replace(/https?:\/\/[^\s)]+/ig, " ")
+    .replace(dateToken?.[0] ?? /$^/, " ")
     .replace(/\b(?:19|20)\d{2}\b/g, " ")
     .replace(/\b\d+\s*(?:hours?|hrs?|weeks?|months?|days?)\b/ig, " ")
     .replace(/\s+/g, " ")
@@ -210,7 +236,9 @@ function parseCredential(line: string): CvCredentialSuggestion | null {
   return {
     title,
     ...(parts[1] ? { issuer: parts[1].slice(0, 200) } : {}),
-    ...(year ? { issue_date: year[0] + "-01-01" } : {}),
+    ...((dateToken?.[0] ? dateToIso(dateToken[0], false) : undefined) ?? (year ? year[0] + "-01-01" : undefined)
+      ? { issue_date: (dateToken?.[0] ? dateToIso(dateToken[0], false) : undefined) ?? year![0] + "-01-01" }
+      : {}),
     ...(duration ? { duration } : {}),
     ...(url ? { reference_url: url.slice(0, 500) } : {}),
     raw_text: raw,

@@ -59,3 +59,10 @@ field category, per fixture and in aggregate, and fails when a gate is missed:
 **Limitation:** a curated synthetic corpus is not a representative real-CV corpus. Passing these gates
 does not establish accuracy on real-world CVs. Issue #24 stays open until an owner-approved, consented
 and anonymized corpus is supplied and evaluated. OCR for scanned/image-only PDFs remains out of scope.
+
+## Additional regression coverage
+
+The current main baseline passes the original Arabic attached-skill and two-column sidebar fixtures.
+This extension adds Arabic month names with Arabic-Indic digits, `YYYY-MM` dates, alternate
+Arabic/English headings, and an ambiguous employer/title negative control. Ambiguous two-part headers
+without a recognized role token are intentionally left unassigned.

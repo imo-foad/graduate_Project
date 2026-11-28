@@ -113,3 +113,37 @@ test("placeholder and non-credential lines are not emitted as credentials", () =
   assert.deepEqual(result.certifications, []);
   assert.deepEqual(result.courses, []);
 });
+
+test("supports Arabic month names, Arabic-Indic digits and alternate Arabic section headings", () => {
+  const result = extractStructuredCvData([
+    "الخبرات الوظيفية", "مطور تطبيقات | شركة المدار", "يناير ٢٠٢١ - مارس ٢٠٢٣",
+    "الرخص المهنية", "شهادة إدارة الأنظمة | معهد التقنية | فبراير ٢٠٢٤",
+    "التدريب والتطوير", "تحليل البيانات | مركز التدريب | أبريل ٢٠٢٢ | 12 hours",
+  ].join("\n"));
+  assert.equal(result.experiences[0].start_date, "2021-01-01");
+  assert.equal(result.experiences[0].end_date, "2023-03-31");
+  assert.equal(result.certifications[0].issue_date, "2024-02-01");
+  assert.equal(result.courses[0].issue_date, "2022-04-01");
+});
+test("supports YYYY-MM date ranges and credential issue dates", () => {
+  const result = extractStructuredCvData([
+    "CAREER HISTORY", "Platform Engineer | Cedar Systems", "2022-03 - 2024-07",
+    "LICENSES", "Cloud Security Associate | Cedar Academy | 2024-06",
+    "PROFESSIONAL DEVELOPMENT", "Reliable APIs | Cedar Academy | 2023-09 | 5 weeks",
+  ].join("\n"));
+  assert.equal(result.experiences[0].start_date, "2022-03-01");
+  assert.equal(result.experiences[0].end_date, "2024-07-31");
+  assert.equal(result.certifications[0].issue_date, "2024-06-01");
+  assert.equal(result.courses[0].issue_date, "2023-09-01");
+});
+test("does not guess company versus title when both header fields are ambiguous", () => {
+  const result = extractStructuredCvData([
+    "WORK EXPERIENCE", "Orion Group | Northwind Labs", "2020-01 - 2021-12",
+    "Contributed to internal reporting.",
+  ].join("\n"));
+  assert.equal(result.experiences.length, 1);
+  assert.equal(result.experiences[0].company_name, undefined);
+  assert.equal(result.experiences[0].job_title, undefined);
+  assert.equal(result.experiences[0].start_date, "2020-01-01");
+  assert.equal(result.experiences[0].end_date, "2021-12-31");
+});

@@ -1169,6 +1169,76 @@
           "PYTHON"
         ]
       }
+    },
+    {
+      "id": "en-pdf-two-column-separated-header-v1",
+      "format": "pdf",
+      "language": "en",
+      "layout": "two-column-separated-header",
+      "content": [
+        {
+          "columns": {
+            "left": [
+              "WORK EXPERIENCE",
+              "Product Analyst",
+              "2019 - 2020",
+              "Analysed product reports with SQL.",
+              "CERTIFICATIONS",
+              "AWS Certified Developer | Amazon Web Services | 2022",
+              "COURSES",
+              "Advanced SQL | Coursera | 2023"
+            ],
+            "right": [
+              "SKILLS",
+              "Bright Analytics",
+              "Kotlin",
+              "Docker",
+              "EDUCATION",
+              "BSc Computer Science"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "skills": [
+          "SQL",
+          "KOTLIN",
+          "DOCKER",
+          "AWS"
+        ],
+        "experiences": [
+          {
+            "company_name": "Bright Analytics",
+            "job_title": "Product Analyst",
+            "start_date": "2019-01-01",
+            "end_date": "2020-12-31",
+            "is_current": false
+          }
+        ],
+        "certifications": [
+          {
+            "title": "AWS Certified Developer",
+            "issuer": "Amazon Web Services",
+            "issue_date": "2022-01-01"
+          }
+        ],
+        "courses": [
+          {
+            "title": "Advanced SQL",
+            "issuer": "Coursera",
+            "issue_date": "2023-01-01"
+          }
+        ]
+      },
+      "must_not_extract": {
+        "skills": [
+          "JAVA",
+          "REACT"
+        ],
+        "courses": [
+          "BSc Computer Science"
+        ]
+      }
     }
   ]
 }

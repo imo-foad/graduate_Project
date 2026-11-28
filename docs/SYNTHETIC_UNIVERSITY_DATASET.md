@@ -29,6 +29,25 @@ New synthetic users have no email and no National ID. Stable fixture keys and in
 
 No SMS is sent. The local Supabase Auth Admin API sets `phone_confirm: true` while provisioning a disposable local account. Set `DEMO_PASSWORD` in the environment; it must be at least 12 characters. Do not commit it or write it into a fixture, SQL file, documentation, issue comment or build artifact.
 
+## Registration demo identities (migration 0042)
+
+The email-first registration flow uses a separate private synthetic identity registry. It is seeded
+with fake `SYNTH-...` identifiers and supports STUDENT, GRADUATE and FACULTY, including a
+multi-identity demo person:
+
+| Synthetic identifier | Identity |
+|---|---|
+| `SYNTH-STUDENT-0001` | STUDENT |
+| `SYNTH-STUDENT-0002` | STUDENT |
+| `SYNTH-GRADUATE-0001` | GRADUATE |
+| `SYNTH-FACULTY-0001` | FACULTY |
+| `SYNTH-MULTI-0001` | GRADUATE + FACULTY |
+
+These values are demo-only. A real-looking 14-digit National ID is rejected. The registry stores only
+a SHA-256 lookup digest and a short hint; it has RLS enabled, no client policy and no client grant.
+Registration requests a Supabase email confirmation and never sends an SMS. Local Mailpit is the
+confirmation mailbox (`http://127.0.0.1:54324`).
+
 ## Local commands
 
 Start the disposable local Supabase stack and apply migrations first. The API URL must be a localhost alias on port 54321, and the database URL must be local on port 54322.

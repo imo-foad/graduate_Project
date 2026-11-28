@@ -320,7 +320,10 @@ class SecurityAndAuthContract(unittest.TestCase):
         self.assertEqual(sorted(refs), ["PasswordGrantRequest", "RefreshTokenGrantRequest"])
         sch = API["components"]["schemas"]
         pw, rf = sch["PasswordGrantRequest"], sch["RefreshTokenGrantRequest"]
-        self.assertEqual(set(pw["required"]), {"phone", "password"})
+        self.assertEqual(set(pw["required"]), {"password"})
+        self.assertEqual({frozenset(option["required"]) for option in pw["oneOf"]},
+                         {frozenset({"email"}), frozenset({"phone"})})
+        self.assertEqual(set(pw["properties"]), {"email", "phone", "password"})
         self.assertEqual(set(rf["required"]), {"refresh_token"})
         for s in (pw, rf): self.assertIs(s["additionalProperties"], False)
         self.assertFalse(set(pw["properties"]) & set(rf["properties"]), "bodies must be mutually exclusive")

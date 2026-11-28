@@ -45,29 +45,34 @@ Scholarships and Competitions remain permanently cancelled.
 
 ## 2. Human identity and authentication
 
-### 2.1 Registration
+### 2.1 Registration (demo-MVP override, 2026-11-28)
 
-A new human account requires:
+The university demo uses a local synthetic identity registry, not a real institutional provider and
+not SMS. A new human account requires:
 
-1. National ID.
-2. Phone number.
-3. Password.
-4. Successful verification of the National ID against the institution's authoritative data source.
-5. Successful phone OTP verification.
+1. Full name.
+2. Email address (the canonical Supabase Auth identifier and confirmation target).
+3. Optional phone number (contact data only).
+4. Password.
+5. A fake `SYNTH-...` identifier that exists in the private local synthetic registry.
 
-Both identity verification and phone ownership verification are mandatory before the account is activated for normal platform use.
+The account is created as `PENDING_VERIFICATION`. It becomes `ACTIVE` only after both:
+- Supabase Auth records `email_confirmed_at`; and
+- at least one verified identity (`STUDENT`, `GRADUATE` or `FACULTY`) is associated with the account.
 
-The National ID is an identity-verification attribute, not a login credential.
+Every registry-backed identity is marked `SYNTHETIC_SEED`. This is simulated demo verification, not
+a real National-ID or institutional claim. Unknown identifiers and real-looking 14-digit National
+IDs are rejected. The synthetic identifier is not a login credential.
 
 ### 2.2 Login
 
-Login uses **phone number + password only**.
+New email-first accounts use **email + password**. Legacy synthetic demo accounts retain
+phone + password compatibility.
 
-- Do not use National ID to log in.
-- Do not substitute email/password for the approved phone/password flow.
-- Do not create fake email aliases from a phone number or National ID.
-- Use Supabase phone/password Auth, subject to verification against the current supported Supabase Auth flow.
-- OTP is mandatory during registration to prove control of the phone number. Login itself remains phone/password; do not add an OTP challenge to every login unless a future security decision explicitly changes this.
+- Do not use a synthetic identifier or National ID to log in.
+- Do not create fake email aliases from a phone number or identifier.
+- Do not require an OTP challenge on every login.
+- Phone is contact data for the demo MVP; it is not a second Auth identifier for new accounts.
 
 ### 2.3 One human account, multiple verified identities
 
@@ -90,44 +95,45 @@ Rules:
 - Server-side authorization must check verified identity/affiliation and account state. Client-supplied role metadata is never authoritative.
 - Do not assume that every human can hold every role; accept only combinations confirmed by the institutional source.
 
-### 2.4 Sensitive National ID handling
+### 2.4 Sensitive identifier handling
 
-- Do not return a National ID from public APIs.
+- Do not return the synthetic identifier from public APIs.
 - Do not place it in JWT claims, analytics, ordinary logs, exception text, notifications or client metadata.
-- Minimize retention.
-- If uniqueness or matching requires persistence, use a reviewed protected design such as encrypted storage plus a keyed deterministic lookup digest, with secrets outside source control.
-- Never use a plain unkeyed hash as the security design for a low-entropy identifier.
-- Document access controls, retention, deletion and key rotation.
-- Use synthetic identifiers only in tests.
+- The private registry stores only a SHA-256 lookup digest and a short hint, never the raw identifier.
+- The registry has RLS enabled, no client policy and no `anon`/`authenticated` grant. Only the
+  service role can resolve a digest through the dedicated RPC.
+- This demo registry is explicitly synthetic (`SYNTHETIC_SEED`). It is not a design for real
+  National IDs. A real integration would require a reviewed keyed-digest/encryption design with
+  secrets outside source control and a documented retention/key-rotation policy.
+- Use fake `SYNTH-...` identifiers only. Never use a real National ID, real student record or
+  personal phone number in fixtures or CI.
 
 ---
 
-## 3. Phone OTP and external identity verification
+## 3. Email confirmation and the local synthetic registry
 
-### Phone OTP
+### Email confirmation
 
-OTP verification is mandatory during registration.
+Email confirmation is the primary registration verification channel. The register Edge Function
+creates the Auth user with `email_confirm=false`, requests the Supabase signup confirmation, and
+returns `PENDING_EMAIL_VERIFICATION`. Ordinary duplicate registration requests are idempotent and
+do not send duplicate messages. A user-initiated resend uses `resend_confirmation: true`; the backend
+applies a 60-second cooldown and a five-attempt total budget. Auth accepting the request is not proof
+of delivery; the API reports `email_delivery: UNCONFIRMED` until delivery is independently verified.
 
-Use Supabase Auth's supported phone verification mechanism and an approved SMS delivery provider/configuration. Validate the current Supabase version and supported flow before implementation.
+The finalize endpoint/RPC activates the account only after `auth.users.email_confirmed_at` is set
+and a verified identity exists. Unconfirmed accounts cannot sign in.
 
-A mock SMS/OTP adapter is allowed only in disposable local tests. It is not evidence that real SMS delivery is configured.
+### Local synthetic identity registry
 
-### Institutional National ID provider
+The demo uses a private local registry seeded by migration 0042 with fake `SYNTH-...` identifiers.
+It supports `STUDENT`, `GRADUATE` and `FACULTY`, including multi-identity demo people. Unknown
+identifiers are rejected; real-looking National IDs are rejected by the namespace; the registry is
+never exposed through PostgREST.
 
-The institution's authoritative data source must determine whether the National ID belongs to a valid institutional person and which human identities/attributes are verified.
-
-Do not invent:
-- an institution endpoint,
-- a database schema,
-- credentials,
-- student/faculty records,
-- or a successful verification response.
-
-Implement a provider abstraction, response normalization, safe retries, timeouts, idempotency, audit events and a deterministic local mock.
-
-The actual identity integration remains externally dependent until the institution supplies an approved API/database contract and authorized test access.
-
-The rest of onboarding must continue to be implemented and tested with synthetic identities and the local mock.
+This is not a real institutional integration. Do not claim real university verification, real
+National-ID validation or real SMS delivery. The external institution/SMS rows below remain
+`BLOCKED_EXTERNAL` for any production claim, but they are **not** required for the demo MVP.
 
 ---
 
@@ -343,8 +349,8 @@ These are dependencies, not undecided product rules:
 
 | Dependency | Required to claim real integration | What can proceed without it |
 |---|---|---|
-| Institution authoritative identity source | Approved API/database contract, authorized test access and credentials | Provider interface, validation, state model, mock, synthetic tests, onboarding orchestration |
-| SMS delivery provider | Supabase-supported provider configuration, credentials/sender approval and delivery test | Auth flow, OTP lifecycle tests with local mock, rate limiting, API contracts |
+| Institution authoritative identity source | Approved API/database contract, authorized test access and credentials | **Not required for the demo MVP.** The local synthetic registry and `SYNTHETIC_SEED` tests proceed without it. |
+| SMS delivery provider | Supabase-supported provider configuration, credentials/sender approval and delivery test | **Not required for the demo MVP.** Registration is email-first and never requests an SMS OTP. Legacy phone demo login uses local Auth only. |
 | Company verification evidence | A documented checklist of acceptable evidence and an authorized admin reviewer | Company submission, pending/review/reject/verify state machine, audit log, test fixtures |
 | Production Supabase release access | Explicit owner authorization, target environment and release credentials | Local migrations, CI, deployment/runbook design, rollback rehearsal plan |
 

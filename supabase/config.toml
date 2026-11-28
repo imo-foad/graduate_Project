@@ -9,8 +9,19 @@ schemas = ["public"]
 [auth]
 enable_signup = false   # demo accounts are provisioned by scripts/provision-demo-users.mjs
 
+[auth.email]
+# Registration is email-first. Auth Admin creates the account with email_confirm=false, the register
+# function requests the signup confirmation, and finalize-registration requires email_confirmed_at.
+enable_confirmations = true
+
+[auth.rate_limit]
+# Local disposable stack only. The registration integration sends a handful of confirmation emails;
+# keep the limit high enough for the suite without weakening a hosted project's real limits.
+email_sent = 100
+
 [auth.sms]
-# Keep local phone/password Auth enabled for Auth-Admin-provisioned synthetic accounts.
+# Legacy synthetic university demo accounts still log in with phone+password. Registration NEVER
+# requests an SMS OTP and the new email-first flow never touches this provider.
 # Supabase CLI disables the phone provider when no SMS transport is configured.
 # CI never requests an SMS and never sends a message; these credentials are deliberately fake.
 enabled = true
@@ -41,11 +52,12 @@ verify_jwt = true
 [functions.cleanup-cv-objects]
 verify_jwt = true
 
-# Public registration: the caller has no JWT yet. The handler uses the service role internally and
-# never returns the National ID. Rate limiting belongs at the gateway/host level.
+# Public registration: the caller has no JWT yet. The handler uses the service role internally,
+# resolves a local synthetic identifier and never returns the raw identifier. Rate limiting belongs
+# at the gateway/host level.
 [functions.register]
 verify_jwt = false
 
-# Requires the phone-user JWT issued after OTP confirmation.
+# Requires the email-confirmed user JWT issued after the confirmation link is opened.
 [functions.finalize-registration]
 verify_jwt = true

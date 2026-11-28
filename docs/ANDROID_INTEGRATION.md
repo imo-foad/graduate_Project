@@ -10,11 +10,14 @@ The Android app receives only:
 
 Send `apikey: <anon key>` with every Auth, REST and Edge Function request. After authentication, send `Authorization: Bearer <access_token>` on authenticated requests.
 
-Never ship a service-role key, National-ID HMAC secret, institutional provider token, SMS provider credential, demo password or AI key in the APK. Do not log or persist a raw National ID. A National ID is used only during institutional registration verification; it is never a login credential.
+Never ship a service-role key, demo password or AI key in the APK. Do not log or persist the raw synthetic identifier. The synthetic identifier is used only during demo registration verification; it is never a login credential. There is no National-ID HMAC secret, institutional provider token or SMS provider credential in this demo flow.
 
-## 2. Registration: National ID + phone + password + OTP
+## 2. Registration: email + password + synthetic identity
 
-Registration is a two-step flow. The client must not choose an account role.
+Registration is a two-step flow. The client must not choose an account role. The university demo
+does **not** call a real institutional provider and does **not** send an SMS OTP. It verifies a
+clearly fake `SYNTH-...` identifier against the backend's local synthetic registry. This is demo
+verification only, never a real National-ID or institutional claim.
 
 **Step A — submit registration details**
 
@@ -24,40 +27,48 @@ apikey: <anon key>
 Content-Type: application/json
 
 {
-  "national_id": "<national ID>",
+  "email": "student@example.test",
   "phone": "+201XXXXXXXXX",
   "password": "<password>",
-  "full_name": "<full name>"
+  "full_name": "<full name>",
+  "synthetic_id": "SYNTH-STUDENT-0001"
 }
 ```
 
-The phone must be E.164 format. The Edge Function asks the configured institutional identity provider to verify the National ID and the institution-provided affiliations. It then creates a phone Auth user, records only a keyed National-ID digest (not plaintext), and requests the mandatory SMS OTP.
+`email` is the canonical Auth identifier and the confirmation target. `phone` is optional contact
+data; it is never used as an Auth identifier and never triggers an SMS. `synthetic_id` must be one of
+the fake identifiers seeded in the private local registry. A real-looking 14-digit National ID is
+rejected with `422 INVALID_SYNTHETIC_ID`; an unknown `SYNTH-...` value is rejected with
+`422 SYNTHETIC_IDENTITY_NOT_FOUND`.
 
 Expected outcomes:
-- `202 PENDING_OTP`: the account exists but is not active. Continue to SMS confirmation.
-- `409 PHONE_ALREADY_REGISTERED` or `IDENTITY_ALREADY_LINKED`: resolve the existing account/identity; do not create aliases.
-- `422`: invalid input or the provider rejected the identity.
-- `503 IDENTITY_PROVIDER_UNAVAILABLE`: no approved provider/configuration is available. This is a real blocker, not a successful verification. Do not bypass it or fabricate an identity.
-- `503 OTP_DELIVERY_FAILED`: the account remains pending and OTP delivery must be retried.
-- **Safe OTP resend:** resubmit the same registration request using the same phone number and National ID. The server compares the normalized phone with the keyed National-ID digest and resumes only that exact `PENDING_VERIFICATION` account; it sends a new OTP without creating a second Auth user. A different identity, a different phone, or an already-active account is not eligible for this retry and receives the normal conflict response. This retry does not change the password already stored for the pending Auth account; use password recovery if it must be changed.
+- `202 PENDING_EMAIL_VERIFICATION`: the account and synthetic identities exist, but the account is
+  not active. The body reports `email_confirmation: "REQUESTED"` and
+  `email_delivery: "UNCONFIRMED"`. Auth accepting the request is **not** proof that the email was
+  delivered. Do not show a "delivered" message; tell the user to check their inbox.
+- `409 EMAIL_ALREADY_REGISTERED`, `PHONE_ALREADY_REGISTERED` or `IDENTITY_ALREADY_LINKED`: resolve
+  the existing account/identity; do not create aliases.
+- `422 INVALID_SYNTHETIC_ID` or `SYNTHETIC_IDENTITY_NOT_FOUND`: the demo identifier is not in the
+  local registry. Do not bypass this or fabricate an identity.
+- `429 EMAIL_RESEND_COOLDOWN`: an explicit resend was requested too soon. Respect
+  `retry_after_seconds` and show the user when another resend can be requested.
+- `429 EMAIL_RESEND_MAX_ATTEMPTS`: the five-attempt confirmation-email budget is exhausted.
+- `503 EMAIL_CONFIRMATION_REQUEST_FAILED`: the pending account and identity association remain.
+  Do not claim delivery. The user may explicitly request a resend after the cooldown.
+- **Idempotent retry:** resubmitting the same `email` + `synthetic_id` pair without
+  `resend_confirmation` resumes only that exact pending account and does not send a duplicate email.
+  It returns `email_confirmation: ALREADY_REQUESTED` when a send was already claimed.
+- **Explicit resend:** include `"resend_confirmation": true` only after the user taps a resend action.
+  The backend enforces a 60-second cooldown and a maximum of five total attempts (including the first).
+  A different identity cannot recover an orphaned pending account because recovery requires the exact
+  digest stored in Auth Admin-owned `app_metadata`. This retry does not change the existing password;
+  use password recovery if it must be changed.
 
-The mock identity provider is allowed only when `ALLOW_MOCK_IDENTITY=true` **and** the Edge Function's `SUPABASE_URL` uses HTTP with a local host (`localhost`, `127.0.0.1`, `kong` or `supabase_kong`). The Edge Function rejects mock mode with `503 MOCK_IDENTITY_LOCAL_ONLY` on any hosted/non-local URL, even if the flag is accidentally enabled. It must never silently replace an unavailable institutional provider in a shared or production environment.
+**Step B — confirm the email**
 
-**Step B — confirm the SMS code**
-
-Use Supabase Auth's phone OTP verification flow (SMS type) with the phone number and the code sent to that number:
-
-```http
-POST {SUPABASE_URL}/auth/v1/verify
-apikey: <anon key>
-Content-Type: application/json
-
-{ "type": "sms", "phone": "+201XXXXXXXXX", "token": "<SMS code>" }
-```
-
-The response contains the access token needed by the finalize-registration Edge Function. Keep the resulting access token only after Auth confirms the phone.
-
-Then call:
+Supabase sends a confirmation link to the address. The Android client opens that link (deep link or
+browser) and Supabase returns a session in the redirect fragment. Keep the resulting access token
+only after the email is confirmed. Then call:
 
 ```http
 POST {SUPABASE_URL}/functions/v1/finalize-registration
@@ -69,14 +80,16 @@ Content-Type: application/json
 ```
 
 This activates the account only when both conditions are true:
-1. Supabase Auth has a `phone_confirmed_at` timestamp.
-2. At least one institution-verified human identity is present.
+1. Supabase Auth has an `email_confirmed_at` timestamp.
+2. At least one verified synthetic identity is associated with the account.
 
-Until then, ordinary account operations are blocked. A pending owner may still read their own verification status/identities as documented.
+Until then, ordinary account operations are blocked. A pending owner may still read their own
+verification status/identities as documented. Phone confirmation is not required and is not checked.
 
 ## 3. Login and refresh
 
-**Login uses phone + password only. Never send the National ID to the token endpoint.**
+**New email-first accounts use email + password.** Legacy synthetic demo accounts keep phone +
+password compatibility.
 
 ```http
 POST {SUPABASE_URL}/auth/v1/token?grant_type=password
@@ -84,10 +97,13 @@ apikey: <anon key>
 Content-Type: application/json
 
 {
-  "phone": "+201XXXXXXXXX",
+  "email": "student@example.test",
   "password": "<password>"
 }
 ```
+
+For a legacy demo account, send `phone` instead of `email`. Never send the synthetic identifier or
+any National ID to the token endpoint.
 
 **Refresh** uses only the latest refresh token:
 
@@ -99,18 +115,19 @@ Content-Type: application/json
 { "refresh_token": "<latest refresh_token>" }
 ```
 
-Persist the new refresh token returned after each successful refresh. Never store a stale refresh token as the current token.
+Persist the new refresh token returned after each successful refresh. Never store a stale refresh
+token as the current token.
 
 ## 4. Human identities and account capabilities
 
-One human account may have multiple institution-verified identities:
+One human account may have multiple verified synthetic identities:
 - `STUDENT`
 - `GRADUATE`
 - `FACULTY`
 
-The institution provider determines the identities; the user cannot self-select or grant a privileged role. Use `POST /rest/v1/rpc/list_my_identities` to read the caller's own identities. The response is caller-scoped.
+The local synthetic registry determines the identities; the user cannot self-select or grant a privileged role. Every such identity is marked `SYNTHETIC_SEED` and is demo data, not institutional verification. Use `POST /rest/v1/rpc/list_my_identities` to read the caller's own identities. The response is caller-scoped.
 
-A `graduate_profiles` career profile is provisioned only for an institution-verified `GRADUATE` identity (legacy invitation/demo accounts remain compatible). A student/faculty-only identity must not be treated as a graduate just because it has an app account.
+A `graduate_profiles` career profile is provisioned only for a verified `GRADUATE` identity (legacy invitation/demo accounts remain compatible). A student/faculty-only identity must not be treated as a graduate just because it has an app account.
 
 Companies are separate entities, not human account types. Company memberships use `OWNER`, `RECRUITER`, and `VIEWER`. Only `OWNER` and `RECRUITER` may manage opportunities or applications; `VIEWER` is read-only. Publishing, new applications and recommendation discovery require a platform-verified company. A transition to `SUSPENDED` or `REJECTED` invalidates cached recommendations and removes that company's listings from fresh candidate results. While unverified, members cannot edit an `ACTIVE` listing; they may close it as a safe deactivation action. DRAFT editing is allowed, but publishing still requires verification. Platform admin access is provisioned out-of-band and cannot be self-selected.
 

@@ -1,4 +1,4 @@
--- 0028: phone-first registration, multiple verified human identities, and organization role hardening.
+-- 0042: email-confirmed registration, synthetic identities, and organization role hardening.
 begin;
 create extension if not exists pgtap with schema extensions;
 select * from no_plan();
@@ -9,7 +9,7 @@ create table tests.ids (k text primary key, v uuid not null);
 grant select on tests.ids to anon, authenticated, service_role;
 create function tests.id(p_k text) returns uuid language sql stable as $f$ select v from tests.ids where k = p_k $f$;
 
--- Synthetic phone-only Auth user: the trigger must create a PENDING profile without fabricating an email.
+-- Legacy phone-only Auth user: the trigger still creates a PENDING profile without fabricating an email.
 create function tests.mk_phone_user(p_key text, p_phone text, p_confirmed boolean default false)
 returns uuid language plpgsql as $f$
 declare v uuid := gen_random_uuid();
@@ -20,6 +20,8 @@ begin
   insert into tests.ids values (p_key, v);
   return v;
 end $f$;
+
+-- Legacy email/demo/invitation user (no registration marker): remains ACTIVE for compatibility.
 create function tests.mk_email_user(p_key text) returns uuid language plpgsql as $f$
 declare v uuid := gen_random_uuid();
 begin
@@ -29,6 +31,26 @@ begin
   return v;
 end $f$;
 
+-- New email-first registration account: PENDING until email confirmation + identity association.
+create function tests.mk_registration_user(
+  p_key text, p_email text, p_phone text default null, p_confirmed boolean default false
+) returns uuid language plpgsql as $f$
+declare
+  v uuid := gen_random_uuid();
+  v_metadata jsonb := jsonb_build_object(
+    'full_name', p_key,
+    'registration_flow', 'EMAIL_IDENTITY_VERIFICATION'
+  );
+begin
+  if p_phone is not null then
+    v_metadata := v_metadata || jsonb_build_object('contact_phone', p_phone);
+  end if;
+  insert into auth.users (id, aud, role, email, email_confirmed_at, raw_user_meta_data)
+  values (v, 'authenticated', 'authenticated', p_email,
+          case when p_confirmed then now() end, v_metadata);
+  insert into tests.ids values (p_key, v);
+  return v;
+end $f$;
 
 -- pgTAP's throws_ok executes in a subtransaction; set the PostgREST-style claims inside the same
 -- statement string so an expected error is asserted against the intended identity, not an empty JWT.
@@ -38,30 +60,40 @@ create function tests.as_user(p_uid uuid, p_sql text) returns text language sql 
                 'role', 'authenticated') || p_sql
 $f$;
 
--- ---- 1. Phone-first profile model, with no fabricated email -----------------------------------------
-select tests.mk_phone_user('pending_u', '+201000000001', false);
-select is((select email from public.profiles where id = tests.id('pending_u')), null,
-  'a phone-only account gets no fabricated email');
+-- ---- 1. Email-first profile model, with phone as contact data only --------------------------------
+select tests.mk_registration_user('pending_u', 'pending@tests.local', '+201000000001', false);
+select is((select email from public.profiles where id = tests.id('pending_u')), 'pending@tests.local',
+  'the email is stored as the account identifier');
+select is((select phone from public.profiles where id = tests.id('pending_u')), '+201000000001',
+  'the optional phone is stored as contact data');
 select is((select account_status from public.profiles where id = tests.id('pending_u')), 'PENDING_VERIFICATION',
-  'a phone-only account starts PENDING_VERIFICATION');
+  'an unconfirmed email registration starts PENDING_VERIFICATION');
+select is((select count(*)::int from public.graduate_profiles where profile_id = tests.id('pending_u')), 0,
+  'a pending registration receives no graduate profile before its identity is verified');
+
+-- Legacy accounts keep their existing behavior.
+select tests.mk_email_user('legacy_email_u');
+select is((select account_status from public.profiles where id = tests.id('legacy_email_u')), 'ACTIVE',
+  'a legacy confirmed email account remains ACTIVE');
+select tests.mk_phone_user('legacy_phone_u', '+201000000009', true);
+select is((select account_status from public.profiles where id = tests.id('legacy_phone_u')), 'PENDING_VERIFICATION',
+  'a new phone-only trigger profile starts PENDING; the local demo seed explicitly activates it later');
 
 -- GoTrue accepts E.164 input but stores auth.users.phone without its leading plus.
--- The profile trigger must restore the canonical representation without weakening the DB constraint.
 select tests.mk_phone_user('auth_normalized_u', '201000000005', false);
 select is((select phone from public.profiles where id = tests.id('auth_normalized_u')), '+201000000005',
   'Auth phone stored without plus is normalized back to E.164 in profiles');
-select tests.mk_phone_user('auth_canonical_u', '+201000000006', false);
-select is((select phone from public.profiles where id = tests.id('auth_canonical_u')), '+201000000006',
-  'an Auth phone that already has plus is preserved without double-prefixing');
 select throws_ok(
   format($$ update public.profiles set phone = 'not-e164' where id = %L $$, tests.id('pending_u')),
   '23514', null, 'an invalid phone number is rejected by the profile constraint'
 );
 
 -- ---- 2. Only the service role writes verification and identities ------------------------------------
-select is(has_function_privilege('authenticated', 'public.record_identity_verification(uuid,text,text,text,text,jsonb,text,text,jsonb)', 'execute'), false,
-  'authenticated cannot record its own National-ID verification');
-select is(has_function_privilege('service_role', 'public.record_identity_verification(uuid,text,text,text,text,jsonb,text,text,jsonb)', 'execute'), true,
+select is(has_function_privilege('authenticated',
+  'public.record_identity_verification(uuid,text,text,text,text,jsonb,text,text,jsonb,text)', 'execute'), false,
+  'authenticated cannot record its own identity verification');
+select is(has_function_privilege('service_role',
+  'public.record_identity_verification(uuid,text,text,text,text,jsonb,text,text,jsonb,text)', 'execute'), true,
   'service_role records verification results');
 select is(has_table_privilege('authenticated', 'public.human_identities', 'insert'), false,
   'authenticated cannot insert its own identity rows');
@@ -72,79 +104,95 @@ select is(has_table_privilege('authenticated', 'public.human_identities', 'selec
 
 -- Rejected verification creates no identity.
 select is(public.record_identity_verification(
-  tests.id('pending_u'), 'mock-institutional-identity', null,
-  repeat('a', 64), '4567', '[]'::jsonb, 'REJECTED', 'NATIONAL_ID_NOT_FOUND') ->> 'status',
+  tests.id('pending_u'), 'synthetic-registry', null,
+  repeat('a', 64), '4567', '[]'::jsonb, 'REJECTED', 'SYNTHETIC_IDENTITY_NOT_FOUND',
+  '{}'::jsonb, 'SYNTHETIC_SEED') ->> 'status',
   'REJECTED', 'a rejected verification is recorded');
 select is((select count(*)::int from public.human_identities where profile_id = tests.id('pending_u')), 0,
   'a rejected verification grants no identity');
 
--- Verified verification writes every identity from the institution (multi-identity account).
+-- Verified verification writes every identity and marks the synthetic source explicitly.
 select is(public.record_identity_verification(
-  tests.id('pending_u'), 'mock-institutional-identity', 'synthetic:4567',
+  tests.id('pending_u'), 'synthetic-registry', null,
   repeat('b', 64), '4567',
-  '[{"identity_type":"STUDENT","institution_ref":"CAIRO_UNIVERSITY_SYNTHETIC","attributes":{"year":3}},
-    {"identity_type":"FACULTY","institution_ref":"AIN_SHAMS_UNIVERSITY_SYNTHETIC","attributes":{}}]'::jsonb,
-  'VERIFIED', null) ->> 'verified_identities',
+  '[{"identity_type":"STUDENT","institution_ref":"SYNTH-STU-0001","attributes":{"academic_level":3}},
+    {"identity_type":"FACULTY","institution_ref":"SYNTH-FAC-0001","attributes":{}}]'::jsonb,
+  'VERIFIED', null, '{}'::jsonb, 'SYNTHETIC_SEED') ->> 'verified_identities',
   '2', 'two verified identities are recorded for one account');
-select is((select count(*)::int from public.human_identities where profile_id = tests.id('pending_u') and status = 'VERIFIED'), 2,
-  'the account holds both verified affiliations');
+select is((select count(*)::int from public.human_identities
+            where profile_id = tests.id('pending_u') and status = 'VERIFIED'
+              and verification_source = 'SYNTHETIC_SEED'), 2,
+  'the account holds both verified synthetic affiliations');
 select is((select count(*)::int from public.graduate_profiles where profile_id = tests.id('pending_u')), 0,
   'STUDENT/FACULTY-only accounts do not receive graduate career profiles');
 
--- One institutional person cannot be linked to a second account.
-select tests.mk_phone_user('second_u', '+201000000002', false);
+-- One synthetic person cannot be linked to a second account.
+select tests.mk_registration_user('second_u', 'second@tests.local', '+201000000002', false);
 select throws_ok(
-  format($$ select public.record_identity_verification(%L, 'mock-institutional-identity', null, %L, '4567', '[{"identity_type":"GRADUATE","institution_ref":"CAIRO_UNIVERSITY_SYNTHETIC"}]'::jsonb, 'VERIFIED') $$,
+  format($$ select public.record_identity_verification(%L, 'synthetic-registry', null, %L, '4567',
+    '[{"identity_type":"GRADUATE","institution_ref":"SYNTH-GRAD-0001"}]'::jsonb,
+    'VERIFIED', null, '{}'::jsonb, 'SYNTHETIC_SEED') $$,
          tests.id('second_u'), repeat('b', 64)),
   'PT409', 'IDENTITY_ALREADY_LINKED',
-  'the same keyed National-ID digest cannot be linked to two accounts'
+  'the same synthetic digest cannot be linked to two accounts'
 );
--- Unknown role strings from a provider are rejected, never trusted.
+-- Unknown role strings from the registry are rejected, never trusted.
 select throws_ok(
-  format($$ select public.record_identity_verification(%L, 'mock-institutional-identity', null, %L, '9999', '[{"identity_type":"ADMIN","institution_ref":"X"}]'::jsonb, 'VERIFIED') $$,
+  format($$ select public.record_identity_verification(%L, 'synthetic-registry', null, %L, '9999',
+    '[{"identity_type":"ADMIN","institution_ref":"X"}]'::jsonb,
+    'VERIFIED', null, '{}'::jsonb, 'SYNTHETIC_SEED') $$,
          tests.id('second_u'), repeat('c', 64)),
   'PT422', 'INVALID_IDENTITY',
-  'an unsupported provider role is rejected'
+  'an unsupported identity type is rejected'
+);
+select throws_ok(
+  format($$ select public.record_identity_verification(%L, 'synthetic-registry', null, %L, '9999',
+    '[{"identity_type":"STUDENT","institution_ref":"SYNTH-STU-0001"}]'::jsonb,
+    'VERIFIED', null, '{}'::jsonb, 'NOT_A_SOURCE') $$,
+         tests.id('second_u'), repeat('d', 64)),
+  'PT422', 'INVALID_VERIFICATION_SOURCE',
+  'an unknown verification source is rejected'
 );
 
--- ---- 3. Phone OTP + institutional identity are both required before activation ----------------------
+-- ---- 3. Email confirmation + verified identity are both required before activation ----------------
 select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('pending_u'), 'role', 'authenticated')::text, true);
 select set_config('role', 'authenticated', true);
-select throws_ok(tests.as_user(tests.id('pending_u'), 'select public.finalize_registration()'), 'PT409', 'PHONE_NOT_VERIFIED',
-  'registration cannot complete before the phone OTP is confirmed');
+select throws_ok(tests.as_user(tests.id('pending_u'), 'select public.finalize_registration()'), 'PT409', 'EMAIL_NOT_VERIFIED',
+  'registration cannot complete before the email is confirmed');
 select throws_ok(tests.as_user(tests.id('pending_u'), 'select public.get_my_insights()'), 'PT403', 'ACCOUNT_UNAVAILABLE',
   'a pending account is blocked from normal RPCs');
 select is((select count(*)::int from public.list_my_identities()), 2,
   'the pending owner can still read their own verified identities');
 reset role;
 
--- Confirm OTP (simulating Supabase Auth) and finalize.
-update auth.users set phone_confirmed_at = now() where id = tests.id('pending_u');
+-- Confirm the email (simulating Supabase Auth) and finalize.
+update auth.users set email_confirmed_at = now() where id = tests.id('pending_u');
 select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('pending_u'), 'role', 'authenticated')::text, true);
 select set_config('role', 'authenticated', true);
 select is(public.finalize_registration() ->> 'account_status', 'ACTIVE',
-  'OTP + verified identity activate the account');
+  'email confirmation + verified identity activate the account');
 select is((select account_status from public.profiles where id = tests.id('pending_u')), 'ACTIVE',
   'the profile status becomes ACTIVE');
-select is((select phone_verified_at is not null from public.profiles where id = tests.id('pending_u')), true,
-  'the verified phone timestamp is recorded');
+select is((select email_verified_at is not null from public.profiles where id = tests.id('pending_u')), true,
+  'the verified email timestamp is recorded');
 reset role;
 
--- A second account with a verified identity but no OTP still cannot activate.
-select tests.mk_phone_user('no_otp_u', '+201000000003', false);
+-- A second account with a verified identity but no confirmed email still cannot activate.
+select tests.mk_registration_user('no_email_u', 'no-email@tests.local', null, false);
 select public.record_identity_verification(
-  tests.id('no_otp_u'), 'mock-institutional-identity', null, repeat('d', 64), '4444',
-  '[{"identity_type":"GRADUATE","institution_ref":"CAIRO_UNIVERSITY_SYNTHETIC"}]'::jsonb, 'VERIFIED', null);
-select is((select count(*)::int from public.graduate_profiles where profile_id = tests.id('no_otp_u')), 1,
+  tests.id('no_email_u'), 'synthetic-registry', null, repeat('e', 64), '0001',
+  '[{"identity_type":"GRADUATE","institution_ref":"SYNTH-GRAD-0003"}]'::jsonb,
+  'VERIFIED', null, '{}'::jsonb, 'SYNTHETIC_SEED');
+select is((select count(*)::int from public.graduate_profiles where profile_id = tests.id('no_email_u')), 1,
   'a verified GRADUATE identity provisions exactly one graduate profile');
-select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('no_otp_u'), 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('no_email_u'), 'role', 'authenticated')::text, true);
 select set_config('role', 'authenticated', true);
-select throws_ok(tests.as_user(tests.id('no_otp_u'), 'select public.finalize_registration()'), 'PT409', 'PHONE_NOT_VERIFIED',
-  'a verified identity without phone OTP does not activate the account');
+select throws_ok(tests.as_user(tests.id('no_email_u'), 'select public.finalize_registration()'), 'PT409', 'EMAIL_NOT_VERIFIED',
+  'a verified identity without email confirmation does not activate the account');
 reset role;
 
 -- ---- 4. Identity RLS: another user cannot read these affiliations ----------------------------------
-select tests.mk_phone_user('other_u', '+201000000004', false);
+select tests.mk_email_user('other_u');
 select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('other_u'), 'role', 'authenticated')::text, true);
 select set_config('role', 'authenticated', true);
 select is((select count(*)::int from public.human_identities where profile_id = tests.id('pending_u')), 0,
@@ -235,7 +283,7 @@ select throws_ok(
 reset role;
 
 -- ---- 6. Pending accounts are blocked at the RLS layer too ------------------------------------------
-select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('no_otp_u'), 'role', 'authenticated')::text, true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('no_email_u'), 'role', 'authenticated')::text, true);
 select set_config('role', 'authenticated', true);
 select is((select count(*)::int from public.opportunities), 0,
   'a PENDING_VERIFICATION account reads no catalogue rows through RLS');

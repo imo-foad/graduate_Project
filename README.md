@@ -6,7 +6,15 @@ All data is synthetic. Android is a separate workstream: see `docs/openapi.yaml`
 ## Product scope (2026-11-26)
 
 Approved account scope: Student, Graduate and Faculty human accounts, plus Company, Organization and
-Institution identities. **Implementation status:** phone-first accounts and verified human identity types STUDENT, GRADUATE and FACULTY are supported; student and faculty attributes are held in typed academic tables. The new university cohort uses simulated `SYNTHETIC_SEED` verification only for disposable local development and is not evidence of real institutional verification. Real institutional provider credentials and SMS delivery remain **BLOCKED_EXTERNAL**. Company identities exist as `companies` + `company_memberships` with owner/recruiter/viewer permissions.
+Institution identities. **Implementation status:** the demo MVP registers with **email + password**
+and verifies a fake `SYNTH-...` identifier against a private local synthetic registry; phone is
+optional contact data. Verified human identity types STUDENT, GRADUATE and FACULTY are supported,
+with student and faculty attributes in typed academic tables. Every registry-backed identity is
+marked `SYNTHETIC_SEED`; this is not evidence of real institutional or National-ID verification.
+Registration never requests an SMS OTP. Legacy phone/password demo accounts remain compatible.
+Real institutional provider credentials and SMS delivery remain **BLOCKED_EXTERNAL** for any
+production claim. Company identities exist as `companies` + `company_memberships` with
+owner/recruiter/viewer permissions.
 
 Cancelled product lines (explicit product decision, not deprioritisation):
 
@@ -30,12 +38,12 @@ Free-plan figures seen in third-party sources (500 MB DB, 1 GB storage, 500k fun
 
 ## Layout
 
-- `supabase/migrations/0001..0040` — schema, catalogue, activity, RLS/storage, social feed, identity, company rules, recommendation availability, durable CV cleanup/retry and permanently retired Storage-path tombstones with transaction-level advisory locking, plus typed synthetic university academic records
+- `supabase/migrations/0001..0042` — schema, catalogue, activity, RLS/storage, social feed, identity, company rules, recommendation availability, durable CV cleanup/retry, permanently retired Storage-path tombstones with transaction-level advisory locking, typed synthetic university academic records, and the private synthetic identity registry + email-confirmed registration
 - `fixtures/*.json` -> `npm run build:seed` -> four generated SQL seeds for skills, active catalogue, the four existing graduate demos and local synthetic university accounts
 - `supabase/functions/_shared/` — deterministic scoring, opportunity filtering and recommendation orchestration
 - `supabase/functions/recommend/` — authenticated Edge Function
 - `scripts/provision-demo-users.mjs` — provisions the four existing synthetic graduate demos locally only
-- `scripts/provision-university-demo-users.mjs` and `scripts/seed-university-demo.mjs` — provision and apply 20 students, 10 faculty and 10 local platform admins; strict localhost guards, phone-only Auth users, no SMS
+- `scripts/provision-university-demo-users.mjs` and `scripts/seed-university-demo.mjs` — provision and apply 20 students, 10 faculty and 10 local platform admins; strict localhost guards, legacy phone-only Auth users for demo login, no SMS
 - `scripts/run-local-integrations.sh` — local-only Auth, demo-seed, Storage and Edge HTTP checks
 - `tests/` — Node, OpenAPI, workflow, SQL, pgTAP and HTTP integration tests
 

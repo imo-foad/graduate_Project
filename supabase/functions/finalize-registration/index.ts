@@ -1,6 +1,6 @@
-// Completes phone-first registration after the client confirms the Supabase phone OTP.
-// The database checks BOTH conditions: auth.users.phone_confirmed_at is set AND at least one verified
-// institutional identity exists. Only then does account_status move to ACTIVE.
+// Completes email-first registration after the client confirms the Supabase email.
+// The database checks BOTH conditions: auth.users.email_confirmed_at is set AND at least one verified
+// identity exists. Only then does account_status move to ACTIVE. Phone is contact data, not proof.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const json = (body: unknown, status = 200) =>
@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
   const { data, error } = await userClient.rpc("finalize_registration");
   if (error) {
     const message = error.message ?? "";
-    if (message.includes("PHONE_NOT_VERIFIED")) return json({ error: "PHONE_NOT_VERIFIED" }, 409);
+    if (message.includes("EMAIL_NOT_VERIFIED")) return json({ error: "EMAIL_NOT_VERIFIED" }, 409);
     if (message.includes("IDENTITY_NOT_VERIFIED")) return json({ error: "IDENTITY_NOT_VERIFIED" }, 409);
     if (message.includes("ACCOUNT_UNAVAILABLE")) return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
     return json({ error: "REGISTRATION_FINALIZE_FAILED" }, 500);

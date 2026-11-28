@@ -260,8 +260,13 @@ async function main() {
   pass("student deletes own post", (await rpc(student.token, "delete_social_post", { p_post_id: imagePost.json.post_id })).status === 200);
   pass("deleted post leaves the feed", findPost(await feed(graduate.token), imagePost.json.post_id) === null);
   pass("deleted post image becomes unreadable", (await downloadImage(graduate.token, studentPath)).status >= 400);
-  const queued = sql(`select q.status from private.social_media_cleanup_queue q join public.social_post_media m on m.id = q.media_id where m.storage_path = '${studentPath}'`).trim();
-  pass("deleted post media is queued for Storage cleanup", queued === "PENDING", { status: queued });
+  const mediaMetadataCount = sql(`select count(*) from public.social_post_media where storage_path = '${studentPath}'`).trim();
+  pass("deleted post media metadata is removed with its post", mediaMetadataCount === "0", { count: mediaMetadataCount });
+  // The cleanup ledger deliberately has no FK to social_post_media: it must survive the cascade.
+  // Query by the immutable Storage path because the media metadata row has now been deleted.
+  const queued = sql(`select status || '|' || reason || '|' || (media_id is not null)::text from private.social_media_cleanup_queue where storage_path = '${studentPath}'`).trim();
+  pass("deleted post media remains in the durable Storage cleanup ledger",
+    queued === "PENDING|POST_DELETED|true", { entry: queued });
   const claim = await rpc(service, "claim_social_media_cleanup", { p_limit: 10 });
   pass("service role claims cleanup work", claim.status === 200 && claim.json.length >= 1, claim.text);
   const claimed = claim.json.find((item) => item.storage_path === studentPath);

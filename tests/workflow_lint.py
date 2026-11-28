@@ -152,8 +152,10 @@ class Scripts(unittest.TestCase):
         self.assertIn("finalize_registration", social_http)
         self.assertIn('errorCode(impersonation) === "SOCIAL_ACTOR_NOT_AUTHORIZED"', social_http)
         self.assertIn("impersonation.status === 403", social_http)
-        self.assertIn("select q.status from private.social_media_cleanup_queue q join public.social_post_media m", social_http)
-        self.assertIn('queued === "PENDING"', social_http)
+        self.assertIn("select count(*) from public.social_post_media where storage_path = '${studentPath}'", social_http)
+        self.assertIn('mediaMetadataCount === "0"', social_http)
+        self.assertIn("select status || '|' || reason || '|' || (media_id is not null)::text from private.social_media_cleanup_queue", social_http)
+        self.assertIn('queued === "PENDING|POST_DELETED|true"', social_http)
         self.assertIn("SYNTHETIC_SEED", social_http)
         self.assertNotIn("insert into public.profiles", social_http.lower(),
                          "Auth's handle_new_user trigger provisions profiles and the HUMAN actor")

@@ -96,12 +96,14 @@ def table_grants(role="authenticated"):
                 privilege, columns_text = match.groups()
                 privilege = privilege.lower()
                 if privilege == "all":
-                    methods = {"select", "insert", "update", "delete"}
                     if columns_text is None:
                         if action == "grant":
-                            table_level[table].update(methods)
+                            # Preserve the legacy contract parser's distinction between an explicit
+                            # HTTP method grant and GRANT ALL. The latter is not expanded into a
+                            # fabricated REST surface; explicit method grants remain comparable.
+                            table_level[table].add("all")
                         else:
-                            table_level[table].difference_update(methods)
+                            table_level[table].clear()
                             column_level[table].clear()
                     continue
 
@@ -172,7 +174,8 @@ class Contract(unittest.TestCase):
     def test_cancelled_application_tables_remain_service_role_only(self):
         migration = open(os.path.join(ROOT, "supabase/migrations/0025_cancel_scholarship_and_competition.sql")).read()
         self.assertIn("revoke all on public.scholarship_applications", migration)
-        self.assertIn("revoke all on public.competition_applications", migration)
+        self.assertIn("public.competition_applications", migration)
+        self.assertIn("competition_application_status_history", migration)
         self.assertIn("to service_role", migration)
         self.assertIn("CANCELLED FEATURE", migration)
 

@@ -131,6 +131,34 @@ A `graduate_profiles` career profile is provisioned only for a verified `GRADUAT
 
 Companies are separate entities, not human account types. Company memberships use `OWNER`, `RECRUITER`, and `VIEWER`. Only `OWNER` and `RECRUITER` may manage opportunities or applications; `VIEWER` is read-only. Publishing, new applications and recommendation discovery require a platform-verified company. A transition to `SUSPENDED` or `REJECTED` invalidates cached recommendations and removes that company's listings from fresh candidate results. While unverified, members cannot edit an `ACTIVE` listing; they may close it as a safe deactivation action. DRAFT editing is allowed, but publishing still requires verification. Platform admin access is provisioned out-of-band and cannot be self-selected.
 
+### 4.1 Profile and career management
+
+**Basic profile (`profiles`)**
+
+- Read the authenticated caller's own row with `GET /rest/v1/profiles?select=id,full_name,avatar_url`.
+- Update the caller's own display name with `PATCH /rest/v1/profiles?id=eq.<auth.uid>` and a body such as `{"full_name":"New display name"}`.
+- RLS derives ownership from the JWT. Do not send another user's id as an ownership claim.
+- `full_name` must contain 1–200 non-whitespace characters.
+- `avatar_url` is currently server-managed. There is no approved avatar bucket or client upload endpoint in this version, and authenticated clients cannot PATCH an arbitrary URL. Do not construct public URLs or upload avatars to the private CV bucket.
+
+**Professional profile (`graduate_profiles`)**
+
+- A row is provisioned only for a verified `GRADUATE` identity. A `STUDENT` or `FACULTY` account may still read and update its own basic `profiles` row without a graduate career profile.
+- The owner can read and PATCH supported fields: `college`, `department`, `major`, `graduation_year`, `degree`, `employment_status`, `location`, `career_interests`, `work_preferences`, and `hidden_fields`.
+- PATCH is partial: an omitted property is unchanged, `null` clears a nullable field, and an empty string remains distinct from `null` where the database permits it. Existing constraints remain authoritative; graduation year is limited to 1990–2100.
+- `hidden_fields` accepts only `location`, `career_interests`, `work_preferences`, and `avatar_url`. Do not treat client-side hiding as authorization; private graduate and career rows are RLS-scoped to their owner.
+
+**Career history (`career_history`)**
+
+- Read only the caller's own rows. Add a past role using `POST /rest/v1/career_history` with `graduate_id=<auth.uid>`, company, title, start date, and required end date. The database assigns `SELF_REPORTED` provenance.
+- Edit supported details on an owned row with PATCH. Ownership, provenance, and `is_current` are not client-writable.
+- Current employment must use `POST /rest/v1/rpc/set_current_job` with `p_company_name`, `p_job_title`, and `p_start_date` (plus optional field/description). It creates one current row with no end date and closes the previous current row at the new start date.
+- The caller must own a graduate profile. A Student/Faculty-only account receives HTTP 403 `GRADUATE_PROFILE_REQUIRED` for the current-job RPC and cannot insert career history directly.
+- A past row permits equal start/end dates; an end date earlier than its start date is rejected. Starting a new current job earlier than the previous current job returns `START_BEFORE_PREVIOUS`.
+- There is no client DELETE/archive endpoint. Career history is preserved for auditability; correct an incorrect self-reported entry through the supported update operation.
+
+Company memberships and institutional affiliations do not grant direct read access to another person's private `profiles`, `graduate_profiles`, or `career_history` rows. Public Social Feed projections remain a separate, explicitly limited API surface; they do not expose private account or career fields.
+
 ## 5. Opportunity catalogue
 
 The only active product types are:

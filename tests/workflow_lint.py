@@ -209,7 +209,7 @@ class Scripts(unittest.TestCase):
         pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
         race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
-        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "Files=21", "bash tests/db/cv-cleanup-concurrency.sh"):
+        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "23_profile_career_management", "Files=22", "bash tests/db/cv-cleanup-concurrency.sh"):
             self.assertIn(needle, runner)
         self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
         self.assertIn("createdUsers.push(targetId)", integration)
@@ -224,6 +224,20 @@ class Scripts(unittest.TestCase):
         self.assertIn("pg_stat_activity", race)
         self.assertIn("wait_for_lock_wait", race)
         self.assertIn("CV CLEANUP CONCURRENCY PASSED", race)
+
+    def test_profile_career_management_security_is_migration_and_pgtap_covered(self):
+        runner = SCRIPTS["scripts/run-db-tests.sh"]
+        migration = code(open(os.path.join(ROOT, "supabase/migrations/0044_profile_career_management_security.sql")).read())
+        pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/23_profile_career_management.test.sql")).read())
+        self.assertIn("23_profile_career_management", runner)
+        self.assertIn("Files=22", runner)
+        self.assertIn("revoke update (avatar_url) on public.profiles from authenticated", migration)
+        self.assertIn("GRADUATE_PROFILE_REQUIRED", migration)
+        self.assertIn("graduate_profiles", migration)
+        self.assertIn("GRADUATE_PROFILE_REQUIRED", pgtap)
+        self.assertIn("career history cannot be hard-deleted", pgtap)
+        self.assertIn("omitted PATCH fields retain", pgtap)
+        self.assertIn("avatar_url", pgtap)
 
     def test_all_pgtap_files_are_expected_by_the_runner(self):
         on_disk = sorted(f[:-len(".test.sql")] for f in os.listdir(os.path.join(ROOT, "supabase/tests/database")) if f.endswith(".test.sql"))

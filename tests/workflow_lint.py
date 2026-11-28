@@ -152,6 +152,8 @@ class Scripts(unittest.TestCase):
         self.assertIn("finalize_registration", social_http)
         self.assertIn('errorCode(impersonation) === "SOCIAL_ACTOR_NOT_AUTHORIZED"', social_http)
         self.assertIn("impersonation.status === 403", social_http)
+        self.assertIn("select q.status from private.social_media_cleanup_queue q join public.social_post_media m", social_http)
+        self.assertIn('queued === "PENDING"', social_http)
         self.assertIn("SYNTHETIC_SEED", social_http)
         self.assertNotIn("insert into public.profiles", social_http.lower(),
                          "Auth's handle_new_user trigger provisions profiles and the HUMAN actor")

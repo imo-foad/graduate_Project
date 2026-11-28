@@ -230,8 +230,13 @@ async function main() {
     p_post_id: created.json.post_id, p_content: "Synthetic student post edited " + run,
   });
   pass("student can edit own post", edited.status === 200 && edited.json.content === "Synthetic student post edited " + run);
+  const impersonation = await rpc(student.token, "create_social_post_v2", {
+    p_actor_id: (await personalActor(graduate)).actor_id,
+    p_content: "impersonation",
+  });
   pass("student cannot publish as another human actor",
-    (await rpc(student.token, "create_social_post_v2", { p_actor_id: (await personalActor(graduate)).actor_id, p_content: "impersonation" })).status === 404);
+    impersonation.status === 403 && errorCode(impersonation) === "SOCIAL_ACTOR_NOT_AUTHORIZED",
+    { status: impersonation.status, code: errorCode(impersonation) });
 
   pass("anonymous image upload is rejected", (await request("/functions/v1/social-media-upload", { method: "POST", body: new FormData() })).status === 401);
   const uploaded = await uploadViaFunction(student, studentActor.actor_id);

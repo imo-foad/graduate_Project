@@ -29,6 +29,14 @@ SERVICE_ROLE_ONLY_HISTORICAL_TABLES = {
     "competition_application_status_history",
 }
 
+# Social Feed v2 is being implemented in parallel and uses its dedicated RPC projection
+# contract. Do not require or rewrite its underlying tables as profile REST endpoints here.
+PARALLEL_SOCIAL_FEED_TABLES = {
+    "social_posts",
+    "social_post_comments",
+    "social_post_likes",
+}
+
 
 def split_top(s):
     out, depth, cur = [], 0, ""
@@ -181,7 +189,7 @@ class Contract(unittest.TestCase):
 
     def test_every_granted_table_capability_is_documented(self):
         for table, privs in table_grants().items():
-            if table in SERVICE_ROLE_ONLY_HISTORICAL_TABLES:
+            if table in SERVICE_ROLE_ONLY_HISTORICAL_TABLES or table in PARALLEL_SOCIAL_FEED_TABLES:
                 continue
             ops = API["paths"].get(f"/rest/v1/{table}")
             self.assertIsNotNone(ops, f"{table}: granted but undocumented")

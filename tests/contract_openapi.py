@@ -62,27 +62,58 @@ def exec_granted(role):
 
 
 def table_grants(role="authenticated"):
-    """Final table privileges for a role: grants and revokes are applied in migration order."""
-    grants = {}
+    """Final table capabilities, preserving independent column-level grants/revokes."""
+    table_level = {}
+    column_level = {}
     for statement in re.finditer(r"(?im)^[ \t]*(grant|revoke)\b(.*?);", SQL, re.S):
         action, body = statement.group(1).lower(), statement.group(2)
         parsed = re.match(r"(?is)\s*(.+?)\s+on\s+(?!function\b)(.+?)\s+(?:to|from)\s+(.+?)\s*$", body)
-        if not parsed: continue
+        if not parsed:
+            continue
         priv_text, object_text, roles_text = parsed.groups()
-        if role not in [r.strip() for r in roles_text.split(",")]: continue
-        privs = {re.match(r"\w+", p).group(0).lower() for p in split_top(priv_text)}
+        if role not in [r.strip() for r in roles_text.split(",")]:
+            continue
         if not object_text.strip().lower().startswith("public."):
             continue
-        for t in split_top(object_text):
-            key = t.replace("public.", "").strip()
-            if action == "grant":
-                grants.setdefault(key, set()).update(privs)
-            elif "all" in privs:
-                grants.pop(key, None)
-            else:
-                grants.get(key, set()).difference_update(privs)
-    return grants
 
+        for table_item in split_top(object_text):
+            table = table_item.replace("public.", "").strip()
+            table_level.setdefault(table, set())
+            column_level.setdefault(table, {})
+            for item in split_top(priv_text):
+                match = re.fullmatch(r"(?is)\s*([a-z_]+)(?:\s*\((.*)\))?\s*", item)
+                if not match:
+                    continue
+                privilege, columns_text = match.groups()
+                privilege = privilege.lower()
+                if privilege == "all":
+                    methods = {"select", "insert", "update", "delete"}
+                    if columns_text is None:
+                        if action == "grant":
+                            table_level[table].update(methods)
+                        else:
+                            table_level[table].difference_update(methods)
+                            column_level[table].clear()
+                    continue
+
+                if columns_text is not None:
+                    columns = set(split_top(columns_text))
+                    granted_columns = column_level[table].setdefault(privilege, set())
+                    if action == "grant":
+                        granted_columns.update(columns)
+                    else:
+                        granted_columns.difference_update(columns)
+                elif action == "grant":
+                    table_level[table].add(privilege)
+                else:
+                    table_level[table].discard(privilege)
+
+    grants = {}
+    for table, privs in table_level.items():
+        effective = set(privs)
+        effective.update(priv for priv, columns in column_level[table].items() if columns)
+        grants[table] = effective
+    return grants
 
 METHOD_PRIV = {"get": "select", "post": "insert", "patch": "update", "delete": "delete"}
 
@@ -123,6 +154,11 @@ class Contract(unittest.TestCase):
             self.assertIn(table, grants, f"{table}: documented but no grant to authenticated")
             for method in ops:
                 self.assertIn(METHOD_PRIV[method], grants[table], f"{method.upper()} {path} not granted in SQL")
+
+    def test_column_level_profile_revokes_preserve_other_supported_updates(self):
+        grants = table_grants()
+        self.assertIn("update", grants["profiles"],
+                      "full_name remains writable after avatar_url is revoked")
 
     def test_every_granted_table_capability_is_documented(self):
         for table, privs in table_grants().items():

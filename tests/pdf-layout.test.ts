@@ -87,3 +87,24 @@ test("an empty or whitespace-only page produces no text", () => {
   assert.equal(layoutPdfText([]), "");
   assert.equal(layoutPdfText([item("   ", 50, 760, 10)]), "");
 });
+
+test("two-column employer and job-title fragments are paired only with organization cues", () => {
+  const rows = [
+    ["WORK EXPERIENCE", "SKILLS"],
+    ["Product Analyst", "Bright Analytics"],
+    ["2019 - 2020", "Kotlin"],
+    ["Analysed product reports with SQL.", "Docker"],
+    ["CERTIFICATIONS", "EDUCATION"],
+  ];
+  const items: PdfTextItem[] = [];
+  rows.forEach(([left, right], index) => {
+    const y = 760 - index * 14;
+    items.push(item(left, 50, y));
+    items.push(item(right, 340, y));
+  });
+  const lines = layoutPdfText(items).split("\n");
+  assert.equal(lines[1], "Product Analyst | Bright Analytics");
+  assert.equal(lines.includes("Bright Analytics"), false);
+  assert.equal(lines.includes("Kotlin"), true);
+  assert.equal(lines.includes("Docker"), true);
+});

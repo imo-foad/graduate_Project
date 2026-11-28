@@ -150,6 +150,8 @@ class Scripts(unittest.TestCase):
         self.assertIn('registration_flow: "EMAIL_IDENTITY_VERIFICATION"', social_http)
         self.assertIn("record_identity_verification", social_http)
         self.assertIn("finalize_registration", social_http)
+        self.assertIn('errorCode(impersonation) === "SOCIAL_ACTOR_NOT_AUTHORIZED"', social_http)
+        self.assertIn("impersonation.status === 403", social_http)
         self.assertIn("SYNTHETIC_SEED", social_http)
         self.assertNotIn("insert into public.profiles", social_http.lower(),
                          "Auth's handle_new_user trigger provisions profiles and the HUMAN actor")

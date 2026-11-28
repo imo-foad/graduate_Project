@@ -410,30 +410,30 @@ select is(
 reset role;
 
 -- ---- Current employment is managed atomically and only for graduate identities -----------------------
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$select public.set_current_job(
-       'Synthetic Current Employer',
-       'Senior Engineer',
-       date '2023-01-01',
-       'Software',
-       'Synthetic current employment'
-     )$q$
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+select public.set_current_job(
+  'Synthetic Current Employer',
+  'Senior Engineer',
+  date '2023-01-01',
+  'Software',
+  'Synthetic current employment'
 );
+reset role;
 select is(
   (select count(*)::int from public.career_history
     where graduate_id = tests.id('graduate_a') and is_current and end_date is null),
   1,
   'set_current_job creates a current record without an end date'
 );
-select tests.as_user(
-  tests.id('graduate_a'),
-  $q$select public.set_current_job(
-       'Synthetic Next Employer',
-       'Staff Engineer',
-       date '2024-01-01'
-     )$q$
+select set_config('request.jwt.claims', jsonb_build_object('sub', tests.id('graduate_a'), 'role', 'authenticated')::text, true);
+set local role authenticated;
+select public.set_current_job(
+  'Synthetic Next Employer',
+  'Staff Engineer',
+  date '2024-01-01'
 );
+reset role;
 select is(
   (select end_date from public.career_history
     where graduate_id = tests.id('graduate_a') and company_name = 'Synthetic Current Employer'),

@@ -158,6 +158,15 @@ function detectColumnSplit(segmented: Segment[][], gapThreshold: number): number
   return best.split;
 }
 
+const JOB_TITLE = /(?:^|[^\p{L}])(?:developer|engineer|analyst|designer|intern|manager|consultant|administrator|specialist|architect|lead|officer|technician|tester|qa|scientist|researcher|coordinator|accountant|teacher|مدير|مهندس|محلل|مصمم|متدرب|مطور|باحث|فني|محاسب|معلم)(?=$|[^\p{L}])/iu;
+const ORGANIZATION_SUFFIX = /(?:\b(?:systems?|analytics|labs?|group|limited|ltd|inc|corp(?:oration)?|technologies|technology|studio|services|solutions|university|hospital|bank|agency|company)\b|^شركة\s|^مؤسسة\s|^جامعة\s)/i;
+
+/** Pair cross-column employer/title fragments only when both sides carry strong lexical cues. */
+function pairedExperienceHeader(left: string, right: string): boolean {
+  return JOB_TITLE.test(left) && !left.includes("|") &&
+    !JOB_TITLE.test(right) && ORGANIZATION_SUFFIX.test(right);
+}
+
 /**
  * Rebuild readable text from positioned PDF text items for one page.
  * Single-column pages keep line order; large intra-line gaps become " | ".
@@ -186,6 +195,13 @@ export function layoutPdfText(items: PdfTextItem[], options: PdfLayoutOptions = 
     if (segments.length === 0) continue;
     const left = segments.filter((segment) => segment.start < split - 3).map((segment) => segment.text);
     const right = segments.filter((segment) => segment.start >= split - 3).map((segment) => segment.text);
+    if (left.length > 0 && right.length > 0 &&
+        left.length === 1 && right.length === 1 && pairedExperienceHeader(left[0], right[0])) {
+      // The two columns contain complementary fragments of one experience header. Keep the
+      // combined header in the left-column reading stream and do not duplicate the employer.
+      columns.left.push(left[0] + " | " + right[0]);
+      continue;
+    }
     if (left.length > 0) columns.left.push(left.join(" | "));
     if (right.length > 0) columns.right.push(right.join(" | "));
   }

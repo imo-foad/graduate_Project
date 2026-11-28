@@ -148,6 +148,23 @@ jobs:
           find .ci-logs -maxdepth 1 -type f -delete
       - name: "Database tests (local stack only, fails on any error)"
         run: bash scripts/run-db-tests.sh
+      - name: Verify the CV cleanup HTTP suite marker
+        # The runner captures Social Feed and CV cleanup separately and fails when either failed; this
+        # step makes the CV cleanup result explicit and public instead of only visible in admin logs.
+        if: always()
+        run: |
+          log=.ci-logs/cv-cleanup-integration.log
+          if [ ! -s "$log" ]; then
+            echo "::warning title=CV_CLEANUP_SUITE_MISSING::cv-cleanup-integration.log was not produced; the failing stage is reported above"
+            exit 0
+          fi
+          marker="$(grep -E '^CV CLEANUP INTEGRATION PASSED: [1-9][0-9]* checks$' "$log" | tail -n 1)"
+          if [ -z "$marker" ]; then
+            echo "::error title=CV_CLEANUP_SUITE_MARKER_MISSING::cv-cleanup-integration.log has no positive 'CV CLEANUP INTEGRATION PASSED: N checks' line"
+            exit 1
+          fi
+          printf '::notice title=CV_CLEANUP_SUITE::%s\n' "$marker"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then printf 'CV cleanup HTTP: %s\n' "$marker" >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Collect diagnostics
         if: always()
         run: |

@@ -251,6 +251,25 @@ class Scripts(unittest.TestCase):
         self.assertIn("wait_for_lock_wait", race)
         self.assertIn("CV CLEANUP CONCURRENCY PASSED", race)
 
+    def test_cv_cleanup_http_result_is_independent_of_the_social_feed_suite(self):
+        runner = SCRIPTS["scripts/run-local-integrations.sh"]
+        social = runner.index('require_independent_suite "social-feed-integration.log" "Social Feed HTTP"')
+        cv_cleanup = runner.index('require_independent_suite "cv-cleanup-integration.log" "CV cleanup HTTP"')
+        self.assertLess(social, cv_cleanup, "the CV cleanup suite must start after the captured Social Feed suite")
+        for needle in ("INDEPENDENT_FAILURES=()", "INDEPENDENT_FAILURES+=(\"$label\")", "INDEPENDENT SUITE FAILURES",
+                       "timeout 300s node tests/integration/social-feed.integration.mjs",
+                       "timeout 300s node tests/integration/cv-cleanup.integration.mjs",
+                       "'^CV CLEANUP INTEGRATION PASSED: [1-9][0-9]* checks$'"):
+            self.assertIn(needle, runner)
+        # A failed Social Feed run must still fail the whole integration stage.
+        self.assertIn('if [ "${#INDEPENDENT_FAILURES[@]}" -ne 0 ]; then', runner)
+        self.assertIn("exit 1", runner[cv_cleanup:])
+        # The workflow publishes the CV cleanup result explicitly and never silences it.
+        marker_step = next(s for s in steps("database") if "CV CLEANUP INTEGRATION PASSED" in s.get("run", ""))
+        self.assertEqual(marker_step.get("if"), "always()")
+        self.assertNotIn("|| true", marker_step["run"])
+        self.assertIn("cv-cleanup-integration.log", marker_step["run"])
+
     def test_profile_career_management_security_is_migration_and_pgtap_covered(self):
         runner = SCRIPTS["scripts/run-db-tests.sh"]
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0044_profile_career_management_security.sql")).read())

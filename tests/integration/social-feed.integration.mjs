@@ -5,7 +5,7 @@
 // at the end. Non-local targets are refused before the first Auth/Storage/psql call.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { assertLocalDbUrl } from "../../scripts/assert-local-db.mjs";
 
 const base = (process.env.SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -63,16 +63,55 @@ const createdUsers = [];
 const createdCompanies = [];
 async function createUser(label) {
   const email = `social.${label}.${run}@alumni.test`;
+  const fullName = `Synthetic ${label}`;
   const response = await request("/auth/v1/admin/users", {
     method: "POST",
     headers: headers(service, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ email, password, email_confirm: true }),
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, registration_flow: "EMAIL_IDENTITY_VERIFICATION" },
+    }),
   });
   assert.equal(response.status, 200, "create synthetic auth user " + label + ": " + response.text.slice(0, 200));
   const id = response.json.id;
   createdUsers.push(id);
-  sql(`insert into public.profiles (id, full_name, email, account_status) values ('${id}', 'Synthetic ${label}', '${email}', 'ACTIVE')`);
-  return { id, email, label };
+
+  // Auth's handle_new_user trigger owns profile creation. The integration must not insert the same
+  // profile again, because that would bypass the current email-first registration contract and the
+  // profiles_social_actor provisioning trigger.
+  assert.equal(
+    sql(`select count(*) from public.profiles where id = '${id}' and full_name = '${fullName}' and account_status = 'PENDING_VERIFICATION'`),
+    "1",
+    "Auth trigger must provision exactly one pending profile for " + label,
+  );
+
+  const identityType = label === "graduate" ? "GRADUATE" : label === "faculty" ? "FACULTY" : "STUDENT";
+  const institutionRef = `SYNTH-SOCIAL-${identityType}-${id.slice(0, 8).toUpperCase()}`;
+  const identityPayload = JSON.stringify([{
+    identity_type: identityType,
+    institution_ref: institutionRef,
+    attributes: { fixture: "social-feed-v2", label },
+  }]);
+  const nationalIdDigest = createHash("sha256").update("social-feed-v2:" + id).digest("hex");
+  const verification = sql(`select public.record_identity_verification(
+    '${id}'::uuid,
+    'LOCAL_SOCIAL_FEED_TEST',
+    '${randomUUID()}',
+    '${nationalIdDigest}',
+    '0000',
+    '${identityPayload}'::jsonb,
+    'VERIFIED',
+    null,
+    '{}'::jsonb,
+    'SYNTHETIC_SEED'
+  )`);
+  const verificationResult = JSON.parse(verification);
+  assert.equal(verificationResult.status, "VERIFIED", "synthetic identity verification for " + label);
+  assert.equal(verificationResult.verified_identities, 1, "one synthetic identity linked for " + label);
+
+  return { id, email, label, identityType };
 }
 async function login(user) {
   const response = await request("/auth/v1/token?grant_type=password", {
@@ -81,7 +120,11 @@ async function login(user) {
     body: JSON.stringify({ email: user.email, password }),
   });
   assert.equal(response.status, 200, "password grant " + user.email + ": " + response.text.slice(0, 200));
-  return { ...user, token: response.json.access_token };
+  const token = response.json.access_token;
+  const finalized = await rpc(token, "finalize_registration");
+  assert.equal(finalized.status, 200, "finalize email-first registration for " + user.label + ": " + finalized.text.slice(0, 200));
+  assert.equal(finalized.json?.account_status, "ACTIVE", "verified synthetic identity activates " + user.label);
+  return { ...user, token };
 }
 
 const PNG = Buffer.from(

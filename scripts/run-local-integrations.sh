@@ -148,11 +148,44 @@ node tests/integration/university-dataset.integration.mjs 2>&1 | tee "$LOG_DIR/u
 
 note_suite "http-integration.log"
 timeout 300s node tests/integration/local-supabase.integration.mjs 2>&1 | tee "$LOG_DIR/http-integration.log"
+# ---- Independent HTTP suites ----------------------------------------------------------------------
+# A Social Feed failure must not hide the CV Storage cleanup result, so these two suites are captured
+# separately: each keeps its own log and its own exit status. The run continues while the local stack is
+# healthy, and the script still exits non-zero when either suite failed.
+INDEPENDENT_FAILURES=()
+require_independent_suite() {
+  local log="$1" label="$2"
+  shift 2
+  note_suite "$log"
+  local status=0
+  "$@" 2>&1 | tee "$LOG_DIR/$log" || status=$?
+  publish_suite_result "$log"
+  if [ "$status" -ne 0 ]; then
+    INDEPENDENT_FAILURES+=("$label")
+    printf '::error title=INTEGRATION_SUITE_FAILED::%s failed (exit %s); see %s\n' "$label" "$status" "$log"
+  fi
+  return 0
+}
+
+# Social Feed v2: multi-actor publishing, private images, shares and moderation through the real gateway.
+require_independent_suite "social-feed-integration.log" "Social Feed HTTP" \
+  timeout 300s node tests/integration/social-feed.integration.mjs
+# CV Storage cleanup: real private objects, the service-role worker and approved account deletion.
+require_independent_suite "cv-cleanup-integration.log" "CV cleanup HTTP" \
+  timeout 300s node tests/integration/cv-cleanup.integration.mjs
+# A syntax check or a suite that never executed must not look like evidence, so the explicit success
+# marker with a positive check count is required before the remaining suites run.
+if ! grep -Eq '^CV CLEANUP INTEGRATION PASSED: [1-9][0-9]* checks$' "$LOG_DIR/cv-cleanup-integration.log"; then
+  INDEPENDENT_FAILURES+=("CV cleanup HTTP success marker")
+  printf '::error title=CV_CLEANUP_MARKER_MISSING::%s\n' \
+    "cv-cleanup-integration.log has no 'CV CLEANUP INTEGRATION PASSED: N checks' line with N > 0"
+fi
+if [ "${#INDEPENDENT_FAILURES[@]}" -ne 0 ]; then
+  printf 'INDEPENDENT SUITE FAILURES: %s\n' "${INDEPENDENT_FAILURES[*]}" >&2
+  exit 1
+fi
 note_suite "cv-parse-integration.log"
 timeout 300s node tests/integration/cv-parse.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parse-integration.log"
-note_suite "cv-cleanup-integration.log"
-timeout 300s node tests/integration/cv-cleanup.integration.mjs 2>&1 | tee "$LOG_DIR/cv-cleanup-integration.log"
-publish_suite_result "cv-cleanup-integration.log"
 # Malformed, oversized, encrypted, foreign and concurrent CV inputs through the same HTTP gateway.
 note_suite "cv-parser-robustness.log"
 timeout 300s node tests/integration/cv-parser-robustness.integration.mjs 2>&1 | tee "$LOG_DIR/cv-parser-robustness.log"

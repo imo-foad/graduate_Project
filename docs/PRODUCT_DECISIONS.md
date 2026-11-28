@@ -343,6 +343,19 @@ The following remain out of scope:
 
 ---
 
+## 10A. Social Feed v2 — unified actors, images and sharing
+
+Approved implementation decisions for the multi-identity Social Feed:
+
+- **One actor abstraction.** `public.social_actors` maps every publishing identity to exactly one real platform identity: a `HUMAN` actor per Auth account (student, graduate or faculty) or an `ORGANIZATION` actor per verified company. No student or faculty member needs a `graduate_profiles` row, and no duplicate Auth account represents one person twice.
+- **Organization publishing reuses the existing company model.** Owner and recruiter memberships may publish; a viewer is read-only; suspended or unverified companies cannot publish or stay visible. Authorization is evaluated on every action, never from client-supplied roles.
+- **Images are metadata plus a private bucket.** `public.social_post_media` stores validated metadata; bytes live in the private `social-media` bucket. Uploads are validated by real file signature and dimensions (JPEG/PNG/WebP, 5 MB, 8000x8000, 10 per post, 25 MB per post). Delivery re-checks post visibility on every download; no permanent public or signed URL is stored.
+- **Shares are references, not copies.** A share is a `social_posts` row with `shared_post_id`; `(shared_post_id, actor_id)` is unique so retries cannot duplicate a share, and shares of shares are rejected. When the original is hidden, removed or deleted, the share stops being readable and its `shared_post` projection becomes null, so moderation cannot be bypassed.
+- **Moderation and rate limits extend to the new lifecycle.** Existing report ownership, duplicate-report prevention, audit history and thresholds are preserved. Removing content retires its media, share rate limits apply to the share action itself, and media upload has its own limit.
+- **Legacy compatibility.** The original social RPCs remain as wrappers acting as the caller's personal actor; all historical posts, comments and likes are backfilled to the correct human actor without duplicated content.
+- **Durable cleanup.** Removed and deleted images enter `private.social_media_cleanup_queue` with a retryable, leased claim/complete/fail lifecycle; retired storage paths can never be re-registered, so a retry cannot delete a newer unrelated post's image.
+
+---
 ## 11. External dependencies — only items that may remain externally blocked
 
 These are dependencies, not undecided product rules:

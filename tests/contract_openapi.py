@@ -187,14 +187,24 @@ class Contract(unittest.TestCase):
         self.assertIn("to service_role", migration)
         self.assertIn("CANCELLED FEATURE", migration)
 
+    def test_internal_social_actor_projection_has_no_direct_rest_access(self):
+        methods = set(METHOD_PRIV.values())
+        self.assertEqual(table_grants().get("social_actors", set()) & methods, set(),
+                         "social_actors is server-managed and has no authenticated REST table grant")
+        self.assertNotIn("/rest/v1/social_actors", API["paths"],
+                         "social actor access must stay behind the scoped RPC projection")
+
     def test_every_granted_table_capability_is_documented(self):
         for table, privs in table_grants().items():
             if table in SERVICE_ROLE_ONLY_HISTORICAL_TABLES or table in PARALLEL_SOCIAL_FEED_TABLES:
                 continue
+            effective = privs & set(METHOD_PRIV.values())
+            if not effective:
+                continue  # revoke-only/internal tables are not part of the authenticated REST surface
             ops = API["paths"].get(f"/rest/v1/{table}")
             self.assertIsNotNone(ops, f"{table}: granted but undocumented")
             documented = {METHOD_PRIV[m] for m in ops}
-            self.assertEqual(privs & set(METHOD_PRIV.values()), documented, f"{table}: grants {privs} vs docs {documented}")
+            self.assertEqual(effective, documented, f"{table}: grants {privs} vs docs {documented}")
 
     def test_error_codes_in_sql_are_documented(self):
         fns = functions()

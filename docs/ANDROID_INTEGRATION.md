@@ -240,7 +240,86 @@ Read `/rest/v1/notifications?order=created_at.desc`. Mark only the caller's own 
 
 ## 11. Social Feed
 
-Social Feed remains a core product capability and must not regress. Use the documented RPCs in `docs/openapi.yaml` for keyset-paginated feed reads, post/comment creation and edits, likes, reports and moderation. Do not write social tables directly. Feed projections expose only display name and avatar when not hidden by profile privacy settings; do not expect email, phone, CV or private education fields in the feed.
+Social Feed is a core product capability. All reads and writes go through the documented RPCs in `docs/openapi.yaml`; never read or write `social_posts`, `social_post_comments`, `social_post_likes`, `social_post_media` or the moderation tables directly, and never read another user's private profile fields through the feed.
+
+### 11.1 Publishing identities ("Post as")
+
+`POST /rest/v1/rpc/get_my_social_actors` returns every identity the caller may use:
+
+| Field | Meaning |
+|---|---|
+| `actor_id` | Stable id to send as `p_actor_id`. Never derive or guess one. |
+| `actor_type` | `HUMAN` (student, graduate or faculty — one Auth account, no `graduate_profiles` row required) or `ORGANIZATION`. |
+| `display_name`, `avatar_url` | Display only. |
+| `organization_verified` | True only for a verified company actor. |
+| `membership_role` | `OWNER`, `RECRUITER` or `VIEWER` for organization actors; `null` for personal actors. |
+| `can_publish` | `false` for a `VIEWER` membership or an inactive actor. Show that row disabled, not hidden. |
+
+The server derives the actor from the JWT plus current membership. A client-supplied `actor_type`, role or profile id is ignored. Authorization is re-evaluated on every write, so losing membership or company verification takes effect immediately.
+
+### 11.2 Creating posts (text, images, shares)
+
+`POST /rest/v1/rpc/create_social_post_v2` with `{p_actor_id, p_content?, p_media_ids?, p_shared_post_id?}`.
+
+- A post needs at least one of: non-blank text (max 5000 chars), at least one owned image id, or a shared original post.
+- `p_media_ids` is the ordered image list (max 10). It must contain only media registered by the caller.
+- `p_shared_post_id` points at a visible original; shares of shares are rejected with `SOCIAL_SHARE_NOT_ALLOWED`.
+- Response: `{post_id, actor_id, actor_type, content, shared_post_id, is_share, created_at, media[]}`.
+
+### 11.3 Image upload and delivery
+
+1. `POST /functions/v1/social-media-upload` as `multipart/form-data` with `file`, `actor_id` and optional `alt_text`.
+2. The function validates the real file signature (JPEG, PNG, WebP only), rejects declared-MIME mismatches, SVG/HTML/executable payloads, files over 5 MB and images over 8000x8000, stores the object in the private `social-media` bucket under the caller's own namespace, and returns `{media_id, status: "PENDING", bucket_id, storage_path, mime_type, size_bytes, width, height, alt_text}`.
+3. Pass the returned `media_id` values to `create_social_post_v2` or `update_social_post_v2`. Unattached media never becomes public.
+4. The feed returns `media[]` ordered by `sort_order` with `storage_path`, `mime_type`, `width`, `height` and `alt_text`.
+5. Download with the user JWT: `GET /storage/v1/object/social-media/<storage_path>`. The bucket is private and the Storage policy re-checks the post on every request, so a hidden, removed, deleted or suspended-organization post stops serving its images immediately. There are no permanent public URLs; do not cache image bytes beyond the post's visible lifetime.
+
+Limits: 10 images per post, 5 MB per image, 25 MB per post, JPEG/PNG/WebP only.
+
+### 11.4 Editing and deleting
+
+`POST /rest/v1/rpc/update_social_post_v2` with `{p_post_id, p_content?, p_media?}`.
+
+- `p_media` is the complete desired image state: `[{media_id, alt_text?}, ...]` in display order. Omit the field to keep the current images; send an empty array to remove all of them. Removed images are retired and queued for Storage cleanup.
+- Only the actor that created the post may edit it, and only while that actor still has publishing permission.
+- A hidden or removed post cannot be edited into visibility (`SOCIAL_POST_NOT_FOUND`).
+- `POST /rest/v1/rpc/delete_social_post` deletes only the caller's own post. Comments, likes and shares follow the post; image objects are removed asynchronously by the durable cleanup queue, not by the client.
+
+### 11.5 Shares and reposts
+
+- `POST /rest/v1/rpc/share_social_post` with `{p_actor_id, p_post_id, p_commentary?}` returns `{share_post_id, shared_post_id, actor_id, actor_type, created_at}`.
+- A repeated share of the same post by the same actor returns `409 ALREADY_SHARED`; retries are safe.
+- `POST /rest/v1/rpc/unshare_social_post` with `{p_share_post_id}` removes only the caller actor's own share (`404 SOCIAL_SHARE_NOT_FOUND` otherwise).
+- Feed items expose `shared_post` (original author, content, media) and `shares_count`. `shared_post` is `null` when the original is deleted or no longer visible — render "original unavailable" and never cache the previous original.
+
+### 11.6 Feed, comments and likes
+
+- `POST /rest/v1/rpc/get_social_feed_v2` with `{p_before_created_at?, p_before_id?, p_limit?}`. Use both cursor fields together or neither; `p_limit` 1–50 (default 20). Items: `{id, actor_id, actor_type, actor_name, actor_avatar_url, actor_verified, content, created_at, updated_at, edited_at, likes_count, comments_count, shares_count, liked_by_me, shared_by_me, media[], shared_post}`.
+- `POST /rest/v1/rpc/get_social_post_comments_v2` with `{p_post_id, p_before_created_at?, p_before_id?, p_limit?}`.
+- `POST /rest/v1/rpc/add_social_comment_v2` `{p_post_id, p_actor_id, p_content}` → `{comment_id, post_id, actor_id, content, created_at}`; `update_social_comment_v2` `{p_comment_id, p_content}`; `delete_social_comment` `{p_comment_id}`.
+- `POST /rest/v1/rpc/like_social_post_v2` and `unlike_social_post_v2` with `{p_post_id, p_actor_id}` return `true`; a duplicate like returns `409 ALREADY_LIKED`, an unknown like `404 NOT_LIKED`.
+- The legacy RPCs (`get_social_feed`, `create_social_post`, `update_social_post`, `delete_social_post`, `get_social_post_comments`, `add_social_comment`, `update_social_comment`, `delete_social_comment`, `like_social_post`, `unlike_social_post`) still work and act as the caller's personal actor. New clients should use the `_v2` RPCs.
+
+### 11.7 Moderation and reports
+
+`POST /rest/v1/rpc/create_social_content_report` `{p_target_type: "POST"|"COMMENT", p_target_id, p_category, p_details?}`; categories: `SPAM`, `HARASSMENT`, `HATE_OR_VIOLENCE`, `THREATS`, `SCAM`, `PRIVACY`, `INAPPROPRIATE`, `OTHER`. A duplicate open report returns `409 ALREADY_REPORTED`; reporting your own content returns `422 CANNOT_REPORT_OWN_CONTENT`. Reports and moderation history stay private to platform administrators. An image post is reported through its post id — never expose or ask for a Storage path.
+
+### 11.8 Error handling
+
+| HTTP | Codes |
+|---|---|
+| 401 | `UNAUTHENTICATED` |
+| 403 | `ACCOUNT_UNAVAILABLE`, `SOCIAL_ACTOR_NOT_AUTHORIZED`, `ORGANIZATION_NOT_VERIFIED`, `ORGANIZATION_SUSPENDED`, `SOCIAL_MEDIA_NOT_OWNED` |
+| 404 | `SOCIAL_ACTOR_NOT_FOUND`, `SOCIAL_POST_NOT_FOUND`, `SOCIAL_COMMENT_NOT_FOUND`, `SOCIAL_SHARE_NOT_FOUND`, `NOT_LIKED` |
+| 409 | `ALREADY_SHARED`, `ALREADY_LIKED`, `SOCIAL_MEDIA_ALREADY_REGISTERED`, `ALREADY_REPORTED` |
+| 422 | `INVALID_INPUT`, `SOCIAL_MEDIA_INVALID`, `SOCIAL_MEDIA_TOO_LARGE`, `SOCIAL_MEDIA_NOT_ATTACHABLE`, `SOCIAL_MEDIA_UPLOAD_MISSING`, `SOCIAL_MEDIA_LIMIT_EXCEEDED`, `SOCIAL_MEDIA_RETIRED`, `SOCIAL_SHARE_NOT_ALLOWED` |
+| 429 | `RATE_LIMIT_EXCEEDED` |
+
+Map them to user-facing text instead of showing the raw code. A `404` on content the caller does not own is deliberate: the API never confirms that another actor's content exists.
+
+### 11.9 Required UX flow
+
+Load the feed, then `get_my_social_actors` for the composer's "Post as" control. Upload each selected image through `/functions/v1/social-media-upload`, keep its `media_id` for preview/reorder/alt-text editing, then call `create_social_post_v2` with the ordered ids and re-read the feed. Editing sends the complete ordered media array; deleting removes the post. Comments and likes use the selected `actor_id`, shares use `share_social_post`, and undo uses the returned `share_post_id`. All validation, MIME and permission failures arrive as the stable codes above.
 
 ## 12. General client rules
 

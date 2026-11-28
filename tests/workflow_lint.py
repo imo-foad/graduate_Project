@@ -144,6 +144,32 @@ class Scripts(unittest.TestCase):
                        "graduate_skills", "cv_suggestions", "Python, Machine Learning, Statistics", "Data Analyst", "score_breakdown", "current_level", "review_cv_suggestions", "get_career_market_insights", "record_recommendation_interaction", "Advanced TypeScript"):
             self.assertIn(needle, cv_http)
         self.assertIn("cv-parse.integration.mjs", runner)
+        self.assertIn("social-feed.integration.mjs", runner)
+        social_http = code(open(os.path.join(ROOT, "tests/integration/social-feed.integration.mjs")).read())
+        self.assertIn("SOCIAL FEED HTTP INTEGRATION PASSED", social_http)
+        self.assertIn('registration_flow: "EMAIL_IDENTITY_VERIFICATION"', social_http)
+        self.assertIn("record_identity_verification", social_http)
+        self.assertIn("finalize_registration", social_http)
+        social_migration = code(open(os.path.join(ROOT, "supabase/migrations/0045_social_multi_actor_media_sharing.sql")).read())
+        social_pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/23_social_multi_actor_media_sharing.test.sql")).read())
+        self.assertIn("'id', o.id", social_migration)
+        self.assertNotIn("'post_id', o.id", social_migration)
+        self.assertIn("shared_post ->> 'id'", social_pgtap)
+        self.assertIn('errorCode(impersonation) === "SOCIAL_ACTOR_NOT_AUTHORIZED"', social_http)
+        self.assertIn("impersonation.status === 403", social_http)
+        self.assertIn("select count(*) from public.social_post_media where storage_path = '${studentPath}'", social_http)
+        self.assertIn('mediaMetadataCount === "0"', social_http)
+        self.assertIn("select status || '|' || reason || '|' || (media_id is not null)::text from private.social_media_cleanup_queue", social_http)
+        self.assertIn('queued === "PENDING|POST_DELETED|true"', social_http)
+        self.assertIn("SYNTHETIC_SEED", social_http)
+        self.assertNotIn("insert into public.profiles", social_http.lower(),
+                         "Auth's handle_new_user trigger provisions profiles and the HUMAN actor")
+        self.assertIn("where profile_id = '${student.id}'", social_http)
+        self.assertIn("where profile_id = '${faculty.id}'", social_http)
+        for needle in ("get_my_social_actors", "create_social_post_v2", "share_social_post", "unshare_social_post",
+                       "/functions/v1/social-media-upload", "social-media", "SOCIAL_ACTOR_NOT_AUTHORIZED",
+                       "SOCIAL_MEDIA_INVALID", "ALREADY_SHARED", "assertLocalDbUrl"):
+            self.assertIn(needle, social_http)
         self.assertIn("onboarding.integration.mjs", runner)
         self.assertIn("registration.integration.mjs", runner)
         self.assertIn("rate-limits.integration.mjs", runner)
@@ -209,7 +235,7 @@ class Scripts(unittest.TestCase):
         pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/21_cv_cleanup_lifecycle.test.sql")).read())
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0040_cv_storage_path_retirement_and_locking.sql")).read())
         race = code(open(os.path.join(ROOT, "tests/db/cv-cleanup-concurrency.sh")).read())
-        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "23_profile_career_management", "Files=22", "bash tests/db/cv-cleanup-concurrency.sh"):
+        for needle in ("21_cv_cleanup_lifecycle", "22_registration_email_idempotency", "23_profile_career_management", "Files=23", "bash tests/db/cv-cleanup-concurrency.sh", "23_social_multi_actor_media_sharing"):
             self.assertIn(needle, runner)
         self.assertIn("tests/integration/cv-cleanup.integration.mjs", local)
         self.assertIn("createdUsers.push(targetId)", integration)
@@ -225,12 +251,31 @@ class Scripts(unittest.TestCase):
         self.assertIn("wait_for_lock_wait", race)
         self.assertIn("CV CLEANUP CONCURRENCY PASSED", race)
 
+    def test_cv_cleanup_http_result_is_independent_of_the_social_feed_suite(self):
+        runner = SCRIPTS["scripts/run-local-integrations.sh"]
+        social = runner.index('require_independent_suite "social-feed-integration.log" "Social Feed HTTP"')
+        cv_cleanup = runner.index('require_independent_suite "cv-cleanup-integration.log" "CV cleanup HTTP"')
+        self.assertLess(social, cv_cleanup, "the CV cleanup suite must start after the captured Social Feed suite")
+        for needle in ("INDEPENDENT_FAILURES=()", "INDEPENDENT_FAILURES+=(\"$label\")", "INDEPENDENT SUITE FAILURES",
+                       "timeout 300s node tests/integration/social-feed.integration.mjs",
+                       "timeout 300s node tests/integration/cv-cleanup.integration.mjs",
+                       "'^CV CLEANUP INTEGRATION PASSED: [1-9][0-9]* checks$'"):
+            self.assertIn(needle, runner)
+        # A failed Social Feed run must still fail the whole integration stage.
+        self.assertIn('if [ "${#INDEPENDENT_FAILURES[@]}" -ne 0 ]; then', runner)
+        self.assertIn("exit 1", runner[cv_cleanup:])
+        # The workflow publishes the CV cleanup result explicitly and never silences it.
+        marker_step = next(s for s in steps("database") if "CV CLEANUP INTEGRATION PASSED" in s.get("run", ""))
+        self.assertEqual(marker_step.get("if"), "always()")
+        self.assertNotIn("|| true", marker_step["run"])
+        self.assertIn("cv-cleanup-integration.log", marker_step["run"])
+
     def test_profile_career_management_security_is_migration_and_pgtap_covered(self):
         runner = SCRIPTS["scripts/run-db-tests.sh"]
         migration = code(open(os.path.join(ROOT, "supabase/migrations/0044_profile_career_management_security.sql")).read())
         pgtap = code(open(os.path.join(ROOT, "supabase/tests/database/23_profile_career_management.test.sql")).read())
         self.assertIn("23_profile_career_management", runner)
-        self.assertIn("Files=22", runner)
+        self.assertIn("Files=23", runner)
         self.assertIn("revoke update (avatar_url) on public.profiles from authenticated", migration)
         self.assertIn("GRADUATE_PROFILE_REQUIRED", migration)
         self.assertIn("graduate_profiles", migration)

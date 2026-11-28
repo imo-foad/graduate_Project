@@ -29,7 +29,7 @@ jobs:
           status=0
           { node --version; npm test; } 2>&1 | tee .ci-logs/static-npm-test.log || status=1
           { pip install pyyaml && python3 -m unittest tests/contract_openapi.py -v; } 2>&1 | tee .ci-logs/openapi-contract.log || status=1
-          { bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh && node --check tests/integration/cv-cleanup.integration.mjs && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/cv-parser-robustness.integration.mjs && node --check tests/integration/career-cohort.integration.mjs && node --check tests/integration/onboarding.integration.mjs && node --check tests/integration/registration.integration.mjs && node --check tests/integration/rate-limits.integration.mjs && node --check tests/integration/university-dataset.integration.mjs && node --check scripts/seed-university-demo.mjs && node --check scripts/provision-university-demo-users.mjs && node --check scripts/provision-demo-users.mjs && node --check scripts/evaluate-cv-parser-local.mjs && node --check scripts/cv-parser-metrics.mjs && node --check scripts/cv-fixture-generator.mjs && bash -n scripts/run-university-seed-smoke.sh; } 2>&1 | tee .ci-logs/syntax-check.log || status=1
+          { bash -n scripts/run-db-tests.sh scripts/run-local-integrations.sh tests/db/concurrency.sh tests/db/cv-cleanup-concurrency.sh && node --check tests/integration/cv-cleanup.integration.mjs && node --check tests/integration/local-supabase.integration.mjs && node --check tests/integration/cv-parse.integration.mjs && node --check tests/integration/cv-parser-robustness.integration.mjs && node --check tests/integration/career-cohort.integration.mjs && node --check tests/integration/onboarding.integration.mjs && node --check tests/integration/registration.integration.mjs && node --check tests/integration/rate-limits.integration.mjs && node --check tests/integration/social-feed.integration.mjs && node --check tests/integration/university-dataset.integration.mjs && node --check scripts/seed-university-demo.mjs && node --check scripts/provision-university-demo-users.mjs && node --check scripts/provision-demo-users.mjs && node --check scripts/evaluate-cv-parser-local.mjs && node --check scripts/cv-parser-metrics.mjs && node --check scripts/cv-fixture-generator.mjs && bash -n scripts/run-university-seed-smoke.sh; } 2>&1 | tee .ci-logs/syntax-check.log || status=1
           { python3 -m unittest tests/workflow_lint.py -v; } 2>&1 | tee .ci-logs/workflow-lint.log || status=1
           exit "$status"
       - uses: actions/upload-artifact@v4
@@ -148,6 +148,23 @@ jobs:
           find .ci-logs -maxdepth 1 -type f -delete
       - name: "Database tests (local stack only, fails on any error)"
         run: bash scripts/run-db-tests.sh
+      - name: Verify the CV cleanup HTTP suite marker
+        # The runner captures Social Feed and CV cleanup separately and fails when either failed; this
+        # step makes the CV cleanup result explicit and public instead of only visible in admin logs.
+        if: always()
+        run: |
+          log=.ci-logs/cv-cleanup-integration.log
+          if [ ! -s "$log" ]; then
+            echo "::warning title=CV_CLEANUP_SUITE_MISSING::cv-cleanup-integration.log was not produced; the failing stage is reported above"
+            exit 0
+          fi
+          marker="$(grep -E '^CV CLEANUP INTEGRATION PASSED: [1-9][0-9]* checks$' "$log" | tail -n 1)"
+          if [ -z "$marker" ]; then
+            echo "::error title=CV_CLEANUP_SUITE_MARKER_MISSING::cv-cleanup-integration.log has no positive 'CV CLEANUP INTEGRATION PASSED: N checks' line"
+            exit 1
+          fi
+          printf '::notice title=CV_CLEANUP_SUITE::%s\n' "$marker"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then printf 'CV cleanup HTTP: %s\n' "$marker" >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Collect diagnostics
         if: always()
         run: |

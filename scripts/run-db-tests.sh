@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Real database proof: clean local DB -> every discovered migration -> idempotent seeds -> 21 pgTAP files -> concurrency + local HTTP. LOCAL ONLY.
+# Real database proof: clean local DB -> every discovered migration -> idempotent seeds -> 22 pgTAP files -> concurrency + local HTTP. LOCAL ONLY.
 # Needs: Docker, Supabase CLI, psql, Node. `supabase db reset` DESTROYS the local database: DB_URL is validated first.
 # Never use a Cloud URL, never `supabase link`. Every failed command fails this script (no silent skips).
 set -euo pipefail
@@ -123,9 +123,9 @@ WANT_OPPS="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("fixture
 echo "seed OK: $WANT_SKILLS skills, $WANT_OPPS opportunities (idempotent on second load)"
 
 STAGE="D pgTAP"
-# ---- D. pgTAP: all twenty-two files must run and pass
+# ---- D. pgTAP: all twenty-three files must run and pass
 echo "=== D. supabase test db"
-EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle 20_synthetic_identity_registry 21_cv_cleanup_lifecycle 22_registration_email_idempotency 23_profile_career_management)
+EXPECTED_TESTS=(01_register_for_event 02_rpc_rules 03_rls_security 04_storage_cv_ownership 05_recommendation_cache 06_company_workflow 07_admin_company_controls 08_cv_parse_lifecycle 09_cv_intelligence 10_cancelled_scope_guard 12_social_feed 13_social_moderation_rate_limits 14_secure_graduate_onboarding 15_three_type_scope 16_cv_cleanup_queue 17_recommendation_availability 18_identity_and_organizations 19_product_lifecycle 20_synthetic_identity_registry 21_cv_cleanup_lifecycle 22_registration_email_idempotency 23_profile_career_management 23_social_multi_actor_media_sharing)
 for t in "${EXPECTED_TESTS[@]}"; do [ -f "supabase/tests/database/$t.test.sql" ] || fail "missing test file $t"; done
 # Run the historically fragile auth/catalogue test alone first; require a real TAP plan.
 echo "=== D1. focused Test 15"
@@ -138,7 +138,7 @@ echo "=== D2. full pgTAP suite"
 supabase test db 2>&1 | tee "$LOG_DIR/pgtap.log"
 for t in "${EXPECTED_TESTS[@]}"; do grep -q "$t.test.sql" "$LOG_DIR/pgtap.log" || fail "pgTAP output does not show $t.test.sql"; done
 if grep -Eq '^(not ok|Result: FAIL)|Failed [0-9]+' "$LOG_DIR/pgtap.log"; then fail "pgTAP reported failures"; fi
-grep -Eq '^Files=22, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 22 files with a non-empty TAP plan"
+grep -Eq '^Files=23, Tests=[1-9][0-9]*,' "$LOG_DIR/pgtap.log" || fail "full pgTAP suite did not execute all 22 files with a non-empty TAP plan"
 grep -Fxq 'Result: PASS' "$LOG_DIR/pgtap.log" || fail "full pgTAP TAP plan did not pass"
 
 STAGE="E concurrency"

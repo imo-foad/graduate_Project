@@ -5,6 +5,14 @@
 // recorded failure, an expired worker lease, concurrent claims, exhausted attempts with the operator
 // requeue, the full approved account-deletion lifecycle, and worker/queue authorization.
 //
+// Physical deletion is never inferred from a missing metadata row, a DONE queue row, or the deleted
+// owner's expired token. Every deletion assertion pairs the ledger state with a service-role Storage
+// HTTP download, which bypasses owner RLS: the object is proven readable before deletion and proven
+// unreadable after it, and the real Storage listing endpoint (never storage.objects) proves absence.
+// The account-deletion scenario also uploads genuine orphan objects with no cv_documents row, one of
+// them inside a nested folder and more than one listing page of them at the user prefix, so the
+// recursive prefix enumeration and its 100-entry pagination are exercised rather than assumed.
+//
 // The database target is validated as localhost before the first psql call, and the Supabase API URL
 // must be a localhost origin on port 54321. No Cloud project, credential or object is used.
 import assert from "node:assert/strict";
@@ -89,12 +97,53 @@ async function download(token, path) {
   const body = Buffer.from(await res.arrayBuffer());
   return { status: res.status, bytes: body, text: body.toString("latin1") };
 }
+
+// ---- Privileged Storage verification -------------------------------------------------------------
+// The service-role credential bypasses Storage RLS, so these requests describe the physical object
+// rather than the caller's row-level visibility. The service-role key never leaves this process and is
+// never logged: only HTTP status codes and object names are reported.
+const STORAGE_LIST_PATH = "/storage/v1/object/list/cv-documents";
+const metadataBackedPaths = new Set();
+async function adminDownload(path) {
+  return download(service, path);
+}
+// True only for a definitive "not there" answer: a 5xx would mean the check itself failed.
+async function adminAbsent(path) {
+  const res = await adminDownload(path);
+  return { status: res.status, absent: res.status !== 200 && res.status < 500 };
+}
+async function adminListPage(prefix, offset) {
+  const res = await request(STORAGE_LIST_PATH, {
+    method: "POST",
+    headers: headers(service, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ prefix, limit: 100, offset, sortBy: { column: "name", order: "asc" } }),
+  });
+  return { status: res.status, entries: Array.isArray(res.json) ? res.json : [], text: res.text };
+}
+// Pages exactly like the account-deletion enumerator (100 per page) so a prefix above one page is real
+// evidence instead of a truncated view. A folder entry has id === null; an object has an id.
+async function adminListAll(prefix) {
+  const entries = [];
+  for (let offset = 0; offset <= 10_000; offset += 100) {
+    const page = await adminListPage(prefix, offset);
+    if (page.status !== 200) return { status: page.status, entries, text: page.text };
+    entries.push(...page.entries);
+    if (page.entries.length < 100) break;
+  }
+  return { status: 200, entries, text: "" };
+}
+const entryNames = (entries) => entries.map((entry) => entry.name);
+const objectNames = (entries) => entries.filter((entry) => entry.id !== null).map((entry) => entry.name);
+const baseName = (path) => path.split("/").pop();
+
 async function createMetadata(token, uid, path, bytes) {
-  return request("/rest/v1/cv_documents", {
+  const res = await request("/rest/v1/cv_documents", {
     method: "POST",
     headers: headers(token, { "Content-Type": "application/json", Prefer: "return=representation" }),
     body: JSON.stringify({ graduate_id: uid, storage_path: path, file_type: "pdf", size_bytes: bytes.length }),
   });
+  if (res.status === 201) metadataBackedPaths.add(path);
+  return res;
 }
 async function deleteMetadata(token, id) {
   return request("/rest/v1/rpc/delete_cv_document", {
@@ -128,6 +177,8 @@ function quote(value) {
   return "'" + String(value).replace(/'/g, "''") + "'";
 }
 const metadataCount = (id) => sqlInt("select count(*) from public.cv_documents where id = " + quote(id));
+const metadataBackedCount = (graduateId) =>
+  sqlInt("select count(*) from public.cv_documents where graduate_id = " + quote(graduateId));
 const queueTotal = () => sqlInt("select count(*) from private.cv_cleanup_queue");
 
 function escapePdfLiteral(value) {
@@ -167,6 +218,7 @@ const backlog = await worker();
 pass("pre-test worker drains earlier cleanup backlog", backlog.status === 200, backlog.json ?? backlog.text);
 pass("pre-test backlog contains no unresolved Storage failures", backlog.json?.failed === 0, backlog.json);
 
+let originalError = null;
 try {
   // ---- A. Owner deletion removes the real Storage bytes -------------------------------------------
   const pathA = ownerPrefix + "-owner.pdf";
@@ -176,6 +228,9 @@ try {
   pass("owner uploads a real private PDF object", upA.status === 200 || upA.status === 201, upA);
   const downA = await download(owner.token, pathA);
   pass("owner can download the object before deletion", downA.status === 200 && downA.text.length > 0, downA.status);
+  const adminDownA = await adminDownload(pathA);
+  pass("the service role can download the private object before deletion",
+    adminDownA.status === 200 && Buffer.compare(adminDownA.bytes, bytesA) === 0, adminDownA.status);
   const metaA = await createMetadata(owner.token, owner.id, pathA, bytesA);
   pass("owner registers CV metadata for the object", metaA.status === 201 && metaA.json?.length === 1, metaA);
   const idA = metaA.json?.[0]?.id;
@@ -200,6 +255,13 @@ try {
   pass("the queue row reaches DONE", doneA.length === 1 && doneA[0].status === "DONE" && doneA[0].attempts === 1, doneA);
   const afterDelete = await download(owner.token, pathA);
   pass("the deleted object is no longer downloadable", afterDelete.status !== 200, afterDelete.status);
+  // Independent of the owner's own token: the privileged request describes the object bytes.
+  const adminAfterDelete = await adminAbsent(pathA);
+  pass("the service role can no longer download the deleted object", adminAfterDelete.absent, adminAfterDelete.status);
+  const ownerListing = await adminListAll(owner.id);
+  pass("the Storage listing no longer contains the deleted object path",
+    ownerListing.status === 200 && !objectNames(ownerListing.entries).includes(baseName(pathA)),
+    { status: ownerListing.status, files: objectNames(ownerListing.entries).length, deletedName: baseName(pathA) });
   const foreignAfter = await download(other.token, pathA);
   pass("an unrelated graduate cannot read the deleted object", foreignAfter.status !== 200, foreignAfter.status);
 
@@ -224,8 +286,12 @@ try {
   const replaceDrain = await worker();
   pass("worker completes the replacement cleanup", replaceDrain.status === 200 && replaceDrain.json?.failed === 0, replaceDrain.json);
   pass("the old object is gone", (await download(owner.token, oldPath)).status !== 200);
+  const oldAdminAfter = await adminAbsent(oldPath);
+  pass("the superseded object is absent for the service role", oldAdminAfter.absent, oldAdminAfter.status);
   const newDownload = await download(owner.token, newPath);
   pass("the new object remains downloadable", newDownload.status === 200, newDownload.status);
+  pass("the replacement object is still readable through the service role",
+    (await adminDownload(newPath)).status === 200);
   pass("the new object's bytes are unchanged", Buffer.compare(newDownload.bytes, newBytes) === 0);
   pass("metadata still points at the new path", metadataCount(newId) === 1 &&
     sql("select storage_path from public.cv_documents where id = " + quote(newId)) === newPath);
@@ -260,6 +326,8 @@ try {
     retiredDrain.status === 200 && retiredRows.length === 1 && retiredRows[0]?.status === "DONE" &&
     (await download(owner.token, retiredPath)).status !== 200,
     { response: retiredDrain.json, rows: retiredRows });
+  const retiredAdminAfter = await adminAbsent(retiredPath);
+  pass("the retired object is absent for the service role too", retiredAdminAfter.absent, retiredAdminAfter.status);
 
   const freshPath = ownerPrefix + "-fresh-replacement.pdf";
   const freshBytes = buildPdf("FRESH REPLACEMENT CV\nPython and SQL");
@@ -435,7 +503,8 @@ try {
     (await download(owner.token, exhaustedPath)).status !== 200,
     { response: recoveredDrain.json, rows: recoveredQueue });
 
-  // ---- G. Approved account deletion cleans every object --------------------------------------------
+  // ---- G. Approved account deletion removes metadata-backed CVs, genuine orphan objects and a
+  //         nested folder, and must page past 100 listing entries ------------------------------------
   const email = "cv-cleanup-e2e-" + tag + "@alumni.test";
   const targetPassword = "Cv-Cleanup-Test-" + tag.slice(0, 8);
   const created = await request("/auth/v1/admin/users", {
@@ -455,13 +524,52 @@ try {
     targetId + "/account-a-" + tag + ".pdf",
     targetId + "/account-b-" + tag + ".pdf",
   ];
-  staleObjects.push(...accountPaths);
+  // A genuine object with no cv_documents row, inside a nested folder, so the recursive prefix scan
+  // (not the metadata lookup) is what must discover it.
+  const orphanPath = targetId + "/imports/orphaned-cv-" + tag + ".pdf";
+  // 105 further orphans at the user prefix: the enumerator lists 100 per page, so it must paginate.
+  const bulkPaths = Array.from({ length: 105 }, (_, index) =>
+    targetId + "/bulk-orphan-" + String(index).padStart(3, "0") + "-" + tag + ".pdf");
+  // Tracked before upload so a half-finished scenario is still cleaned up below.
+  staleObjects.push(...accountPaths, orphanPath, ...bulkPaths);
   for (const [index, path] of accountPaths.entries()) {
     const bytes = buildPdf("ACCOUNT DELETION CV " + index + "\nSQL and Python");
     pass("account-deletion CV " + (index + 1) + " uploads", (await upload(target.token, path, bytes)).status < 300);
     const meta = await createMetadata(target.token, targetId, path, bytes);
     pass("account-deletion CV " + (index + 1) + " metadata exists", meta.status === 201 && meta.json?.length === 1, meta);
   }
+  const orphanUpload = await upload(target.token, orphanPath, buildPdf("ORPHANED IMPORT CV\nNo metadata row"));
+  pass("a nested orphan object uploads without any metadata row", orphanUpload.status < 300, orphanUpload.status);
+  let bulkUploaded = 0;
+  for (const path of bulkPaths) {
+    if ((await upload(target.token, path, buildPdf("BULK ORPHAN CV\n" + baseName(path)))).status < 300) bulkUploaded++;
+  }
+  pass("more than a full Storage listing page of orphan objects uploads",
+    bulkUploaded === bulkPaths.length && bulkPaths.length > 100, bulkUploaded);
+  pass("only the two registered objects have CV metadata rows",
+    sqlInt("select count(*) from public.cv_documents where graduate_id = " + quote(targetId)) === 2);
+  const accountAdminBefore = await Promise.all(accountPaths.map((path) => adminDownload(path)));
+  pass("the service role reads both metadata-backed objects before deletion",
+    accountAdminBefore.every((res) => res.status === 200), accountAdminBefore.map((res) => res.status));
+  const orphanAdminBefore = await adminDownload(orphanPath);
+  pass("the service role reads the nested orphan object before deletion",
+    orphanAdminBefore.status === 200, orphanAdminBefore.status);
+  const bulkSample = [bulkPaths[0], bulkPaths[Math.floor(bulkPaths.length / 2)], bulkPaths[bulkPaths.length - 1]];
+  const bulkAdminBefore = await Promise.all(bulkSample.map((path) => adminDownload(path)));
+  pass("the service role reads orphan objects from both listing pages before deletion",
+    bulkAdminBefore.every((res) => res.status === 200), bulkAdminBefore.map((res) => res.status));
+  const rootBefore = await adminListAll(targetId);
+  pass("the user prefix lists more than one page of objects before deletion",
+    rootBefore.status === 200 && objectNames(rootBefore.entries).length > 100 &&
+    rootBefore.entries.some((entry) => entry.name.replace(/\/$/, "") === "imports" && entry.id === null),
+    { status: rootBefore.status, files: objectNames(rootBefore.entries).length });
+  const nestedBefore = await adminListAll(targetId + "/imports");
+  pass("the nested folder holds the orphan object before deletion",
+    nestedBefore.status === 200 && entryNames(nestedBefore.entries).includes(baseName(orphanPath)),
+    { status: nestedBefore.status, names: entryNames(nestedBefore.entries) });
+  pass("no cleanup row exists for the account before any metadata deletion",
+    sqlInt("select count(*) from private.cv_cleanup_queue where storage_path like " + quote(targetId + "/%") +
+      " or storage_path = " + quote(orphanPath)) === 0);
   const requested = await request("/rest/v1/rpc/request_account_deletion", {
     method: "POST",
     headers: headers(target.token, { "Content-Type": "application/json" }),
@@ -483,6 +591,50 @@ try {
     body: JSON.stringify({ p_request_id: requested.json, p_decision: "APPROVE", p_note: "local synthetic cleanup test" }),
   });
   pass("the platform admin approves the account deletion", approved.status === 200 && approved.json === "APPROVED", approved);
+
+  // ---- G2. Failure safety: a rejected caller must neither consume the approval nor delete anything.
+  const unauthorizedDeletion = await request("/functions/v1/delete-graduate", {
+    method: "POST",
+    headers: headers(other.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ request_id: requested.json }),
+  });
+  pass("an ordinary authenticated caller cannot run account deletion",
+    unauthorizedDeletion.status === 403 && unauthorizedDeletion.json?.error === "ADMIN_REQUIRED", unauthorizedDeletion);
+  const unchangedAfterRefusal = (await adminDownload(orphanPath)).status === 200 &&
+    (await adminDownload(accountPaths[0])).status === 200;
+  pass("a refused deletion leaves the approved request, the account and every object untouched",
+    sql("select status from private.account_deletion_requests where id = " + quote(requested.json)) === "APPROVED" &&
+    sqlInt("select count(*) from auth.users where id = " + quote(targetId)) === 1 &&
+    metadataBackedCount(targetId) === 2 && unchangedAfterRefusal,
+    { request: sql("select status from private.account_deletion_requests where id = " + quote(requested.json)) });
+
+  // ---- G3. Failure safety: a metadata path outside the owner's prefix must abort the deletion ----
+  // The row is a database fixture only: no Storage object is created or claimed for it, so this proves
+  // the ownership precheck itself refuses to continue instead of the object lookup failing later.
+  const foreignPath = other.id + "/fixture-foreign-" + tag + ".pdf";
+  const foreignRowId = sql(
+    "insert into public.cv_documents (graduate_id, storage_path, file_type, size_bytes) values (" +
+    quote(targetId) + ", " + quote(foreignPath) + ", 'pdf', 32) returning id::text");
+  pass("a metadata row outside the owner prefix exists only for this safety probe", Boolean(foreignRowId));
+  const mismatchDeletion = await request("/functions/v1/delete-graduate", {
+    method: "POST",
+    headers: headers(admin.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ request_id: requested.json }),
+  });
+  pass("account deletion aborts when a metadata path leaves the owner prefix",
+    mismatchDeletion.status === 409 && mismatchDeletion.json?.error === "CV_STORAGE_OWNERSHIP_MISMATCH",
+    mismatchDeletion);
+  pass("a failed ownership precheck keeps the account, its objects and the approved request",
+    sqlInt("select count(*) from auth.users where id = " + quote(targetId)) === 1 &&
+    sql("select status from private.account_deletion_requests where id = " + quote(requested.json)) === "APPROVED" &&
+    metadataBackedCount(targetId) === 3 &&
+    (await adminDownload(accountPaths[0])).status === 200 &&
+    (await adminDownload(orphanPath)).status === 200,
+    { request: sql("select status from private.account_deletion_requests where id = " + quote(requested.json)) });
+  sql("delete from public.cv_documents where id = " + quote(foreignRowId));
+  // Deleting the probe row enqueues a cleanup entry for its path; remove that fixture-only entry too.
+  sql("delete from private.cv_cleanup_queue where storage_path = " + quote(foreignPath));
+
   const deleted = await request("/functions/v1/delete-graduate", {
     method: "POST",
     headers: headers(admin.token, { "Content-Type": "application/json" }),
@@ -490,18 +642,49 @@ try {
   });
   pass("delete-graduate completes the supported account lifecycle",
     deleted.status === 200 && deleted.json?.status === "COMPLETED", deleted);
-  pass("all account CV metadata is deleted",
-    sqlInt("select count(*) from public.cv_documents where graduate_id = " + quote(targetId)) === 0);
+  pass("all account CV metadata is deleted", metadataBackedCount(targetId) === 0);
   const accountQueues = accountPaths.map((path) => queue(path));
-  pass("every associated Storage path is enqueued exactly once",
+  pass("every metadata-backed Storage path is enqueued exactly once",
     accountQueues.every((rows) => rows.length === 1 && rows[0].status === "PENDING"), accountQueues);
-  pass("every old account object is already inaccessible",
-    (await download(target.token, accountPaths[0])).status !== 200 &&
-    (await download(target.token, accountPaths[1])).status !== 200);
+  pass("the metadata-less orphan needs no cleanup-queue row of its own",
+    queueCount(orphanPath) === 0 && queueCount(bulkPaths[0]) === 0 &&
+    sqlInt("select count(*) from private.cv_cleanup_queue where storage_path like " + quote(targetId + "/%") +
+      " or storage_path = " + quote(orphanPath)) === accountPaths.length,
+    { orphan: queueCount(orphanPath), ledger: sqlInt("select count(*) from private.cv_cleanup_queue where storage_path like " + quote(targetId + "/%") + " or storage_path = " + quote(orphanPath)) });
+  const departedLogin = await request("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: headers(null, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ email, password: targetPassword }),
+  });
+  pass("the deleted account can no longer obtain an Auth token", departedLogin.status >= 400, departedLogin.status);
+  const accountAdminAfter = await Promise.all(accountPaths.map((path) => adminAbsent(path)));
+  pass("the service role can no longer read the metadata-backed objects",
+    accountAdminAfter.every((res) => res.absent), accountAdminAfter.map((res) => res.status));
+  const orphanAdminAfter = await adminAbsent(orphanPath);
+  pass("the service role can no longer read the orphan object that had no metadata row",
+    orphanAdminAfter.absent, orphanAdminAfter.status);
+  const bulkAdminAfter = await Promise.all(bulkSample.map((path) => adminAbsent(path)));
+  pass("the service role can no longer read orphan objects from either listing page",
+    bulkAdminAfter.every((res) => res.absent), bulkAdminAfter.map((res) => res.status));
+  const rootAfter = await adminListAll(targetId);
+  const nestedAfter = await adminListAll(targetId + "/imports");
+  const remainingRoot = entryNames(rootAfter.entries);
+  pass("no file object remains beneath the deleted user's prefix",
+    rootAfter.status === 200 && objectNames(rootAfter.entries).length === 0 &&
+    ![...accountPaths, ...bulkPaths].some((path) => remainingRoot.includes(baseName(path))),
+    { status: rootAfter.status, files: objectNames(rootAfter.entries).length, names: remainingRoot.slice(0, 10) });
+  pass("the nested orphan folder no longer lists any object",
+    nestedAfter.status === 200 && nestedAfter.entries.length === 0,
+    { status: nestedAfter.status, names: entryNames(nestedAfter.entries) });
   const accountDrain = await worker();
   pass("the worker resolves the account-deletion cleanup rows",
     accountDrain.status === 200 && accountPaths.every((path) => queue(path)[0]?.status === "DONE"),
     { response: accountDrain.json, rows: accountQueues });
+  pass("the object bytes stay absent after the queued cleanup completes",
+    (await adminAbsent(accountPaths[0])).absent && (await adminAbsent(orphanPath)).absent);
+  const sentinelAdmin = await adminDownload(sentinelPath);
+  pass("the unrelated graduate's object remains readable through the service role",
+    sentinelAdmin.status === 200, sentinelAdmin.status);
   pass("an unrelated graduate's object survives account deletion",
     (await download(other.token, sentinelPath)).status === 200);
   const repeatDeletion = await request("/functions/v1/delete-graduate", {
@@ -510,7 +693,11 @@ try {
     body: JSON.stringify({ request_id: requested.json }),
   });
   pass("repeating a completed account deletion is rejected without side effects",
-    repeatDeletion.status === 404, repeatDeletion);
+    repeatDeletion.status === 404 &&
+    sql("select status from private.account_deletion_requests where id = " + quote(requested.json)) === "COMPLETED" &&
+    sqlInt("select count(*) from private.cv_cleanup_queue where storage_path like " + quote(targetId + "/%") +
+      " or storage_path = " + quote(orphanPath)) === accountPaths.length &&
+    (await adminAbsent(orphanPath)).absent, repeatDeletion);
 
   // ---- Authorization: clients can never drive the worker or the queue ------------------------------
   const directDelete = await request("/rest/v1/cv_documents?id=eq." + newId, {
@@ -548,34 +735,41 @@ try {
   pass("the worker response exposes only counts, never storage paths or CV data",
     workerBody.status === 200 && Object.keys(workerBody.json ?? {}).sort().join(",") === "done,failed,processed",
     workerBody.json);
+} catch (error) {
+  originalError = error;
+  throw error;
 } finally {
-  // Remove metadata through the owner RPC so every leftover fixture is queued, then drain it.
-  for (const path of staleObjects) {
-    const id = sql("select coalesce(max(id::text), '') from public.cv_documents where storage_path = " + quote(path));
-    if (id) {
-      await request("/rest/v1/cv_documents?id=eq." + id, { method: "DELETE", headers: headers(service) }).catch(() => {});
+  // Best-effort teardown that never relies on the deleted user's expired token: every leftover object
+  // is removed with the service-role Storage API, and each path was tracked before its upload.
+  try {
+    for (const path of staleObjects) {
+      const id = metadataBackedPaths.has(path)
+        ? sql("select coalesce(max(id::text), '') from public.cv_documents where storage_path = " + quote(path))
+        : "";
+      if (id) {
+        await request("/rest/v1/cv_documents?id=eq." + id, { method: "DELETE", headers: headers(service) }).catch(() => {});
+      }
+      await removeObject(service, path).catch(() => {});
     }
-    if (path.startsWith(owner.id + "/")) {
-      await request(downloadPath(path), { method: "DELETE", headers: headers(owner.token) }).catch(() => {});
-    } else if (path.startsWith(other.id + "/")) {
-      await request(downloadPath(path), { method: "DELETE", headers: headers(other.token) }).catch(() => {});
-    } else {
-      await request(downloadPath(path), { method: "DELETE", headers: headers(service) }).catch(() => {});
+    for (const id of createdUsers) {
+      if (!id) continue;
+      await request("/auth/v1/admin/users/" + id, { method: "DELETE", headers: headers(service) }).catch(() => {});
     }
+    if (insertedAdminId) {
+      sql("delete from private.platform_admins where user_id = " + quote(insertedAdminId));
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const drained = await worker();
+      if (drained.status !== 200 || (drained.json?.processed ?? 0) === 0) break;
+    }
+    // Fixture-only rows that intentionally cannot be deleted are removed from the ledger.
+    sql("delete from private.cv_cleanup_queue where storage_path like '%cleanup-e2e-%' and status = 'FAILED'");
+  } catch (cleanupError) {
+    console.error("CLEANUP DIAGNOSTIC: " + (cleanupError?.message ?? cleanupError));
+    // The original assertion failure is the useful signal; report both, never hide the first one.
+    if (!originalError) throw cleanupError;
+    console.error("ORIGINAL FAILURE PRESERVED: " + (originalError?.message ?? originalError));
   }
-  for (const id of createdUsers) {
-    if (!id) continue;
-    await request("/auth/v1/admin/users/" + id, { method: "DELETE", headers: headers(service) }).catch(() => {});
-  }
-  if (insertedAdminId) {
-    sql("delete from private.platform_admins where user_id = " + quote(insertedAdminId));
-  }
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const drained = await worker();
-    if (drained.status !== 200 || (drained.json?.processed ?? 0) === 0) break;
-  }
-  // Fixture-only rows that intentionally cannot be deleted are removed from the ledger.
-  sql("delete from private.cv_cleanup_queue where storage_path like '%cleanup-e2e-%' and status = 'FAILED'");
 }
 
 console.log("CV CLEANUP INTEGRATION PASSED: " + passed + " checks");
